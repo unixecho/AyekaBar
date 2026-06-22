@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>אייכה בר — תפריט</title>
+<meta name="robots" content="index,follow" />
+<!-- TODO: per BRAND.md, swap Rubik to self-hosted woff2 subsets (assets/fonts/) and drop this CDN. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* Base — deep night */
+    --bg: #0a0a0f;
+    --bg-elev: #141420;
+    --bg-elev-2: #1d1d2b;
+    /* Neon accents */
+    --neon: #ff5e3a;
+    --neon-soft: #ff8a5c;
+    --neon-2: #38e1ff;
+    /* Text */
+    --text: #f5f3ef;
+    --text-dim: #a8a5b0;
+    --text-faint: #6a6776;
+    /* Lines & glow */
+    --line: rgba(245, 243, 239, 0.08);
+    --line-strong: rgba(245, 243, 239, 0.14);
+    --glow: 0 0 24px rgba(255, 94, 58, 0.45);
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --sticky-h: 0px; /* measured at runtime */
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100dvh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* Ambient lit-room glow behind everything */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(60% 45% at 80% -5%, rgba(255, 94, 58, 0.16), transparent 70%),
+      radial-gradient(55% 40% at 10% 0%, rgba(56, 225, 255, 0.10), transparent 70%),
+      radial-gradient(80% 60% at 50% 110%, rgba(255, 94, 58, 0.08), transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ---------- Sticky top (header + chips) ---------- */
+  .sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: linear-gradient(to bottom, rgba(10, 10, 15, 0.96) 70%, rgba(10, 10, 15, 0.0));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  header.topbar {
+    position: relative;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 56px;
+  }
+
+  .brand {
+    font-weight: 800;
+    font-size: 1.35rem;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    text-shadow: 0 0 18px rgba(255, 94, 58, 0.55), 0 0 2px rgba(255, 138, 92, 0.8);
+    white-space: nowrap;
+  }
+  .brand .dot { color: var(--neon); }
+
+  /* Back-to-portal pinned to physical RIGHT corner (stable across rtl/ltr) */
+  .back {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    color: var(--text-dim);
+    text-decoration: none;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.02);
+    transition: color .25s var(--ease), border-color .25s var(--ease), background .25s var(--ease);
+  }
+  .back:hover { color: var(--text); border-color: var(--line-strong); background: rgba(255,255,255,0.05); }
+  .back svg { width: 18px; height: 18px; }
+
+  /* ---------- Language switcher (globe → expand) pinned physical LEFT ---------- */
+  .lang { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 50; }
+  .globe {
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color .25s var(--ease), box-shadow .3s var(--ease), background .25s var(--ease);
+  }
+  .globe:hover { border-color: rgba(56, 225, 255, 0.5); }
+  .lang.open .globe { border-color: var(--neon-2); box-shadow: 0 0 18px rgba(56, 225, 255, 0.4); background: rgba(56,225,255,0.06); }
+  .globe svg { width: 20px; height: 20px; }
+
+  .lang-menu {
+    position: absolute;
+    top: 46px;
+    left: 0;
+    min-width: 132px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    padding: 6px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+    transform-origin: top left;
+    pointer-events: none;
+    transition: opacity .26s var(--ease), transform .26s var(--ease);
+  }
+  .lang.open .lang-menu { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+
+  .lang-opt {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--text-dim);
+    text-align: start;
+    font: inherit;
+    font-weight: 500;
+    padding: 9px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background .2s var(--ease), color .2s var(--ease);
+  }
+  .lang-opt:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+  .lang-opt.active { color: var(--text); background: rgba(255, 94, 58, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 94, 58, 0.3); }
+
+  /* ---------- Category chips slider (fixed + centered) ---------- */
+  .chips-wrap { position: relative; }
+  .chips {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    padding: 6px 50% 12px;       /* big inline padding lets any chip reach center */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .chips::-webkit-scrollbar { display: none; }
+
+  .chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-dim);
+    font: inherit;
+    font-weight: 500;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: color .25s var(--ease), border-color .25s var(--ease),
+      background .25s var(--ease), box-shadow .3s var(--ease), transform .2s var(--ease);
+  }
+  .chip .ic { font-size: 1rem; }
+  .chip:hover { color: var(--text); border-color: var(--line-strong); }
+  .chip.active {
+    color: #fff;
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+    box-shadow: var(--glow);
+  }
+
+  /* ---------- Menu (accordion) ---------- */
+  main { max-width: 720px; margin: 0 auto; padding: 8px 14px 80px; }
+
+  .cat {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    margin: 12px 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01));
+    overflow: hidden;
+    scroll-margin-top: calc(var(--sticky-h) + 12px);
+    transition: border-color .35s var(--ease), box-shadow .35s var(--ease);
+  }
+  .cat.open { border-color: var(--line-strong); box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
+
+  .cat-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    background: transparent;
+    border: 0;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    text-align: start;
+  }
+  .cat-head .ic {
+    font-size: 1.4rem;
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    background: rgba(255, 94, 58, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(255, 94, 58, 0.18);
+    flex: 0 0 auto;
+  }
+  .cat-head .ttl { font-weight: 700; font-size: 1.18rem; flex: 1; }
+  .cat-head .count { color: var(--text-faint); font-size: 0.85rem; font-weight: 500; }
+  .chev {
+    width: 22px; height: 22px;
+    flex: 0 0 auto;
+    color: var(--text-faint);
+    transition: transform .4s var(--ease), color .3s var(--ease);
+  }
+  .cat.open .chev { transform: rotate(180deg); color: var(--neon); }
+
+  /* smooth auto-height accordion */
+  .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease); }
+  .cat.open .cat-body { grid-template-rows: 1fr; }
+  .cat-body-inner { overflow: hidden; }
+  .cat-pad { padding: 0 14px 14px; }
+
+  .cat-note {
+    margin: 0 4px 12px;
+    padding: 8px 12px;
+    font-size: 0.88rem;
+    color: var(--neon-soft);
+    background: rgba(255, 94, 58, 0.07);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 94, 58, 0.16);
+  }
+
+  /* Item card — solid background for legibility */
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    margin: 8px 0;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity .45s ease, transform .45s var(--ease),
+      border-color .25s var(--ease), background .25s var(--ease);
+    transition-delay: calc(var(--i) * 35ms);
+  }
+  .cat.open .item { opacity: 1; transform: none; }
+  .item:hover { border-color: var(--line-strong); background: var(--bg-elev-2); }
+  .item.sold { opacity: 0.5; }
+
+  .item-thumb {
+    width: 52px; height: 52px; flex: 0 0 auto;
+    border-radius: 10px; object-fit: cover;
+    border: 1px solid var(--line);
+  }
+  .item-main { flex: 1; min-width: 0; }
+  .item-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .item-name { font-weight: 600; font-size: 1.04rem; color: var(--text); }
+  .item-note { margin-top: 3px; font-size: 0.86rem; line-height: 1.45; color: var(--text-dim); }
+
+  .badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+  .badge.mustTry { color: #fff; background: linear-gradient(135deg, var(--neon), var(--neon-soft)); box-shadow: 0 0 12px rgba(255,94,58,0.5); }
+  .badge.new { color: #04222b; background: linear-gradient(135deg, var(--neon-2), #7defff); box-shadow: 0 0 12px rgba(56,225,255,0.45); }
+
+  .price {
+    flex: 0 0 auto;
+    font-weight: 700;
+    font-size: 1.02rem;
+    color: var(--neon-soft);
+    direction: ltr;
+    unicode-bidi: isolate;
+    white-space: nowrap;
+    padding-top: 1px;
+  }
+  .price .cur { color: var(--text-faint); font-weight: 500; font-size: 0.85em; margin-inline-start: 2px; }
+
+  footer { text-align: center; color: var(--text-faint); font-size: 0.8rem; padding: 24px 16px 40px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
+    .item { opacity: 1 !important; transform: none !important; transition: none !important; }
+    .cat-body { transition: none; }
+    .lang-menu { transition: opacity .12s linear; }
+  }
+</style>
+</head>
+<body>
+  <div class="sticky-top">
+    <header class="topbar">
+      <div class="lang" id="lang">
+        <button class="globe" id="globeBtn" aria-label="Language" aria-expanded="false" aria-haspopup="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M3 12h18"></path>
+            <path d="M12 3c2.5 2.5 3.8 5.8 3.8 9S14.5 18.5 12 21C9.5 18.5 8.2 15.2 8.2 12S9.5 5.5 12 3z"></path>
+          </svg>
+        </button>
+        <div class="lang-menu" id="langMenu" role="menu"></div>
+      </div>
+
+      <div class="brand" id="brand">אייכה<span class="dot"> ·</span> בר</div>
+
+      <a class="back" id="back" href="index.html" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12h16"></path><path d="M9 6l-6 6 6 6"></path>
+        </svg>
+      </a>
+    </header>
+
+    <div class="chips-wrap">
+      <nav class="chips" id="chips" aria-label="categories"></nav>
+    </div>
+  </div>
+
+  <main id="menu"></main>
+  <footer id="footer"></footer>
+
+  <script src="menu-data.js"></script>
+  <script>
+  (function () {
+    "use strict";
+
+    var MENU = window.MENU;
+    var BADGES = window.BADGES || (MENU && MENU.badges) || {};
+    if (!MENU) { document.getElementById("menu").innerHTML = "<p style='padding:24px;color:#a8a5b0'>menu-data.js not found.</p>"; return; }
+
+    var LANGS = ["he", "en", "ar"];
+    var RTL = { he: true, ar: true, en: false };
+    var UI = {
+      back:   { he: "חזרה לפורטל", en: "Back to portal", ar: "العودة إلى البوابة" },
+      sold:   { he: "אזל", en: "Sold out", ar: "نفد" },
+      items:  { he: "פריטים", en: "items", ar: "عناصر" },
+      langName: { he: "עברית", en: "English", ar: "العربية" },
+      footer: { he: "המחירים בשקלים חדשים (₪)", en: "Prices in NIS (₪)", ar: "الأسعار بالشيكل الجديد (₪)" },
+    };
+
+    var lang = localStorage.getItem("siteLanguage");
+    if (LANGS.indexOf(lang) === -1) lang = "he";
+
+    function loc(obj) {
+      if (!obj) return "";
+      return obj[lang] || obj.he || obj.en || obj.ar || "";
+    }
+    function fmtPrice(p) {
+      if (p === null || p === undefined || p === "") return "";
+      var val = (typeof p === "string") ? p.replace("/", " / ") : String(p);
+      return val + ' <span class="cur">₪</span>';
+    }
+
+    var stickyEl = document.querySelector(".sticky-top");
+    function setStickyVar() {
+      document.documentElement.style.setProperty("--sticky-h", stickyEl.offsetHeight + "px");
+    }
+
+    var openId = null;
+
+    function render() {
+      document.documentElement.lang = lang;
+      document.documentElement.dir = RTL[lang] ? "rtl" : "ltr";
+      document.getElementById("brand").textContent = loc(MENU.name);
+      document.getElementById("back").setAttribute("aria-label", UI.back[lang]);
+      document.title = loc(MENU.name) + " — " + (lang === "en" ? "Menu" : (lang === "ar" ? "القائمة" : "תפריט"));
+      document.getElementById("footer").textContent = UI.footer[lang];
+
+      // language menu
+      var lm = document.getElementById("langMenu");
+      lm.innerHTML = "";
+      LANGS.forEach(function (l) {
+        var b = document.createElement("button");
+        b.className = "lang-opt" + (l === lang ? " active" : "");
+        b.type = "button";
+        b.setAttribute("role", "menuitem");
+        b.textContent = UI.langName[l];
+        b.addEventListener("click", function () {
+          lang = l;
+          localStorage.setItem("siteLanguage", l);
+          closeLang();
+          render();
+        });
+        lm.appendChild(b);
+      });
+
+      // chips
+      var chips = document.getElementById("chips");
+      chips.innerHTML = "";
+      MENU.categories.forEach(function (cat) {
+        var c = document.createElement("button");
+        c.className = "chip" + (cat.id === openId ? " active" : "");
+        c.type = "button";
+        c.dataset.id = cat.id;
+        c.innerHTML = '<span class="ic">' + (cat.icon || "") + "</span>" + loc(cat.title);
+        c.addEventListener("click", function () { openCategory(cat.id, true); });
+        chips.appendChild(c);
+      });
+
+      // sections
+      var menu = document.getElementById("menu");
+      menu.innerHTML = "";
+      MENU.categories.forEach(function (cat) {
+        var sec = document.createElement("section");
+        sec.className = "cat" + (cat.id === openId ? " open" : "");
+        sec.id = "cat-" + cat.id;
+
+        var head = document.createElement("button");
+        head.className = "cat-head";
+        head.type = "button";
+        head.setAttribute("aria-expanded", cat.id === openId ? "true" : "false");
+        head.innerHTML =
+          '<span class="ic">' + (cat.icon || "") + "</span>" +
+          '<span class="ttl">' + loc(cat.title) + "</span>" +
+          '<span class="count">' + cat.items.length + " " + UI.items[lang] + "</span>" +
+          '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+        head.addEventListener("click", function () { openCategory(cat.id, true); });
+
+        var body = document.createElement("div");
+        body.className = "cat-body";
+        var inner = document.createElement("div");
+        inner.className = "cat-body-inner";
+        var pad = document.createElement("div");
+        pad.className = "cat-pad";
+
+        if (cat.note) {
+          var note = document.createElement("div");
+          note.className = "cat-note";
+          note.textContent = loc(cat.note);
+          pad.appendChild(note);
+        }
+
+        cat.items.forEach(function (it, i) {
+          var row = document.createElement("div");
+          row.className = "item" + (it.available === false ? " sold" : "");
+          row.style.setProperty("--i", i);
+
+          var thumb = it.image ? '<img class="item-thumb" src="' + it.image + '" alt="" loading="lazy">' : "";
+
+          var badge = "";
+          var blist = it.badges || (it.badge ? [it.badge] : []);
+          blist.forEach(function (bk) {
+            if (BADGES[bk]) badge += '<span class="badge ' + bk + '">' + loc(BADGES[bk]) + "</span>";
+          });
+          if (it.available === false) {
+            badge += '<span class="badge" style="background:#2a2a38;color:#a8a5b0">' + UI.sold[lang] + "</span>";
+          }
+
+          var noteHtml = it.note ? '<div class="item-note">' + loc(it.note) + "</div>" : "";
+          var priceHtml = fmtPrice(it.price);
+
+          row.innerHTML =
+            thumb +
+            '<div class="item-main">' +
+              '<div class="item-top"><span class="item-name">' + loc(it) + "</span>" + badge + "</div>" +
+              noteHtml +
+            "</div>" +
+            (priceHtml ? '<div class="price">' + priceHtml + "</div>" : "");
+
+          pad.appendChild(row);
+        });
+
+        inner.appendChild(pad);
+        body.appendChild(inner);
+        sec.appendChild(head);
+        sec.appendChild(body);
+        menu.appendChild(sec);
+      });
+
+      setStickyVar();
+      centerChip(openId);
+    }
+
+    function openCategory(id, scroll) {
+      openId = (openId === id) ? null : id;  // toggle (collapse if same) → only one open
+      render();
+      if (openId && scroll) {
+        var sec = document.getElementById("cat-" + openId);
+        if (sec) {
+          // delay so layout settles before scroll
+          requestAnimationFrame(function () {
+            window.scrollTo({
+              top: sec.getBoundingClientRect().top + window.pageYOffset - (stickyEl.offsetHeight + 10),
+              behavior: prefersReduced() ? "auto" : "smooth"
+            });
+          });
+        }
+      }
+    }
+
+    function centerChip(id) {
+      if (!id) return;
+      var chip = document.querySelector('.chip[data-id="' + id + '"]');
+      if (chip && chip.scrollIntoView) {
+        chip.scrollIntoView({ inline: "center", block: "nearest", behavior: prefersReduced() ? "auto" : "smooth" });
+      }
+    }
+
+    function prefersReduced() {
+      return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+
+    // ---- language dropdown open/close ----
+    var langWrap = document.getElementById("lang");
+    var globeBtn = document.getElementById("globeBtn");
+    function openLang() { langWrap.classList.add("open"); globeBtn.setAttribute("aria-expanded", "true"); }
+    function closeLang() { langWrap.classList.remove("open"); globeBtn.setAttribute("aria-expanded", "false"); }
+    globeBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      langWrap.classList.contains("open") ? closeLang() : openLang();
+    });
+    document.addEventListener("click", function (e) {
+      if (!langWrap.contains(e.target)) closeLang();
+    });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeLang(); });
+
+    window.addEventListener("resize", setStickyVar);
+
+    // default: open the first category
+    openId = MENU.categories.length ? MENU.categories[0].id : null;
+    render();
+  })();
+  </script>
+</body>
+</html>
