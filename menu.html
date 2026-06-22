@@ -178,14 +178,16 @@
   .lang-opt:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
   .lang-opt.active { color: var(--text); background: rgba(255, 94, 58, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 94, 58, 0.3); }
 
-  /* ---------- Category chips slider (fixed + centered) ---------- */
+  /* ---------- Category chips slider ---------- */
   .chips-wrap { position: relative; }
   .chips {
     display: flex;
     gap: 8px;
     overflow-x: auto;
     scroll-behavior: smooth;
-    padding: 6px 50% 12px;       /* big inline padding lets any chip reach center */
+    /* 50% inline padding = scroll room so ANY chip (incl. the first/last)
+       can be scrolled to the centre of the strip. */
+    padding: 6px 50% 12px;
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
@@ -562,16 +564,18 @@
     }
 
     function centerChip(id, instant) {
-      if (!id) return;
       var chips = document.getElementById("chips");
+      if (!chips || !id) return;
       var chip = chips.querySelector('.chip[data-id="' + id + '"]');
-      if (!chip) return;
-      // pixel-accurate, ABSOLUTE centering (RTL/LTR safe; idempotent so repeated
-      // calls in one tick can't accumulate / overshoot the way scrollBy did)
-      var cRect = chips.getBoundingClientRect();
-      var iRect = chip.getBoundingClientRect();
-      var delta = (iRect.left + iRect.width / 2) - (cRect.left + cRect.width / 2);
-      chips.scrollTo({ left: chips.scrollLeft + delta, behavior: (instant || prefersReduced()) ? "auto" : "smooth" });
+      if (!chip || !chip.scrollIntoView) return;
+      // scrollIntoView({inline:"center"}) is the spec-correct way to center a
+      // child in a scroll container — it handles RTL/LTR internally, so no
+      // manual scrollLeft sign math. block:"nearest" => no vertical page jump.
+      chip.scrollIntoView({
+        inline: "center",
+        block: "nearest",
+        behavior: (instant || prefersReduced()) ? "auto" : "smooth",
+      });
     }
 
     function prefersReduced() {
