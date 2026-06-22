@@ -735,7 +735,7 @@ const CATEGORIES = [
 
 // Single source for the menu page.
 const MENU = {
-  name: { he: "אייכה בר", en: "Eicha Bar", ar: "إيخا بار" }, // ⚠️ confirm Arabic spelling
+  name: { he: "אייכה בר", en: "Ayeka Bar", ar: "אייכה בר" }, // ar intentionally Hebrew for now
   badges: BADGES,
   categories: CATEGORIES,
 };

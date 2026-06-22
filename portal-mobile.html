@@ -4,15 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <script>
-  // Phones get a dedicated, separately-scaled portal. Redirect before paint.
-  // Override with ?desktop=1 to force this desktop version on a phone.
+  // Dedicated phone portal. If a clearly-desktop browser lands here, bounce to
+  // the desktop version. The 900px threshold here vs 820px in index.html leaves
+  // a dead zone (821–900) so the two pages can never redirect-loop.
   (function () {
     try {
       if (/[?&]desktop=1/.test(location.search)) return;
       var ua = navigator.userAgent || "";
       var phoneUA = /Mobi|Android|iPhone|iPod|Windows Phone|BlackBerry|Opera Mini|IEMobile/i.test(ua);
-      var narrow = Math.min(screen.width || 9999, window.innerWidth || 9999) <= 820;
-      if (phoneUA || narrow) location.replace("portal-mobile.html" + location.search);
+      if (!phoneUA && (window.innerWidth || 0) > 900) location.replace("index.html");
     } catch (e) {}
   })();
 </script>
@@ -52,47 +52,34 @@
     position: relative;
     overflow-x: hidden;
   }
-  /* ---- desktop photo background (phones use portal-mobile.html) ---- */
+
+  /* ---- phone photo background ---- */
   .bg {
     position: fixed; inset: 0; z-index: -3;
-    background-position: center; background-size: cover; background-repeat: no-repeat;
-    background-image: url("assets/bg-desktop.jpg");
+    background-position: center top; background-size: cover; background-repeat: no-repeat;
+    background-image: url("assets/bg-mobile.jpg");
   }
-
-  /* darkening scrim over the photo so text + buttons stay legible */
+  /* Scrim: keep the TOP light so the neon sign stays visible, darken toward the
+     bottom where the buttons sit so they stay legible. */
   body::before {
     content: "";
     position: fixed; inset: 0; z-index: -2;
-    background:
-      radial-gradient(120% 85% at 50% 42%, transparent 0%, rgba(10, 10, 15, 0.55) 100%),
-      linear-gradient(to bottom,
-        rgba(10, 10, 15, 0.70) 0%,
-        rgba(10, 10, 15, 0.30) 26%,
-        rgba(10, 10, 15, 0.42) 64%,
-        rgba(10, 10, 15, 0.88) 100%);
+    background: linear-gradient(to bottom,
+      rgba(10, 10, 15, 0.30) 0%,
+      rgba(10, 10, 15, 0.28) 24%,
+      rgba(10, 10, 15, 0.52) 56%,
+      rgba(10, 10, 15, 0.86) 100%);
     pointer-events: none;
-  }
-  /* slow ambient drift */
-  body::after {
-    content: "";
-    position: fixed; inset: -20%; z-index: -1;
-    background: radial-gradient(35% 35% at 50% 50%, rgba(255, 94, 58, 0.06), transparent 70%);
-    pointer-events: none;
-    animation: drift 18s var(--ease) infinite alternate;
-  }
-  @keyframes drift {
-    0%   { transform: translate(-6%, -4%) scale(1); }
-    100% { transform: translate(6%, 5%) scale(1.15); }
   }
 
   /* ---- language switcher (globe → expand), pinned physical LEFT ---- */
-  .lang { position: fixed; left: 14px; top: 14px; z-index: 50; }
+  .lang { position: fixed; left: 12px; top: 12px; z-index: 50; }
   .globe {
-    width: 42px; height: 42px;
+    width: 40px; height: 40px;
     display: grid; place-items: center;
-    border-radius: 13px;
+    border-radius: 12px;
     border: 1px solid var(--line);
-    background: rgba(20, 20, 32, 0.6);
+    background: rgba(20, 20, 32, 0.55);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     color: var(--text);
@@ -101,9 +88,9 @@
   }
   .globe:hover { border-color: rgba(56, 225, 255, 0.5); }
   .lang.open .globe { border-color: var(--neon-2); box-shadow: 0 0 18px rgba(56, 225, 255, 0.4); }
-  .globe svg { width: 22px; height: 22px; }
+  .globe svg { width: 21px; height: 21px; }
   .lang-menu {
-    position: absolute; top: 50px; left: 0;
+    position: absolute; top: 48px; left: 0;
     min-width: 138px;
     background: var(--bg-elev-2);
     border: 1px solid var(--line-strong);
@@ -125,56 +112,58 @@
   .lang-opt:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
   .lang-opt.active { color: var(--text); background: rgba(255, 94, 58, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 94, 58, 0.3); }
 
-  /* ---- main ---- */
+  /* ---- main: brand near the top (below the neon), buttons anchored low ---- */
   main {
     flex: 1;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    width: 100%; max-width: 440px; margin: 0 auto;
-    padding: 48px 22px 36px;
+    display: flex; flex-direction: column; align-items: center;
+    width: 100%; max-width: 460px; margin: 0 auto;
+    /* big top padding clears the neon sign baked into the photo */
+    padding: 17vh 20px 14px;
     text-align: center;
   }
 
-  .brandwrap { margin-bottom: 38px; }
-  .brand-logo { margin: 0 auto 14px; line-height: 0; }
+  .brandwrap { margin: 0; }
+  .brand-logo { margin: 0 auto 12px; line-height: 0; }
   .brand-logo img {
-    width: 150px; max-width: 48vw; height: auto; display: block; margin: 0 auto;
+    width: 92px; height: auto; display: block; margin: 0 auto;
     filter:
-      drop-shadow(0 0 34px rgba(255, 94, 58, 0.40))
-      drop-shadow(0 10px 26px rgba(0, 0, 0, 0.55));
+      drop-shadow(0 0 26px rgba(255, 94, 58, 0.40))
+      drop-shadow(0 8px 20px rgba(0, 0, 0, 0.55));
   }
   .brand {
-    margin: 0; font-weight: 900; font-size: 2.6rem; letter-spacing: 1px; line-height: 1.05;
-    text-shadow: 0 0 26px rgba(255, 94, 58, 0.6), 0 0 3px rgba(255, 138, 92, 0.7);
+    margin: 0; font-weight: 900; font-size: 2.05rem; letter-spacing: 0.5px; line-height: 1.05;
+    text-shadow: 0 0 22px rgba(255, 94, 58, 0.6), 0 0 3px rgba(255, 138, 92, 0.7);
   }
   .brand .dot { color: var(--neon); }
   .tagline {
-    margin-top: 10px; color: var(--text-dim); font-size: 0.98rem; font-weight: 400;
-    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.65);
+    margin-top: 8px; color: var(--text-dim); font-size: 0.9rem; font-weight: 400;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
   }
 
-  .actions { width: 100%; display: flex; flex-direction: column; gap: 13px; }
+  /* buttons: pushed toward the bottom, a touch smaller than desktop */
+  .actions { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding-top: 26px; }
 
   .btn {
-    display: flex; align-items: center; gap: 14px;
+    display: flex; align-items: center; gap: 13px;
     width: 100%;
-    padding: 17px 20px;
-    border-radius: 16px;
+    padding: 14px 17px;
+    border-radius: 15px;
     border: 1px solid var(--line);
-    background: rgba(20, 20, 32, 0.7);
+    background: rgba(20, 20, 32, 0.72);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     color: var(--text);
     text-decoration: none;
-    font-size: 1.06rem; font-weight: 600;
+    font-size: 1.02rem; font-weight: 600;
     cursor: pointer;
     transition: transform .2s var(--ease), border-color .25s var(--ease),
       background .25s var(--ease), box-shadow .3s var(--ease);
   }
-  .btn .ic { width: 26px; height: 26px; flex: 0 0 auto; color: var(--neon-soft); display: grid; place-items: center; }
-  .btn .ic svg { width: 24px; height: 24px; }
+  .btn .ic { width: 24px; height: 24px; flex: 0 0 auto; color: var(--neon-soft); display: grid; place-items: center; }
+  .btn .ic svg { width: 22px; height: 22px; }
   .btn .label { flex: 1; text-align: start; }
-  .btn .arrow { width: 18px; height: 18px; color: var(--text-faint); transition: transform .25s var(--ease), color .25s var(--ease); }
-  .btn:hover { border-color: var(--line-strong); background: var(--bg-elev-2); transform: translateY(-2px); }
-  .btn:hover .arrow { color: var(--neon-soft); }
-  .btn:active { transform: translateY(0) scale(0.99); }
+  .btn .arrow { width: 17px; height: 17px; color: var(--text-faint); transition: transform .25s var(--ease), color .25s var(--ease); }
+  .btn:active { transform: scale(0.99); }
 
   /* hero = digital menu */
   .btn.hero {
@@ -185,9 +174,8 @@
     box-shadow: var(--glow);
   }
   .btn.hero .ic, .btn.hero .arrow { color: #fff; }
-  .btn.hero:hover { box-shadow: 0 0 36px rgba(255, 94, 58, 0.7); background: linear-gradient(135deg, #ff6a47, #ff9568); }
 
-  footer { text-align: center; color: var(--text-faint); font-size: 0.82rem; padding: 0 16px 26px; }
+  footer { text-align: center; color: var(--text-faint); font-size: 0.8rem; padding: 12px 16px 18px; }
 
   /* ---- entrance animation ---- */
   .anim { opacity: 0; transform: translateY(16px); }
@@ -203,7 +191,6 @@
   @media (prefers-reduced-motion: reduce) {
     .anim { opacity: 1 !important; transform: none !important; animation: none !important; }
     .brand-logo { animation: none !important; opacity: 1 !important; }
-    body::after { animation: none; }
   }
 </style>
 </head>
@@ -224,7 +211,7 @@
   <main>
     <div class="brandwrap">
       <div class="brand-logo" aria-hidden="true">
-        <img src="assets/logo.png" alt="" width="150" height="150" />
+        <img src="assets/logo.png" alt="" width="92" height="92" />
       </div>
       <h1 class="brand anim" id="brand" style="--d:90ms">אייכה<span class="dot"> ·</span> בר</h1>
       <p class="tagline anim" id="tagline" style="--d:180ms"></p>

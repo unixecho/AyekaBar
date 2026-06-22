@@ -64,11 +64,11 @@
     inset: 0;
     z-index: -1;
     background:
-      radial-gradient(60% 45% at 80% -5%, rgba(255, 94, 58, 0.13), transparent 70%),
-      radial-gradient(55% 40% at 10% 0%, rgba(56, 225, 255, 0.08), transparent 70%),
-      /* vignette: clear-ish center, edges fade to near-black so the photo has no visible border */
-      radial-gradient(135% 105% at 50% 16%, transparent 0%, transparent 36%, rgba(10, 10, 15, 0.80) 100%),
-      linear-gradient(to bottom, rgba(10, 10, 15, 0.72) 0%, rgba(10, 10, 15, 0.64) 42%, rgba(10, 10, 15, 0.88) 100%);
+      /* subtle warm/cool glow up top, then a strong even darkening so the photo
+         reads as quiet ambiance — no visible bright streaks or photo edges */
+      radial-gradient(70% 55% at 78% -8%, rgba(255, 94, 58, 0.12), transparent 60%),
+      radial-gradient(55% 45% at 12% -4%, rgba(56, 225, 255, 0.06), transparent 60%),
+      linear-gradient(to bottom, rgba(10, 10, 15, 0.86) 0%, rgba(10, 10, 15, 0.82) 38%, rgba(10, 10, 15, 0.92) 100%);
     pointer-events: none;
   }
 
@@ -122,6 +122,8 @@
   }
   .back:hover { color: var(--text); border-color: var(--line-strong); background: rgba(255,255,255,0.05); }
   .back svg { width: 18px; height: 18px; }
+  /* arrow points "back" toward the start of the line: right in RTL, left in LTR */
+  html[dir="ltr"] .back svg { transform: scaleX(-1); }
 
   /* ---------- Language switcher (globe → expand) pinned physical LEFT ---------- */
   .lang { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 50; }
@@ -363,7 +365,7 @@
 
       <a class="back" id="back" href="index.html" aria-label="Back">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12h16"></path><path d="M9 6l-6 6 6 6"></path>
+          <path d="M21 12H5"></path><path d="M15 6l6 6-6 6"></path>
         </svg>
       </a>
     </header>
@@ -564,11 +566,12 @@
       var chips = document.getElementById("chips");
       var chip = chips.querySelector('.chip[data-id="' + id + '"]');
       if (!chip) return;
-      // pixel-accurate centering (works in both RTL and LTR, no page scroll side-effects)
+      // pixel-accurate, ABSOLUTE centering (RTL/LTR safe; idempotent so repeated
+      // calls in one tick can't accumulate / overshoot the way scrollBy did)
       var cRect = chips.getBoundingClientRect();
       var iRect = chip.getBoundingClientRect();
       var delta = (iRect.left + iRect.width / 2) - (cRect.left + cRect.width / 2);
-      chips.scrollBy({ left: delta, behavior: (instant || prefersReduced()) ? "auto" : "smooth" });
+      chips.scrollTo({ left: chips.scrollLeft + delta, behavior: (instant || prefersReduced()) ? "auto" : "smooth" });
     }
 
     function prefersReduced() {
