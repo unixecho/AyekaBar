@@ -39,13 +39,28 @@
     position: relative;
     overflow-x: hidden;
   }
+  /* ---- responsive photo background ---- */
+  /* JS sets html[data-device]; the @media rules below are a no-JS fallback. */
+  .bg {
+    position: fixed; inset: 0; z-index: -3;
+    background-position: center; background-size: cover; background-repeat: no-repeat;
+    background-image: url("assets/bg-desktop.jpg"); /* fallback default */
+  }
+  @media (max-width: 820px) { .bg { background-image: url("assets/bg-mobile.jpg"); } }
+  html[data-device="desktop"] .bg { background-image: url("assets/bg-desktop.jpg"); }
+  html[data-device="mobile"]  .bg { background-image: url("assets/bg-mobile.jpg"); }
+
+  /* darkening scrim over the photo so text + buttons stay legible */
   body::before {
     content: "";
     position: fixed; inset: 0; z-index: -2;
     background:
-      radial-gradient(55% 40% at 80% -5%, rgba(255, 94, 58, 0.20), transparent 70%),
-      radial-gradient(50% 38% at 12% 2%, rgba(56, 225, 255, 0.12), transparent 72%),
-      radial-gradient(90% 60% at 50% 112%, rgba(255, 94, 58, 0.10), transparent 70%);
+      radial-gradient(120% 85% at 50% 42%, transparent 0%, rgba(10, 10, 15, 0.55) 100%),
+      linear-gradient(to bottom,
+        rgba(10, 10, 15, 0.70) 0%,
+        rgba(10, 10, 15, 0.30) 26%,
+        rgba(10, 10, 15, 0.42) 64%,
+        rgba(10, 10, 15, 0.88) 100%);
     pointer-events: none;
   }
   /* slow ambient drift */
@@ -111,21 +126,22 @@
   }
 
   .brandwrap { margin-bottom: 38px; }
-  .logo {
-    width: 96px; height: 96px; margin: 0 auto 20px;
-    border-radius: 50%;
-    display: grid; place-items: center;
-    background: radial-gradient(circle at 50% 35%, rgba(255, 94, 58, 0.22), rgba(20,20,32,0.6));
-    border: 1px solid rgba(255, 94, 58, 0.3);
-    box-shadow: 0 0 40px rgba(255, 94, 58, 0.35), inset 0 0 24px rgba(255, 94, 58, 0.15);
+  .brand-logo { margin: 0 auto 14px; line-height: 0; }
+  .brand-logo img {
+    width: 150px; max-width: 48vw; height: auto; display: block; margin: 0 auto;
+    filter:
+      drop-shadow(0 0 34px rgba(255, 94, 58, 0.40))
+      drop-shadow(0 10px 26px rgba(0, 0, 0, 0.55));
   }
-  .logo span { font-size: 2.6rem; font-weight: 900; color: var(--neon-soft); text-shadow: var(--glow); line-height: 1; }
   .brand {
-    font-weight: 900; font-size: 2.6rem; letter-spacing: 1px; line-height: 1.05;
+    margin: 0; font-weight: 900; font-size: 2.6rem; letter-spacing: 1px; line-height: 1.05;
     text-shadow: 0 0 26px rgba(255, 94, 58, 0.6), 0 0 3px rgba(255, 138, 92, 0.7);
   }
   .brand .dot { color: var(--neon); }
-  .tagline { margin-top: 10px; color: var(--text-dim); font-size: 0.98rem; font-weight: 400; }
+  .tagline {
+    margin-top: 10px; color: var(--text-dim); font-size: 0.98rem; font-weight: 400;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.65);
+  }
 
   .actions { width: 100%; display: flex; flex-direction: column; gap: 13px; }
 
@@ -168,21 +184,23 @@
   .anim { opacity: 0; transform: translateY(16px); }
   .ready .anim { animation: rise .7s var(--ease) forwards; animation-delay: var(--d, 0ms); }
   @keyframes rise { to { opacity: 1; transform: none; } }
-  .ready .logo { animation: bloom 1s var(--ease) forwards; }
+  .ready .brand-logo { animation: bloom 1s var(--ease) forwards; }
   @keyframes bloom {
-    0%   { opacity: 0; transform: scale(0.8); box-shadow: 0 0 0 rgba(255,94,58,0); }
-    60%  { opacity: 1; box-shadow: 0 0 60px rgba(255, 94, 58, 0.55), inset 0 0 24px rgba(255, 94, 58, 0.25); }
-    100% { opacity: 1; transform: scale(1); box-shadow: 0 0 40px rgba(255, 94, 58, 0.35), inset 0 0 24px rgba(255, 94, 58, 0.15); }
+    0%   { opacity: 0; transform: scale(0.82); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: scale(1); }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .anim { opacity: 1 !important; transform: none !important; animation: none !important; }
-    .logo { animation: none !important; opacity: 1 !important; }
+    .brand-logo { animation: none !important; opacity: 1 !important; }
     body::after { animation: none; }
   }
 </style>
 </head>
 <body>
+  <div class="bg" aria-hidden="true"></div>
+
   <div class="lang" id="lang">
     <button class="globe" id="globeBtn" aria-label="Language" aria-expanded="false" aria-haspopup="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -196,7 +214,9 @@
 
   <main>
     <div class="brandwrap">
-      <div class="logo anim" aria-hidden="true"><span>א</span></div>
+      <div class="brand-logo" aria-hidden="true">
+        <img src="assets/logo.png" alt="" width="150" height="150" />
+      </div>
       <h1 class="brand anim" id="brand" style="--d:90ms">אייכה<span class="dot"> ·</span> בר</h1>
       <p class="tagline anim" id="tagline" style="--d:180ms"></p>
     </div>
@@ -209,6 +229,21 @@
   <script>
   (function () {
     "use strict";
+
+    // ---- PC vs phone: pick the matching background photo ----
+    // Mobile if a touch/phone UA OR a narrow viewport; re-checked on resize/rotate.
+    var mqNarrow = window.matchMedia("(max-width: 820px)");
+    function isPhone() {
+      var ua = navigator.userAgent || "";
+      var mobileUA = /Mobi|Android|iPhone|iPod|iPad|Windows Phone|BlackBerry|Opera Mini|IEMobile/i.test(ua);
+      return mobileUA || mqNarrow.matches;
+    }
+    function applyDevice() {
+      document.documentElement.setAttribute("data-device", isPhone() ? "mobile" : "desktop");
+    }
+    applyDevice();
+    if (mqNarrow.addEventListener) mqNarrow.addEventListener("change", applyDevice);
+    else if (mqNarrow.addListener) mqNarrow.addListener(applyDevice); // older Safari
 
     // ---- External destinations. Replace placeholders with real URLs. ----
     var LINKS = {

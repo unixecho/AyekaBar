@@ -455,7 +455,7 @@ const CATEGORIES = [
         he: "שולחן חברים",
         en: "Friends' Table",
         ar: "طاولة الأصدقاء",
-        price: null,
+        price: 210,
         note: {
           he: "פיצת מרגריטה, 4 שליש בירות מהחבית, נאצ'וס, אדממה וחמוצים",
           en: "Margherita pizza, 4 third-liter draft beers, nachos, edamame and pickles",
@@ -745,4 +745,7 @@ if (typeof window !== "undefined") {
   window.MENU = MENU;
   window.BADGES = BADGES;
 }
-if (typeof module !== "und
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { MENU, BADGES, CATEGORIES };
+}
