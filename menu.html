@@ -269,7 +269,13 @@
   /* smooth auto-height accordion */
   .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease); }
   .cat.open .cat-body { grid-template-rows: 1fr; }
-  .cat-body-inner { overflow: hidden; }
+  .cat-body-inner {
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity .4s var(--ease);
+    transition-delay: 0s;
+  }
+  .cat.open .cat-body-inner { opacity: 1; transition-delay: .08s; }
   .cat-pad { padding: 0 14px 14px; }
 
   .cat-note {
@@ -309,7 +315,15 @@
   }
   .item-main { flex: 1; min-width: 0; }
   .item-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .item-name { font-weight: 600; font-size: 1.04rem; color: var(--text); }
+  .item-name {
+    display: inline-block;
+    font-weight: 600; font-size: 1.04rem; color: var(--text);
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path .5s steps(14, end);
+    transition-delay: calc(var(--i) * 35ms + 90ms);
+  }
+  html[dir="rtl"] .item-name { clip-path: inset(0 0 0 100%); }
+  .cat.open .item .item-name { clip-path: inset(0 0 0 0); }
   .item-note { margin-top: 3px; font-size: 0.86rem; line-height: 1.45; color: var(--text-dim); }
 
   .badge {
@@ -342,7 +356,9 @@
   @media (prefers-reduced-motion: reduce) {
     * { scroll-behavior: auto !important; }
     .item { opacity: 1 !important; transform: none !important; transition: none !important; }
+    .item-name { clip-path: none !important; transition: none !important; }
     .cat-body { transition: none; }
+    .cat-body-inner { opacity: 1 !important; transition: none !important; }
     .lang-menu { transition: opacity .12s linear; }
   }
 </style>
