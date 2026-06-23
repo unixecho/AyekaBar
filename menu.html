@@ -192,6 +192,12 @@
     -ms-overflow-style: none;
   }
   .chips::-webkit-scrollbar { display: none; }
+  /* When every chip fits without scrolling, center the whole row as a group
+     instead of reserving 50% side padding for scroll-to-edge centering. */
+  .chips.fits {
+    justify-content: center;
+    padding: 6px 14px 12px;
+  }
 
   .chip {
     flex: 0 0 auto;
@@ -503,6 +509,7 @@
         c.addEventListener("click", function () { openCategory(cat.id, true); });
         chips.appendChild(c);
       });
+      chips.classList.toggle("fits", chips.scrollWidth <= chips.clientWidth + 1);
 
       // sections
       var menu = document.getElementById("menu");
@@ -598,6 +605,8 @@
     function centerChip(id, instant) {
       var chips = document.getElementById("chips");
       if (!chips || !id) return;
+      chips.classList.toggle("fits", chips.scrollWidth <= chips.clientWidth + 1);
+      if (chips.classList.contains("fits")) return;
       var chip = chips.querySelector('.chip[data-id="' + id + '"]');
       if (!chip || !chip.scrollIntoView) return;
       // scrollIntoView({inline:"center"}) is the spec-correct way to center a
