@@ -380,6 +380,8 @@
   <main id="menu"></main>
   <footer id="footer"></footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
   <script src="menu-data.js"></script>
   <script>
   (function () {
@@ -399,9 +401,39 @@
     if (mqNarrow.addEventListener) mqNarrow.addEventListener("change", applyDevice);
     else if (mqNarrow.addListener) mqNarrow.addListener(applyDevice); // older Safari
 
-    var MENU = window.MENU;
-    var BADGES = window.BADGES || (MENU && MENU.badges) || {};
-    if (!MENU) { document.getElementById("menu").innerHTML = "<p style='padding:24px;color:#a8a5b0'>menu-data.js not found.</p>"; return; }
+    // Live menu lives in Supabase (owner edits it via editor.html + "Publish").
+    // menu-data.js, loaded above, is kept only as an offline/outage fallback —
+    // it stays in the repo but is no longer the source of truth.
+    function staticFallback() {
+      return { MENU: window.MENU, BADGES: window.BADGES || (window.MENU && window.MENU.badges) || {} };
+    }
+
+    async function loadMenu() {
+      try {
+        if (!window.SUPABASE_URL || window.SUPABASE_URL.indexOf("YOUR-PROJECT-REF") > -1 || !window.MENU_SLUG) {
+          throw new Error("Supabase not configured");
+        }
+        var client = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+        var res = await client
+          .from("public_menus")
+          .select("name,badges,menu")
+          .eq("slug", window.MENU_SLUG)
+          .single();
+        if (res.error || !res.data) throw res.error || new Error("menu not found");
+        return {
+          MENU: { name: res.data.name, categories: (res.data.menu && res.data.menu.categories) || [] },
+          BADGES: res.data.badges || {}
+        };
+      } catch (e) {
+        console.warn("Live menu unavailable, using bundled fallback:", e);
+        return staticFallback();
+      }
+    }
+
+    loadMenu().then(function (loaded) { init(loaded.MENU, loaded.BADGES); });
+
+    function init(MENU, BADGES) {
+    if (!MENU) { document.getElementById("menu").innerHTML = "<p style='padding:24px;color:#a8a5b0'>Menu not available.</p>"; return; }
 
     var LANGS = ["he", "en", "ar"];
     var RTL = { he: true, ar: true, en: false };
@@ -608,6 +640,7 @@
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(function () { centerChip(openId, true); });
     }
+    } // end init()
   })();
   </script>
 </body>
