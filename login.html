@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>התחברות — עורך התפריט</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0a0a0f; --bg-elev:#141420; --bg-elev-2:#1d1d2b;
+    --neon:#ff5e3a; --neon-soft:#ff8a5c;
+    --text:#f5f3ef; --text-dim:#a8a5b0; --text-faint:#6a6776;
+    --line:rgba(245,243,239,.10); --line-strong:rgba(245,243,239,.18);
+    --ok:#4ade80; --err:#ff6b6b;
+    --ease:cubic-bezier(0.22,1,0.36,1);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:"Rubik",system-ui,sans-serif;
+    min-height:100dvh;display:grid;place-items:center;padding:24px;}
+  .card{width:100%;max-width:380px;background:var(--bg-elev);border:1px solid var(--line);
+    border-radius:18px;padding:28px 24px;}
+  h1{font-size:1.2rem;margin:0 0 4px;}
+  p.sub{color:var(--text-dim);font-size:.9rem;margin:0 0 20px;}
+  label{display:block;font-size:.82rem;color:var(--text-dim);margin-bottom:6px;font-weight:500;}
+  input[type=email]{width:100%;font:inherit;color:var(--text);background:var(--bg-elev-2);
+    border:1px solid var(--line);border-radius:10px;padding:10px 12px;direction:ltr;text-align:end;}
+  input:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 3px rgba(255,94,58,.15);}
+  button{width:100%;margin-top:14px;font:inherit;font-weight:700;cursor:pointer;border-radius:10px;
+    border:0;color:#fff;padding:11px;background:linear-gradient(135deg,var(--neon),var(--neon-soft));
+    box-shadow:0 0 18px rgba(255,94,58,.4);transition:box-shadow .25s var(--ease);}
+  button:hover{box-shadow:0 0 26px rgba(255,94,58,.6);}
+  button:disabled{opacity:.6;cursor:default;}
+  .status{margin-top:14px;font-size:.86rem;min-height:1.2em;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>עורך התפריט</h1>
+    <p class="sub">הזן את כתובת האימייל שלך ונשלח לך לינק התחברות חד-פעמי.</p>
+    <form id="form">
+      <label for="email">אימייל</label>
+      <input type="email" id="email" required autocomplete="email" placeholder="you@example.com" />
+      <button type="submit" id="submitBtn">שלח לינק התחברות</button>
+    </form>
+    <div class="status" id="status"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  (function () {
+    "use strict";
+
+    var statusEl = document.getElementById("status");
+    function status(msg, color) {
+      statusEl.textContent = msg || "";
+      statusEl.style.color = color || "var(--text-dim)";
+    }
+
+    if (!window.SUPABASE_URL || window.SUPABASE_URL.indexOf("YOUR-PROJECT-REF") > -1) {
+      status("config.js לא הוגדר עדיין — מלא את פרטי ה-Supabase שם.", "var(--err)");
+      document.getElementById("submitBtn").disabled = true;
+      return;
+    }
+
+    var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    var editorUrl = new URL("editor.html", window.location.href).toString();
+
+    // Already signed in (or just followed the magic link back) -> go straight in.
+    supabase.auth.getSession().then(function (res) {
+      if (res.data && res.data.session) window.location.replace(editorUrl);
+    });
+    supabase.auth.onAuthStateChange(function (event, session) {
+      if (session) window.location.replace(editorUrl);
+    });
+
+    document.getElementById("form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var email = document.getElementById("email").value.trim();
+      if (!email) return;
+      var btn = document.getElementById("submitBtn");
+      btn.disabled = true;
+      status("שולח…");
+      var { error } = await supabase.auth.signInWithOtp({
+        email: email,
+        options: { emailRedirectTo: editorUrl }
+      });
+      btn.disabled = false;
+      if (error) { status("שגיאה: " + error.message, "var(--err)"); return; }
+      status("נשלח! בדוק את תיבת המייל שלך ולחץ על הלינק.", "var(--ok)");
+    });
+  })();
+  </script>
+</body>
+</html>
