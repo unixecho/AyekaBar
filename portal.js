@@ -6,7 +6,7 @@
 
   // ---- External destinations ----
   var LINKS = {
-    menu:      "menu.html",                                  // internal — the digital menu
+    menu:      "menu.html?v=20260623",                       // internal — the digital menu (?v busts stale caches)
     instagram: "https://www.instagram.com/ayeka_bar/",
     review:    "https://www.google.com/search?sca_esv=bf5b70d178609590&si=APenkKm7iecQ4G6P-TsbSMFKIQtv3EFIqRAFw-i8uEbk55Z-_7KuVymh7UmzzptLxAMIed7ULsObX2FBkuw7nT2KAF8MiqFu6xqzwWnw0NKO515Um1Z0Z8-i9F5axbTKJbSaHBIaHv9J&q=%D7%90%D7%99%D7%99%D7%9B%D7%94+Reviews&sa=X&ved=2ahUKEwjbgtyuopuVAxWRBNsEHV7yGVoQ0bkNegQIQhAH#",
   };
