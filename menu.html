@@ -594,6 +594,7 @@
       if (openId && scroll) {
         var sec = document.getElementById("cat-" + openId);
         if (sec) {
+          suppressScrollSpy = true;
           // delay so layout settles before scroll
           requestAnimationFrame(function () {
             window.scrollTo({
@@ -601,9 +602,61 @@
               behavior: prefersReduced() ? "auto" : "smooth"
             });
           });
+          armScrollSpyResume();
         }
       }
     }
+
+    // ---- scroll-spy: open whichever category is under the sticky bar as the
+    // user scrolls, closing the previously open one, without fighting any
+    // programmatic (click-triggered) scroll already in flight. ----
+    var suppressScrollSpy = false;
+    var scrollSpyResumeTimer = null;
+    function armScrollSpyResume() {
+      clearTimeout(scrollSpyResumeTimer);
+      document.removeEventListener("scrollend", onScrollSpyResume);
+      if ("onscrollend" in window) {
+        document.addEventListener("scrollend", onScrollSpyResume, { once: true });
+      } else {
+        scrollSpyResumeTimer = setTimeout(onScrollSpyResume, 700);
+      }
+    }
+    function onScrollSpyResume() { suppressScrollSpy = false; }
+
+    function categoryUnderStickyBar() {
+      var triggerY = stickyEl.offsetHeight + 12;
+      var current = null;
+      for (var i = 0; i < MENU.categories.length; i++) {
+        var sec = document.getElementById("cat-" + MENU.categories[i].id);
+        if (sec && sec.getBoundingClientRect().top <= triggerY) current = MENU.categories[i].id;
+      }
+      return current;
+    }
+
+    function syncOpenWithScroll(id) {
+      if (!id || id === openId) return;
+      var before = document.getElementById("cat-" + id);
+      var anchorBefore = before ? before.getBoundingClientRect().top : null;
+      openId = id;
+      render();
+      centerChip(openId, true);
+      if (anchorBefore !== null) {
+        var after = document.getElementById("cat-" + id);
+        var anchorAfter = after.getBoundingClientRect().top;
+        if (anchorAfter !== anchorBefore) window.scrollBy(0, anchorAfter - anchorBefore);
+      }
+    }
+
+    var scrollSpyQueued = false;
+    window.addEventListener("scroll", function () {
+      if (suppressScrollSpy || scrollSpyQueued) return;
+      scrollSpyQueued = true;
+      requestAnimationFrame(function () {
+        scrollSpyQueued = false;
+        if (suppressScrollSpy) return;
+        syncOpenWithScroll(categoryUnderStickyBar());
+      });
+    }, { passive: true });
 
     function centerChip(id, instant) {
       var chips = document.getElementById("chips");
