@@ -275,12 +275,9 @@
   }
   .cat.open .chev { transform: rotate(180deg); color: var(--neon); }
 
-  /* smooth auto-height accordion */
-  .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease); }
+  /* smooth auto-height accordion — slow, deliberate open/close */
+  .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .7s var(--ease); }
   .cat.open .cat-body { grid-template-rows: 1fr; }
-  /* When opening as you scroll, the height settles instantly so the scroll
-     compensation is exact (no jump); item bodies still fade in for grace. */
-  html.scroll-open .cat-body { transition: none; }
   .cat-body-inner { overflow: hidden; }
   .cat-pad { padding: 0 14px 14px; }
 
@@ -305,12 +302,13 @@
     border: 1px solid var(--line);
     border-radius: 14px;
     opacity: 0;
-    transform: translateY(10px);
-    transition: opacity .45s ease, transform .45s var(--ease),
+    transform: translateY(16px) scale(0.97);
+    filter: blur(3px);
+    transition: opacity .7s ease, transform .8s var(--ease), filter .7s ease,
       border-color .25s var(--ease), background .25s var(--ease);
-    transition-delay: calc(var(--i) * 35ms);
+    transition-delay: calc(120ms + var(--i) * 70ms);
   }
-  .cat.open .item { opacity: 1; transform: none; }
+  .cat.open .item { opacity: 1; transform: none; filter: none; }
   .item:hover { border-color: var(--line-strong); background: var(--bg-elev-2); }
   .item.sold { opacity: 0.5; }
 
@@ -353,7 +351,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     * { scroll-behavior: auto !important; }
-    .item { opacity: 1 !important; transform: none !important; transition: none !important; }
+    .item { opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
     .cat-body { transition: none; }
     .lang-menu { transition: opacity .12s linear; }
   }
@@ -522,7 +520,11 @@
       menu.innerHTML = "";
       MENU.categories.forEach(function (cat) {
         var sec = document.createElement("section");
-        sec.className = "cat" + (cat.id === openId ? " open" : "");
+        // Always built closed — see the rAF pass below, which adds "open"
+        // a frame later so the browser actually has a "before" state to
+        // transition from (a freshly-created element that already has the
+        // "open" class never transitions; there's nothing to animate from).
+        sec.className = "cat";
         sec.id = "cat-" + cat.id;
 
         var head = document.createElement("button");
@@ -587,146 +589,40 @@
         menu.appendChild(sec);
       });
 
+      // Let the closed state paint, then add "open" on the next frame so the
+      // expand/fade-in actually transitions instead of snapping instantly.
+      if (openId) {
+        var openSec = document.getElementById("cat-" + openId);
+        if (openSec) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () { openSec.classList.add("open"); });
+          });
+        }
+      }
+
       setStickyVar();
       centerChip(openId);
     }
 
+    // Tap-to-toggle accordion: only one category open at a time. Opening
+    // smoothly scrolls that category's header up under the sticky bar; the
+    // expand itself is a pure CSS transition (see .cat-body / .item), no
+    // scroll-linked JS fighting the user's finger.
     function openCategory(id, scroll) {
-      if (openId === id) {           // tap the open one again → collapse it
-        openId = null;
-        render();
-        return;
-      }
-      if (scroll) {
-        // Same precise open-and-glide the scroll-snap uses, so a tap lands
-        // exactly on its category instead of drifting onto a neighbour.
-        snapToCategory(id);
-      } else {
-        openId = id;
-        render();
-        centerChip(openId, true);
-      }
-    }
-
-    // ---- scroll-spy (open as you scroll) ---------------------------------
-    // As each category header reaches the sticky bar it becomes the open one
-    // and the previous closes — exactly "the next opens, the previous
-    // closes." The catch: opening one category and closing another changes
-    // layout, which would jump the page. We apply the height change instantly
-    // (so its geometry is final) and then compensate the scroll by the exact
-    // shift, keeping the header you're arriving at pinned to the bar — no
-    // jump, and the page is never scrolled programmatically while you drag,
-    // so nothing fights your finger. Item bodies still fade in for grace.
-    //
-    // A glide is used ONLY for explicit chip/header taps (a deliberate jump to
-    // a far category); any real input halts it so it can't tug your scroll.
-    var suppressScrollSpy = false;
-    var glideAbort = null;
-    var gliding = false;
-    var GLIDE_INPUTS = ["wheel", "touchstart", "keydown", "pointerdown"];
-    function stopGlideListeners() {
-      if (!glideAbort) return;
-      GLIDE_INPUTS.forEach(function (ev) { window.removeEventListener(ev, glideAbort); });
-      glideAbort = null;
-    }
-    function endGlide() {
-      if (gliding) {
-        gliding = false;
-        window.scrollTo({ top: window.pageYOffset }); // freeze in-flight glide
-      }
-      stopGlideListeners();
-      suppressScrollSpy = false;
-    }
-    function glideTo(top) {
-      top = Math.max(0, Math.round(top));
-      stopGlideListeners();
-      suppressScrollSpy = true;
-      gliding = true;
-      glideAbort = endGlide;
-      GLIDE_INPUTS.forEach(function (ev) {
-        window.addEventListener(ev, glideAbort, { once: true, passive: true });
-      });
-      window.scrollTo({ top: top, behavior: prefersReduced() ? "auto" : "smooth" });
-    }
-
-    var snapLineGap = 10;
-    function snapLineY() { return stickyEl.offsetHeight + snapLineGap; }
-
-    // The category that currently owns the top of the viewport: the last
-    // header at or above the sticky bar.
-    function categoryAtLine() {
-      if (!MENU.categories.length) return openId;
-      var line = snapLineY() + 4;
-      // Default to the first category: when you're above every header (at the
-      // top) the first one owns the view.
-      var current = MENU.categories[0].id;
-      for (var i = 0; i < MENU.categories.length; i++) {
-        var sec = document.getElementById("cat-" + MENU.categories[i].id);
-        if (sec && sec.getBoundingClientRect().top <= line) current = MENU.categories[i].id;
-      }
-      return current;
-    }
-
-    // Light-touch chip highlight: no re-render, no layout shift.
-    function setActiveChip(id) {
-      if (!id) return;
-      var chips = document.getElementById("chips");
-      if (!chips) return;
-      var list = chips.querySelectorAll(".chip");
-      for (var i = 0; i < list.length; i++) {
-        list[i].classList.toggle("active", list[i].dataset.id === id);
-      }
-      centerChip(id, true);
-    }
-
-    // Switch the open category to `id`, pinning that category's header in
-    // place across the open/close layout change (instant height, exact
-    // compensation) so the view doesn't jump. `anchorId` is the element kept
-    // visually fixed (defaults to the one being opened).
-    function setOpenPinned(id, anchorId) {
-      anchorId = anchorId || id;
-      var anchor = document.getElementById("cat-" + anchorId);
-      var before = anchor ? anchor.getBoundingClientRect().top : 0;
-      document.documentElement.classList.add("scroll-open"); // instant height, items still fade
-      openId = id;
+      openId = (openId === id) ? null : id; // toggle (collapse if same)
       render();
-      anchor = document.getElementById("cat-" + anchorId);
-      var after = anchor ? anchor.getBoundingClientRect().top : 0;
-      void (anchor && anchor.offsetHeight);
-      document.documentElement.classList.remove("scroll-open");
-      if (after !== before) window.scrollTo({ top: Math.max(0, Math.round(window.pageYOffset + after - before)) });
+      if (openId && scroll) {
+        var sec = document.getElementById("cat-" + openId);
+        if (sec) {
+          requestAnimationFrame(function () {
+            window.scrollTo({
+              top: sec.getBoundingClientRect().top + window.pageYOffset - (stickyEl.offsetHeight + 10),
+              behavior: prefersReduced() ? "auto" : "smooth"
+            });
+          });
+        }
+      }
     }
-
-    function openOnScroll() {
-      if (suppressScrollSpy) return;
-      var id = categoryAtLine();
-      if (id) setActiveChip(id);
-      if (id && id !== openId) setOpenPinned(id);
-    }
-
-    // Explicit tap target: open it (pinned, no jump) then glide it to the bar.
-    function snapToCategory(id) {
-      if (!id) return;
-      var sec = document.getElementById("cat-" + id);
-      if (!sec) return;
-      if (id !== openId) setOpenPinned(id);
-      setActiveChip(id);
-      sec = document.getElementById("cat-" + id);
-      glideTo(sec.getBoundingClientRect().top + window.pageYOffset - snapLineY());
-    }
-
-    var spyQueued = false;
-    window.addEventListener("scroll", function () {
-      if (suppressScrollSpy || spyQueued) return;
-      spyQueued = true;
-      requestAnimationFrame(function () { spyQueued = false; openOnScroll(); });
-    }, { passive: true });
-
-    // Any real input hands control back from a tap-glide so it can't fight a
-    // user scroll mid-flight.
-    ["wheel", "keydown", "pointerdown", "touchstart"].forEach(function (ev) {
-      window.addEventListener(ev, function () { if (gliding) endGlide(); }, { passive: true });
-    });
 
     function centerChip(id, instant) {
       var chips = document.getElementById("chips");
