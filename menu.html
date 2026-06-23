@@ -275,8 +275,8 @@
   }
   .cat.open .chev { transform: rotate(180deg); color: var(--neon); }
 
-  /* smooth auto-height accordion — animates both open and close */
-  .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .55s var(--ease); }
+  /* smooth auto-height accordion */
+  .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease); }
   .cat.open .cat-body { grid-template-rows: 1fr; }
   .cat-body-inner { overflow: hidden; }
   .cat-pad { padding: 0 14px 14px; }
@@ -291,10 +291,7 @@
     border: 1px solid rgba(255, 94, 58, 0.16);
   }
 
-  /* Item card — solid background for legibility.
-     Closed/hidden = the resting state, and also the state items return to when
-     a category closes: this rule's transition is the FADE-OUT (quick, no
-     stagger). The .cat.open rule below is the FADE-IN (slower, staggered). */
+  /* Item card — solid background for legibility */
   .item {
     display: flex;
     align-items: flex-start;
@@ -305,27 +302,12 @@
     border: 1px solid var(--line);
     border-radius: 14px;
     opacity: 0;
-    transform: translateY(14px) scale(0.98);
-    filter: blur(2px);
-    transition:
-      opacity .3s ease,
-      transform .35s var(--ease),
-      filter .3s ease,
-      border-color .25s var(--ease),
-      background .25s var(--ease);
+    transform: translateY(10px);
+    transition: opacity .45s ease, transform .45s var(--ease),
+      border-color .25s var(--ease), background .25s var(--ease);
+    transition-delay: calc(var(--i) * 35ms);
   }
-  /* Fade IN: each item drifts up into place one after another. */
-  .cat.open .item {
-    opacity: 1;
-    transform: none;
-    filter: none;
-    transition:
-      opacity .55s ease calc(100ms + var(--i) * 65ms),
-      transform .6s var(--ease) calc(100ms + var(--i) * 65ms),
-      filter .55s ease calc(100ms + var(--i) * 65ms),
-      border-color .25s var(--ease),
-      background .25s var(--ease);
-  }
+  .cat.open .item { opacity: 1; transform: none; }
   .item:hover { border-color: var(--line-strong); background: var(--bg-elev-2); }
   .item.sold { opacity: 0.5; }
 
@@ -368,7 +350,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     * { scroll-behavior: auto !important; }
-    .item { opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
+    .item { opacity: 1 !important; transform: none !important; transition: none !important; }
     .cat-body { transition: none; }
     .lang-menu { transition: opacity .12s linear; }
   }
@@ -537,14 +519,13 @@
       menu.innerHTML = "";
       MENU.categories.forEach(function (cat) {
         var sec = document.createElement("section");
-        // Built closed; applyOpenState() flips the open one's class afterwards.
-        sec.className = "cat";
+        sec.className = "cat" + (cat.id === openId ? " open" : "");
         sec.id = "cat-" + cat.id;
 
         var head = document.createElement("button");
         head.className = "cat-head";
         head.type = "button";
-        head.setAttribute("aria-expanded", "false");
+        head.setAttribute("aria-expanded", cat.id === openId ? "true" : "false");
         head.innerHTML =
           '<span class="ic">' + (cat.icon || "") + "</span>" +
           '<span class="ttl">' + loc(cat.title) + "</span>" +
@@ -603,71 +584,23 @@
         menu.appendChild(sec);
       });
 
-      // Sections were just built closed. Let that closed state paint, then
-      // open the active one on the next frame so it fades/expands in (a
-      // freshly-created element given .open immediately has no "before" state
-      // to transition from, so it would snap).
-      requestAnimationFrame(function () { applyOpenState(); });
-
       setStickyVar();
       centerChip(openId);
     }
 
-    // Reflect `openId` by toggling classes on the already-built DOM — no
-    // rebuild. This is what makes both the fade-IN (opening category) and the
-    // fade-OUT (the one that was open) animate: their elements stay in place
-    // and only the .open class changes, so CSS transitions run in both
-    // directions. Also keeps the chip highlight and aria state in sync.
-    function applyOpenState() {
-      MENU.categories.forEach(function (cat) {
-        var sec = document.getElementById("cat-" + cat.id);
-        if (!sec) return;
-        var isOpen = cat.id === openId;
-        sec.classList.toggle("open", isOpen);
-        var head = sec.querySelector(".cat-head");
-        if (head) head.setAttribute("aria-expanded", isOpen ? "true" : "false");
-      });
-      var chips = document.getElementById("chips");
-      if (chips) {
-        var list = chips.querySelectorAll(".chip");
-        for (var i = 0; i < list.length; i++) {
-          list[i].classList.toggle("active", list[i].dataset.id === openId);
-        }
-      }
-    }
-
-    // Tap-to-toggle accordion: only one category open at a time. Tapping the
-    // open one again closes it; tapping another closes the first (it fades
-    // out) and opens the new one (it fades in). No DOM rebuild, no scroll-spy
-    // — just a class toggle plus a one-shot glide so the opened category
-    // settles under the sticky bar.
     function openCategory(id, scroll) {
-      var prevId = openId;
-
-      // Measure the currently-open category up front: if it sits ABOVE the one
-      // we're opening, it's about to collapse and pull the page up, so we
-      // pre-subtract its height from the scroll target to avoid overshooting.
-      var prevTop = null, prevInnerH = 0;
-      if (prevId) {
-        var prevSec = document.getElementById("cat-" + prevId);
-        if (prevSec) {
-          prevTop = prevSec.getBoundingClientRect().top;
-          var prevInner = prevSec.querySelector(".cat-body-inner");
-          if (prevInner) prevInnerH = prevInner.getBoundingClientRect().height;
-        }
-      }
-
-      openId = (openId === id) ? null : id; // toggle (collapse if same)
-      applyOpenState();
-      centerChip(openId, true);
-
+      openId = (openId === id) ? null : id;  // toggle (collapse if same) → only one open
+      render();
       if (openId && scroll) {
         var sec = document.getElementById("cat-" + openId);
         if (sec) {
-          var rectTop = sec.getBoundingClientRect().top;
-          var correction = (prevId && prevId !== openId && prevTop !== null && prevTop < rectTop) ? prevInnerH : 0;
-          var target = rectTop + window.pageYOffset - (stickyEl.offsetHeight + 10) - correction;
-          window.scrollTo({ top: Math.max(0, target), behavior: prefersReduced() ? "auto" : "smooth" });
+          // delay so layout settles before scroll
+          requestAnimationFrame(function () {
+            window.scrollTo({
+              top: sec.getBoundingClientRect().top + window.pageYOffset - (stickyEl.offsetHeight + 10),
+              behavior: prefersReduced() ? "auto" : "smooth"
+            });
+          });
         }
       }
     }
