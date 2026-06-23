@@ -275,8 +275,8 @@
   }
   .cat.open .chev { transform: rotate(180deg); color: var(--neon); }
 
-  /* smooth auto-height accordion — slow, deliberate open/close */
-  .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .7s var(--ease); }
+  /* smooth auto-height accordion — animates both open and close */
+  .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .55s var(--ease); }
   .cat.open .cat-body { grid-template-rows: 1fr; }
   .cat-body-inner { overflow: hidden; }
   .cat-pad { padding: 0 14px 14px; }
@@ -291,7 +291,10 @@
     border: 1px solid rgba(255, 94, 58, 0.16);
   }
 
-  /* Item card — solid background for legibility */
+  /* Item card — solid background for legibility.
+     Closed/hidden = the resting state, and also the state items return to when
+     a category closes: this rule's transition is the FADE-OUT (quick, no
+     stagger). The .cat.open rule below is the FADE-IN (slower, staggered). */
   .item {
     display: flex;
     align-items: flex-start;
@@ -302,13 +305,27 @@
     border: 1px solid var(--line);
     border-radius: 14px;
     opacity: 0;
-    transform: translateY(16px) scale(0.97);
-    filter: blur(3px);
-    transition: opacity .7s ease, transform .8s var(--ease), filter .7s ease,
-      border-color .25s var(--ease), background .25s var(--ease);
-    transition-delay: calc(120ms + var(--i) * 70ms);
+    transform: translateY(14px) scale(0.98);
+    filter: blur(2px);
+    transition:
+      opacity .3s ease,
+      transform .35s var(--ease),
+      filter .3s ease,
+      border-color .25s var(--ease),
+      background .25s var(--ease);
   }
-  .cat.open .item { opacity: 1; transform: none; filter: none; }
+  /* Fade IN: each item drifts up into place one after another. */
+  .cat.open .item {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition:
+      opacity .55s ease calc(100ms + var(--i) * 65ms),
+      transform .6s var(--ease) calc(100ms + var(--i) * 65ms),
+      filter .55s ease calc(100ms + var(--i) * 65ms),
+      border-color .25s var(--ease),
+      background .25s var(--ease);
+  }
   .item:hover { border-color: var(--line-strong); background: var(--bg-elev-2); }
   .item.sold { opacity: 0.5; }
 
@@ -520,17 +537,14 @@
       menu.innerHTML = "";
       MENU.categories.forEach(function (cat) {
         var sec = document.createElement("section");
-        // Always built closed — see the rAF pass below, which adds "open"
-        // a frame later so the browser actually has a "before" state to
-        // transition from (a freshly-created element that already has the
-        // "open" class never transitions; there's nothing to animate from).
+        // Built closed; applyOpenState() flips the open one's class afterwards.
         sec.className = "cat";
         sec.id = "cat-" + cat.id;
 
         var head = document.createElement("button");
         head.className = "cat-head";
         head.type = "button";
-        head.setAttribute("aria-expanded", cat.id === openId ? "true" : "false");
+        head.setAttribute("aria-expanded", "false");
         head.innerHTML =
           '<span class="ic">' + (cat.icon || "") + "</span>" +
           '<span class="ttl">' + loc(cat.title) + "</span>" +
@@ -589,37 +603,71 @@
         menu.appendChild(sec);
       });
 
-      // Let the closed state paint, then add "open" on the next frame so the
-      // expand/fade-in actually transitions instead of snapping instantly.
-      if (openId) {
-        var openSec = document.getElementById("cat-" + openId);
-        if (openSec) {
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () { openSec.classList.add("open"); });
-          });
-        }
-      }
+      // Sections were just built closed. Let that closed state paint, then
+      // open the active one on the next frame so it fades/expands in (a
+      // freshly-created element given .open immediately has no "before" state
+      // to transition from, so it would snap).
+      requestAnimationFrame(function () { applyOpenState(); });
 
       setStickyVar();
       centerChip(openId);
     }
 
-    // Tap-to-toggle accordion: only one category open at a time. Opening
-    // smoothly scrolls that category's header up under the sticky bar; the
-    // expand itself is a pure CSS transition (see .cat-body / .item), no
-    // scroll-linked JS fighting the user's finger.
+    // Reflect `openId` by toggling classes on the already-built DOM — no
+    // rebuild. This is what makes both the fade-IN (opening category) and the
+    // fade-OUT (the one that was open) animate: their elements stay in place
+    // and only the .open class changes, so CSS transitions run in both
+    // directions. Also keeps the chip highlight and aria state in sync.
+    function applyOpenState() {
+      MENU.categories.forEach(function (cat) {
+        var sec = document.getElementById("cat-" + cat.id);
+        if (!sec) return;
+        var isOpen = cat.id === openId;
+        sec.classList.toggle("open", isOpen);
+        var head = sec.querySelector(".cat-head");
+        if (head) head.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      });
+      var chips = document.getElementById("chips");
+      if (chips) {
+        var list = chips.querySelectorAll(".chip");
+        for (var i = 0; i < list.length; i++) {
+          list[i].classList.toggle("active", list[i].dataset.id === openId);
+        }
+      }
+    }
+
+    // Tap-to-toggle accordion: only one category open at a time. Tapping the
+    // open one again closes it; tapping another closes the first (it fades
+    // out) and opens the new one (it fades in). No DOM rebuild, no scroll-spy
+    // — just a class toggle plus a one-shot glide so the opened category
+    // settles under the sticky bar.
     function openCategory(id, scroll) {
+      var prevId = openId;
+
+      // Measure the currently-open category up front: if it sits ABOVE the one
+      // we're opening, it's about to collapse and pull the page up, so we
+      // pre-subtract its height from the scroll target to avoid overshooting.
+      var prevTop = null, prevInnerH = 0;
+      if (prevId) {
+        var prevSec = document.getElementById("cat-" + prevId);
+        if (prevSec) {
+          prevTop = prevSec.getBoundingClientRect().top;
+          var prevInner = prevSec.querySelector(".cat-body-inner");
+          if (prevInner) prevInnerH = prevInner.getBoundingClientRect().height;
+        }
+      }
+
       openId = (openId === id) ? null : id; // toggle (collapse if same)
-      render();
+      applyOpenState();
+      centerChip(openId, true);
+
       if (openId && scroll) {
         var sec = document.getElementById("cat-" + openId);
         if (sec) {
-          requestAnimationFrame(function () {
-            window.scrollTo({
-              top: sec.getBoundingClientRect().top + window.pageYOffset - (stickyEl.offsetHeight + 10),
-              behavior: prefersReduced() ? "auto" : "smooth"
-            });
-          });
+          var rectTop = sec.getBoundingClientRect().top;
+          var correction = (prevId && prevId !== openId && prevTop !== null && prevTop < rectTop) ? prevInnerH : 0;
+          var target = rectTop + window.pageYOffset - (stickyEl.offsetHeight + 10) - correction;
+          window.scrollTo({ top: Math.max(0, target), behavior: prefersReduced() ? "auto" : "smooth" });
         }
       }
     }
