@@ -278,6 +278,10 @@
   /* smooth auto-height accordion */
   .cat-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease); }
   .cat.open .cat-body { grid-template-rows: 1fr; }
+  /* During a scroll-snap the accordion opens with final geometry instantly;
+     the smooth page glide is the motion the user sees, so alignment is exact. */
+  html.snapping .cat-body { transition: none; }
+  html.snapping .item { transition: none; opacity: 1; transform: none; }
   .cat-body-inner { overflow: hidden; }
   .cat-pad { padding: 0 14px 14px; }
 
@@ -589,73 +593,125 @@
     }
 
     function openCategory(id, scroll) {
-      openId = (openId === id) ? null : id;  // toggle (collapse if same) → only one open
-      render();
-      if (openId && scroll) {
-        var sec = document.getElementById("cat-" + openId);
-        if (sec) {
-          suppressScrollSpy = true;
-          // delay so layout settles before scroll
-          requestAnimationFrame(function () {
-            window.scrollTo({
-              top: sec.getBoundingClientRect().top + window.pageYOffset - (stickyEl.offsetHeight + 10),
-              behavior: prefersReduced() ? "auto" : "smooth"
-            });
-          });
-          armScrollSpyResume();
-        }
+      if (openId === id) {           // tap the open one again → collapse it
+        openId = null;
+        render();
+        return;
       }
-    }
-
-    // ---- scroll-spy: open whichever category is under the sticky bar as the
-    // user scrolls, closing the previously open one, without fighting any
-    // programmatic (click-triggered) scroll already in flight. ----
-    var suppressScrollSpy = false;
-    var scrollSpyResumeTimer = null;
-    function armScrollSpyResume() {
-      clearTimeout(scrollSpyResumeTimer);
-      document.removeEventListener("scrollend", onScrollSpyResume);
-      if ("onscrollend" in window) {
-        document.addEventListener("scrollend", onScrollSpyResume, { once: true });
+      if (scroll) {
+        // Same precise open-and-glide the scroll-snap uses, so a tap lands
+        // exactly on its category instead of drifting onto a neighbour.
+        snapToCategory(id);
       } else {
-        scrollSpyResumeTimer = setTimeout(onScrollSpyResume, 700);
+        openId = id;
+        render();
+        centerChip(openId, true);
       }
     }
-    function onScrollSpyResume() { suppressScrollSpy = false; }
 
-    function categoryUnderStickyBar() {
-      var triggerY = stickyEl.offsetHeight + 12;
-      var current = null;
+    // ---- scroll-spy + magnetic snap -------------------------------------
+    // While the user is actively scrolling we only move the active chip — no
+    // layout shift, so the scroll stays buttery. When the scroll settles we
+    // gently "catch" the nearest category: open it and glide the page so its
+    // header rests just under the sticky bar. A hard swipe that overshoots
+    // gets pulled back up; one that carries far enough eases on to the next
+    // category. suppressScrollSpy stops the snap/click scrolls from
+    // re-triggering the spy while they're still in flight.
+    var suppressScrollSpy = false;
+
+    // Programmatic "glide" to a scroll position. While it runs the spy is
+    // suppressed so the glide's own motion can't re-trigger a snap. We don't
+    // try to guess when the glide "finished" (easing makes that flaky and a
+    // premature resume lets a trailing scroll event hijack to a neighbour);
+    // instead the spy stays parked until the user actually grabs the scroll
+    // back — the next wheel / touch / key / pointer hands control over, and
+    // that always fires before its resulting scroll event.
+    var glideAbort = null;
+    var GLIDE_INPUTS = ["wheel", "touchstart", "keydown", "pointerdown"];
+    function stopGlideListeners() {
+      if (!glideAbort) return;
+      GLIDE_INPUTS.forEach(function (ev) { window.removeEventListener(ev, glideAbort); });
+      glideAbort = null;
+    }
+    function endGlide() {
+      stopGlideListeners();
+      suppressScrollSpy = false;
+    }
+    function glideTo(top) {
+      top = Math.max(0, Math.round(top));
+      stopGlideListeners();
+      suppressScrollSpy = true;
+      glideAbort = endGlide;
+      GLIDE_INPUTS.forEach(function (ev) {
+        window.addEventListener(ev, glideAbort, { once: true, passive: true });
+      });
+      window.scrollTo({ top: top, behavior: prefersReduced() ? "auto" : "smooth" });
+    }
+
+    var snapLineGap = 10;
+    function snapLineY() { return stickyEl.offsetHeight + snapLineGap; }
+
+    // Category whose header sits closest to the snap line. Using nearest (not
+    // "last one past the line") is what lets a gentle overshoot pull back up
+    // and a bigger one settle on the next category.
+    function nearestCategory() {
+      var line = snapLineY();
+      var best = null, bestDist = Infinity;
       for (var i = 0; i < MENU.categories.length; i++) {
         var sec = document.getElementById("cat-" + MENU.categories[i].id);
-        if (sec && sec.getBoundingClientRect().top <= triggerY) current = MENU.categories[i].id;
+        if (!sec) continue;
+        var d = Math.abs(sec.getBoundingClientRect().top - line);
+        if (d < bestDist) { bestDist = d; best = MENU.categories[i].id; }
       }
-      return current;
+      return best;
     }
 
-    function syncOpenWithScroll(id) {
-      if (!id || id === openId) return;
-      var before = document.getElementById("cat-" + id);
-      var anchorBefore = before ? before.getBoundingClientRect().top : null;
-      openId = id;
-      render();
-      centerChip(openId, true);
-      if (anchorBefore !== null) {
-        var after = document.getElementById("cat-" + id);
-        var anchorAfter = after.getBoundingClientRect().top;
-        if (anchorAfter !== anchorBefore) window.scrollBy(0, anchorAfter - anchorBefore);
+    // Light-touch chip highlight during scroll: no re-render, no layout shift.
+    function setActiveChip(id) {
+      if (!id) return;
+      var chips = document.getElementById("chips");
+      if (!chips) return;
+      var list = chips.querySelectorAll(".chip");
+      for (var i = 0; i < list.length; i++) {
+        list[i].classList.toggle("active", list[i].dataset.id === id);
       }
+      centerChip(id, true);
     }
 
-    var scrollSpyQueued = false;
+    function snapToCategory(id) {
+      if (!id) return;
+      var sec = document.getElementById("cat-" + id);
+      if (!sec) return;
+      suppressScrollSpy = true;
+      if (id !== openId) {
+        // Open with final geometry instantly (no accordion easing) so the
+        // glide below lands exactly on the header; clicks still animate since
+        // they don't add this flag.
+        document.documentElement.classList.add("snapping");
+        openId = id;
+        render();
+        sec = document.getElementById("cat-" + id);
+        void sec.offsetHeight; // flush layout before re-enabling transitions
+        document.documentElement.classList.remove("snapping");
+      }
+      setActiveChip(id);
+      glideTo(sec.getBoundingClientRect().top + window.pageYOffset - snapLineY());
+    }
+
+    var snapTimer = null;
+    var liveChipQueued = false;
     window.addEventListener("scroll", function () {
-      if (suppressScrollSpy || scrollSpyQueued) return;
-      scrollSpyQueued = true;
-      requestAnimationFrame(function () {
-        scrollSpyQueued = false;
-        if (suppressScrollSpy) return;
-        syncOpenWithScroll(categoryUnderStickyBar());
-      });
+      if (!suppressScrollSpy && !liveChipQueued) {
+        liveChipQueued = true;
+        requestAnimationFrame(function () {
+          liveChipQueued = false;
+          if (!suppressScrollSpy) setActiveChip(nearestCategory());
+        });
+      }
+      clearTimeout(snapTimer);
+      snapTimer = setTimeout(function () {
+        if (!suppressScrollSpy) snapToCategory(nearestCategory());
+      }, 140);
     }, { passive: true });
 
     function centerChip(id, instant) {
