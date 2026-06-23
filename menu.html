@@ -3,7 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<!-- Don't let the browser keep serving a stale copy of this page: the menu
+     logic is inlined here, so a cached menu.html = old behavior. Force a
+     revalidation on every visit. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>אייכה בר — תפריט</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="favicon.ico" sizes="any" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <meta name="robots" content="index,follow" />
 <!-- TODO: per BRAND.md, swap Rubik to self-hosted woff2 subsets (assets/fonts/) and drop this CDN. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -192,6 +201,12 @@
     -ms-overflow-style: none;
   }
   .chips::-webkit-scrollbar { display: none; }
+  /* When every chip fits without scrolling, center the whole row as a group
+     instead of reserving 50% side padding for scroll-to-edge centering. */
+  .chips.fits {
+    justify-content: center;
+    padding: 6px 14px 12px;
+  }
 
   .chip {
     flex: 0 0 auto;
@@ -396,6 +411,8 @@
   <main id="menu"></main>
   <footer id="footer"></footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
   <script src="menu-data.js"></script>
   <script>
   (function () {
@@ -415,9 +432,39 @@
     if (mqNarrow.addEventListener) mqNarrow.addEventListener("change", applyDevice);
     else if (mqNarrow.addListener) mqNarrow.addListener(applyDevice); // older Safari
 
-    var MENU = window.MENU;
-    var BADGES = window.BADGES || (MENU && MENU.badges) || {};
-    if (!MENU) { document.getElementById("menu").innerHTML = "<p style='padding:24px;color:#a8a5b0'>menu-data.js not found.</p>"; return; }
+    // Live menu lives in Supabase (owner edits it via editor.html + "Publish").
+    // menu-data.js, loaded above, is kept only as an offline/outage fallback —
+    // it stays in the repo but is no longer the source of truth.
+    function staticFallback() {
+      return { MENU: window.MENU, BADGES: window.BADGES || (window.MENU && window.MENU.badges) || {} };
+    }
+
+    async function loadMenu() {
+      try {
+        if (!window.SUPABASE_URL || window.SUPABASE_URL.indexOf("YOUR-PROJECT-REF") > -1 || !window.MENU_SLUG) {
+          throw new Error("Supabase not configured");
+        }
+        var client = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+        var res = await client
+          .from("public_menus")
+          .select("name,badges,menu")
+          .eq("slug", window.MENU_SLUG)
+          .single();
+        if (res.error || !res.data) throw res.error || new Error("menu not found");
+        return {
+          MENU: { name: res.data.name, categories: (res.data.menu && res.data.menu.categories) || [] },
+          BADGES: res.data.badges || {}
+        };
+      } catch (e) {
+        console.warn("Live menu unavailable, using bundled fallback:", e);
+        return staticFallback();
+      }
+    }
+
+    loadMenu().then(function (loaded) { init(loaded.MENU, loaded.BADGES); });
+
+    function init(MENU, BADGES) {
+    if (!MENU) { document.getElementById("menu").innerHTML = "<p style='padding:24px;color:#a8a5b0'>Menu not available.</p>"; return; }
 
     var LANGS = ["he", "en", "ar"];
     var RTL = { he: true, ar: true, en: false };
@@ -487,6 +534,7 @@
         c.addEventListener("click", function () { openCategory(cat.id, true); });
         chips.appendChild(c);
       });
+      chips.classList.toggle("fits", chips.scrollWidth <= chips.clientWidth + 1);
 
       // sections
       var menu = document.getElementById("menu");
@@ -582,6 +630,8 @@
     function centerChip(id, instant) {
       var chips = document.getElementById("chips");
       if (!chips || !id) return;
+      chips.classList.toggle("fits", chips.scrollWidth <= chips.clientWidth + 1);
+      if (chips.classList.contains("fits")) return;
       var chip = chips.querySelector('.chip[data-id="' + id + '"]');
       if (!chip || !chip.scrollIntoView) return;
       // scrollIntoView({inline:"center"}) is the spec-correct way to center a
@@ -624,6 +674,7 @@
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(function () { centerChip(openId, true); });
     }
+    } // end init()
   })();
   </script>
 </body>

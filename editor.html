@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex,nofollow" />
 <title>עורך התפריט — אייכה בר</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="favicon.ico" sizes="any" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -117,12 +120,15 @@
 </head>
 <body>
   <div class="bar">
-    <h1>עורך התפריט <span class="dot">·</span> אייכה בר</h1>
+    <h1>עורך התפריט <span class="dot">·</span> <span id="bizName">…</span></h1>
     <span class="dirty" id="dirty"><span class="d"></span> שינויים לא שמורים</span>
     <span class="grow"></span>
+    <span class="status" id="whoami" style="opacity:.65"></span>
     <span class="status" id="status"></span>
-    <button class="btn-ghost" id="openBtn" title="פתח קובץ menu-data.js כדי לאפשר שמירה ישירה">📂 פתח קובץ</button>
-    <button class="btn-primary" id="saveBtn">💾 שמירה</button>
+    <button class="btn-ghost btn-sm" id="exportBtn" title="הורדת עותק גיבוי כקובץ menu-data.js">⬇️ גיבוי</button>
+    <button class="btn-primary" id="saveBtn">💾 שמירת טיוטה</button>
+    <button class="btn-primary" id="publishBtn" style="background:linear-gradient(135deg,#22c55e,#4ade80);box-shadow:0 0 18px rgba(34,197,94,.4)">🚀 פרסום לתפריט החי</button>
+    <button class="btn-ghost btn-sm" id="logoutBtn">התנתקות</button>
   </div>
 
   <div class="errors" id="errors"></div>
@@ -140,11 +146,13 @@
   </div>
 
   <p class="foot-note">
-    טיפ: לחיצה על <b>פתח קובץ</b> ובחירת <code>menu-data.js</code> מאפשרת שמירה ישירה לקובץ (Chrome/Edge).
-    אחרת, <b>שמירה</b> תוריד קובץ <code>menu-data.js</code> מעודכן להחלפה ידנית.
+    <b>שמירת טיוטה</b> שומרת את השינויים רק לך — התפריט הציבורי לא משתנה.
+    <b>פרסום</b> מעביר את הטיוטה לתפריט החי שהלקוחות רואים. <b>גיבוי</b> מוריד עותק
+    JS מקומי של המצב הנוכחי, ליתר ביטחון.
   </p>
 
-  <script src="menu-data.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
   <script>
   (function(){
     "use strict";
@@ -152,16 +160,9 @@
     var BADGE_KEYS = ["new","mustTry"];
     var BADGE_LABEL = { new:"חדש (New)", mustTry:"חובה לטעום (Must try)" };
 
-    var SRC = window.MENU;
-    if(!SRC){ document.getElementById("catEditor").innerHTML = '<div class="empty">לא נמצא menu-data.js</div>'; return; }
-
-    // deep clone working state
-    var data = JSON.parse(JSON.stringify({ name: SRC.name, categories: SRC.categories }));
-    var BADGES = SRC.badges || window.BADGES || { new:{he:"חדש",en:"New",ar:"جديد"}, mustTry:{he:"חובה לטעום",en:"Must try",ar:"يجب تجربته"} };
-
-    var sel = data.categories.length ? 0 : -1;
+    // populated by boot() once the signed-in owner's menu row is fetched
+    var data = null, BADGES = null, sel = -1, menuRow = null, currentUser = null, supabaseClient = null;
     var dirty = false;
-    var fileHandle = null;
 
     var $ = function(id){ return document.getElementById(id); };
 
@@ -278,44 +279,52 @@
       return head + badges + categories + menu;
     }
 
-    // ---------- save ----------
-    async function save(){
+    // ---------- save / publish (Supabase) ----------
+    function currentDraft(){ return { name: data.name, categories: data.categories }; }
+
+    async function saveDraft(){
       var errs = validate();
-      if(showErrors(errs)) return;
-      var text = serialize();
-      try{
-        if(fileHandle){
-          var w = await fileHandle.createWritable();
-          await w.write(text); await w.close();
-          setDirty(false); status("נשמר לקובץ ✓","var(--ok)");
-          return;
-        }
-        if(window.showSaveFilePicker){
-          fileHandle = await window.showSaveFilePicker({ suggestedName:"menu-data.js",
-            types:[{description:"JavaScript",accept:{"text/javascript":[".js"]}}] });
-          var w2 = await fileHandle.createWritable();
-          await w2.write(text); await w2.close();
-          setDirty(false); status("נשמר לקובץ ✓","var(--ok)");
-          return;
-        }
-      }catch(e){ if(e && e.name==="AbortError"){ status("השמירה בוטלה"); return; } /* fall through to download */ }
-      download(text);
+      if(showErrors(errs)) return false;
+      status("שומר טיוטה…");
+      var { error } = await supabaseClient
+        .from("menus")
+        .update({ draft: currentDraft(), updated_at: new Date().toISOString() })
+        .eq("id", menuRow.id);
+      if(error){ status("שגיאה בשמירה: "+error.message,"var(--err)"); return false; }
+      setDirty(false);
+      return true;
     }
+
+    async function save(){
+      if(await saveDraft()) status("טיוטה נשמרה ✓ — התפריט הציבורי עדיין לא השתנה","var(--ok)");
+    }
+
+    async function publish(){
+      if(!(await saveDraft())) return;
+      status("מפרסם…");
+      var { error } = await supabaseClient.rpc("publish_menu", { p_menu_id: menuRow.id });
+      if(error){ status("שגיאה בפרסום: "+error.message,"var(--err)"); return; }
+      status("פורסם לתפריט החי ✓","var(--ok)");
+    }
+
+    async function logout(){
+      await supabaseClient.auth.signOut();
+      location.href = "login.html";
+    }
+
     function download(text){
       var blob = new Blob([text],{type:"text/javascript"});
       var a = document.createElement("a");
       a.href = URL.createObjectURL(blob); a.download="menu-data.js";
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(a.href);
-      setDirty(false); status("הקובץ הורד ✓ — החלף את menu-data.js בפרויקט","var(--ok)");
+      status("גיבוי הורד ✓","var(--ok)");
     }
-    async function openFile(){
-      if(!window.showOpenFilePicker){ status("הדפדפן לא תומך בפתיחה ישירה — השתמש בשמירה (הורדה)","var(--warn)"); return; }
-      try{
-        var [h] = await window.showOpenFilePicker({ types:[{description:"JavaScript",accept:{"text/javascript":[".js"]}}] });
-        fileHandle = h;
-        status("הקובץ מחובר — אפשר לשמור ישירות ✓","var(--ok)");
-      }catch(e){ /* cancelled */ }
+
+    function exportBackup(){
+      var errs = validate();
+      if(showErrors(errs)) return;
+      download(serialize());
     }
 
     // ---------- rendering ----------
@@ -540,11 +549,49 @@
       sel=data.categories.length-1; setDirty(true); renderAll();
     });
     $("saveBtn").addEventListener("click",save);
-    $("openBtn").addEventListener("click",openFile);
+    $("publishBtn").addEventListener("click",publish);
+    $("exportBtn").addEventListener("click",exportBackup);
+    $("logoutBtn").addEventListener("click",logout);
     window.addEventListener("beforeunload",function(e){ if(dirty){ e.preventDefault(); e.returnValue=""; } });
 
-    renderAll();
-    status("נטענו "+data.categories.length+" קטגוריות");
+    // ---------- boot: auth gate + load this owner's menu row ----------
+    async function boot(){
+      if(!window.SUPABASE_URL || window.SUPABASE_URL.indexOf("YOUR-PROJECT-REF") > -1){
+        $("catEditor").innerHTML = '<div class="empty">config.js לא הוגדר עדיין — מלא את פרטי ה-Supabase שם.</div>';
+        return;
+      }
+      supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+      var { data: sessionRes } = await supabaseClient.auth.getSession();
+      var session = sessionRes && sessionRes.session;
+      if(!session){ location.href = "login.html"; return; }
+      currentUser = session.user;
+      $("whoami").textContent = currentUser.email || "";
+
+      // admins may pass ?biz=<slug> to edit a specific business; owners always
+      // get their own row regardless of the query string.
+      var bizSlug = new URLSearchParams(location.search).get("biz");
+      var query = supabaseClient.from("menus").select("*");
+      query = bizSlug ? query.eq("slug", bizSlug) : query.eq("owner_id", currentUser.id);
+      var { data: rows, error } = await query.limit(1);
+
+      if(error || !rows || !rows.length){
+        $("catEditor").innerHTML = '<div class="empty">לא נמצא תפריט לחשבון הזה. פנה למנהל המערכת.</div>';
+        return;
+      }
+
+      menuRow = rows[0];
+      var src = menuRow.draft || { categories: [] };
+      data = JSON.parse(JSON.stringify({ name: menuRow.name, categories: src.categories || [] }));
+      BADGES = menuRow.badges || { new:{he:"חדש",en:"New",ar:"جديد"}, mustTry:{he:"חובה לטעום",en:"Must try",ar:"يجب تجربته"} };
+      sel = data.categories.length ? 0 : -1;
+
+      $("bizName").textContent = he(data.name) || menuRow.slug;
+      renderAll();
+      status("נטענו "+data.categories.length+" קטגוריות");
+    }
+
+    boot();
   })();
   </script>
 </body>
