@@ -11,6 +11,13 @@
     review:    "https://www.google.com/search?sca_esv=bf5b70d178609590&si=APenkKm7iecQ4G6P-TsbSMFKIQtv3EFIqRAFw-i8uEbk55Z-_7KuVymh7UmzzptLxAMIed7ULsObX2FBkuw7nT2KAF8MiqFu6xqzwWnw0NKO515Um1Z0Z8-i9F5axbTKJbSaHBIaHv9J&q=%D7%90%D7%99%D7%99%D7%9B%D7%94+Reviews&sa=X&ved=2ahUKEwjbgtyuopuVAxWRBNsEHV7yGVoQ0bkNegQIQhAH#",
   };
 
+  // ---- Loyalty app URLs — UPDATE after Vercel deploy ----
+  var LOYALTY_BASE = "https://YOUR_LOYALTY_VERCEL_URL";   // e.g. https://ayekabar-loyalty.vercel.app
+  var LOYALTY_LINKS = {
+    customer: LOYALTY_BASE + "/customer",
+    staff:    LOYALTY_BASE + "/staff",
+  };
+
   // ---- Navigation: three map providers under the "navigate" button ----
   var NAV_ORDER = ["gmaps", "waze", "amaps"];
   var NAV = {
@@ -34,6 +41,9 @@
       menu: "תפריט דיגיטלי",
       instagram: "אינסטגרם",
       review: "השארת ביקורת",
+      loyalty: "מועדון נאמנות",
+      loyaltyCustomer: "אני לקוח/ה",
+      loyaltyStaff: "צוות בר",
       footer: "© אייכה בר",
       langName: "עברית",
     },
@@ -44,6 +54,9 @@
       menu: "Digital menu",
       instagram: "Instagram",
       review: "Leave a review",
+      loyalty: "Loyalty Club",
+      loyaltyCustomer: "I'm a customer",
+      loyaltyStaff: "Bar staff",
       footer: "© Ayeka Bar",
       langName: "English",
     },
@@ -54,6 +67,9 @@
       menu: "القائمة الرقمية",
       instagram: "إنستغرام",
       review: "اترك تقييماً",
+      loyalty: "نادي الولاء",
+      loyaltyCustomer: "أنا زبون",
+      loyaltyStaff: "طاقم البار",
       footer: "© אייכה בר",
       langName: "العربية",
     },
@@ -64,12 +80,15 @@
     menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 10h16"/><path d="M4 15h10"/><path d="M4 20h7"/></svg>',
     instagram: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>',
     review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L4.3 9.4l6-.9z"/></svg>',
+    loyalty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><circle cx="12" cy="13" r="2"/><path d="M9 17c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg>',
   };
   var ARROW = '<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
   var CHEVRON = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
   var PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg>';
+  var PERSON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+  var STAFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
 
-  var ORDER = ["navigate", "menu", "instagram", "review"];
+  var ORDER = ["navigate", "menu", "loyalty", "instagram", "review"];
 
   // ---- styles for the navigation chooser (kept here so both portal pages share them) ----
   (function injectNavCSS() {
@@ -87,7 +106,10 @@
       ".nav-opt:active{transform:scale(0.99)}" +
       ".nav-opt .pin{width:22px;height:22px;flex:0 0 auto;color:var(--neon-soft);display:grid;place-items:center}" +
       ".nav-opt .pin svg{width:20px;height:20px}" +
-      ".nav-opt .label{flex:1;text-align:start}";
+      ".nav-opt .label{flex:1;text-align:start}" +
+      // loyalty sub-options
+      ".loyalty-customer{border-color:rgba(255,94,58,0.3)!important;background:rgba(255,94,58,0.07)!important}" +
+      ".loyalty-customer:hover{border-color:rgba(255,94,58,0.6)!important;background:rgba(255,94,58,0.12)!important}";
     var s = document.createElement("style");
     s.textContent = css;
     document.head.appendChild(s);
@@ -149,6 +171,57 @@
     return wrap;
   }
 
+  function makeLoyaltyWrap(t) {
+    var wrap = document.createElement("div");
+    wrap.className = "nav-wrap";
+
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn nav-toggle";
+    btn.setAttribute("aria-expanded", "false");
+    btn.innerHTML =
+      '<span class="ic">' + ICONS.loyalty + "</span>" +
+      '<span class="label">' + t.loyalty + "</span>" +
+      CHEVRON;
+
+    var options = document.createElement("div");
+    options.className = "nav-options";
+    var inner = document.createElement("div");
+    inner.className = "nav-opts-inner";
+    var list = document.createElement("div");
+    list.className = "nav-list";
+
+    // Customer option (highlighted)
+    var customerLink = document.createElement("a");
+    customerLink.className = "nav-opt loyalty-customer";
+    customerLink.href = LOYALTY_LINKS.customer;
+    customerLink.innerHTML =
+      '<span class="pin">' + PERSON + "</span>" +
+      '<span class="label">' + t.loyaltyCustomer + "</span>";
+    list.appendChild(customerLink);
+
+    // Staff option
+    var staffLink = document.createElement("a");
+    staffLink.className = "nav-opt";
+    staffLink.href = LOYALTY_LINKS.staff;
+    staffLink.innerHTML =
+      '<span class="pin">' + STAFF + "</span>" +
+      '<span class="label">' + t.loyaltyStaff + "</span>";
+    list.appendChild(staffLink);
+
+    inner.appendChild(list);
+    options.appendChild(inner);
+
+    btn.addEventListener("click", function () {
+      var open = wrap.classList.toggle("open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    wrap.appendChild(btn);
+    wrap.appendChild(options);
+    return wrap;
+  }
+
   function render() {
     var t = I18N[lang];
     document.documentElement.lang = lang;
@@ -179,11 +252,18 @@
       lm.appendChild(b);
     });
 
-    // action buttons (navigate expands into 3 map providers)
+    // action buttons
     var box = document.getElementById("actions");
     box.innerHTML = "";
     ORDER.forEach(function (key, i) {
-      var node = (key === "navigate") ? makeNavWrap(t) : makeLinkBtn(key, t);
+      var node;
+      if (key === "navigate") {
+        node = makeNavWrap(t);
+      } else if (key === "loyalty") {
+        node = makeLoyaltyWrap(t);
+      } else {
+        node = makeLinkBtn(key, t);
+      }
       node.classList.add("anim");
       node.style.setProperty("--d", (260 + i * 90) + "ms");
       box.appendChild(node);
