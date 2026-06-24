@@ -12,7 +12,7 @@
   };
 
   // ---- Loyalty app URLs — UPDATE after Vercel deploy ----
-  var LOYALTY_BASE = "https://YOUR_LOYALTY_VERCEL_URL";   // e.g. https://ayekabar-loyalty.vercel.app
+  var LOYALTY_BASE = "https://ayeka-bar.vercel.app";   // e.g. https://ayekabar-loyalty.vercel.app
   var LOYALTY_LINKS = {
     customer: LOYALTY_BASE + "/customer",
     staff:    LOYALTY_BASE + "/staff",
