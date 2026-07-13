@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
 const PROTECTED_ROUTES = [
   '/customer/dashboard',
@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[]) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
@@ -46,6 +46,29 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = redirectTo
     return NextResponse.redirect(url)
+  }
+
+  // Authenticated isn't authorized: with Google sign-in open to any account,
+  // staff/owner dashboards additionally require a public.staff row
+  // (RLS lets each user read only their own row).
+  const staffProtected = pathname.startsWith('/staff/dashboard')
+  const ownerProtected = pathname.startsWith('/owner/dashboard')
+
+  if (user && (staffProtected || ownerProtected)) {
+    const { data: staffRow } = await supabase
+      .from('staff')
+      .select('role')
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+
+    if (!staffRow || (ownerProtected && staffRow.role !== 'owner')) {
+      // Authenticated but not authorized — send back to the sign-in page with a
+      // flag so it can explain (rather than a silent bounce to home).
+      const url = request.nextUrl.clone()
+      url.pathname = ownerProtected ? '/owner' : '/staff'
+      url.search = '?denied=1'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse

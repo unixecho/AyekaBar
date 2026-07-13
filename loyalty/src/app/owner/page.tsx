@@ -5,22 +5,20 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { AuthHandoff, GoogleG } from '@/components/AuthHandoff'
 
-// Staff sign in with Google, same as customers. Access to /staff/dashboard is
-// granted only if the owner has added their account to public.staff
-// (enforced in middleware). No self-signup, no separate password.
+// Owner sign-in. Google-gated; /owner/dashboard requires role = 'owner'.
 const COPY = {
   he: {
-    tagline: 'כניסת צוות',
+    tagline: 'ניהול — בעל/ת העסק',
     google: 'המשך עם Google',
-    hint: 'הגישה לצוות ניתנת על ידי בעל/ת העסק בלבד.',
+    hint: 'אזור ניהול. גישה לבעלי הרשאת בעלים בלבד.',
     googleError: 'שגיאה בהתחברות ל-Google.',
-    denied: 'החשבון הזה עדיין לא רשום כצוות. פנה/י לבעל/ת העסק כדי לקבל גישה.',
+    denied: 'לחשבון הזה אין הרשאת בעלים.',
     back: '← חזרה',
   },
 } as const
 const t = COPY.he
 
-export default function StaffSignInPage() {
+export default function OwnerSignInPage() {
   const [error, setError]       = useState<string | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
   const [authBusy, setAuthBusy] = useState(false)
@@ -41,7 +39,7 @@ export default function StaffSignInPage() {
     setAuthBusy(true); setError(null)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=/staff/dashboard` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=/owner/dashboard` },
     })
     if (error) { setAuthBusy(false); setError(t.googleError) }
   }
