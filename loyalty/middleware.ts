@@ -6,6 +6,7 @@ const PROTECTED_ROUTES = [
   '/staff/dashboard',
   '/owner/dashboard',
   '/owner/editor',
+  '/owner/customers',
 ]
 
 export async function middleware(request: NextRequest) {
@@ -53,7 +54,7 @@ export async function middleware(request: NextRequest) {
   // staff/owner dashboards additionally require a public.staff row
   // (RLS lets each user read only their own row).
   const staffProtected = pathname.startsWith('/staff/dashboard')
-  const ownerProtected = pathname.startsWith('/owner/dashboard') || pathname.startsWith('/owner/editor')
+  const ownerProtected = pathname.startsWith('/owner/dashboard') || pathname.startsWith('/owner/editor') || pathname.startsWith('/owner/customers')
 
   if (user && (staffProtected || ownerProtected)) {
     const { data: staffRow } = await supabase

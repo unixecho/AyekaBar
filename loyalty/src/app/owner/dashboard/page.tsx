@@ -37,7 +37,11 @@ export default async function OwnerDashboardPage() {
       </div>
 
       {/* Quick links */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+        <Link href="/owner/customers" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }}>👥</span>
+          <span>לקוחות ונקודות</span>
+        </Link>
         <Link href="/owner/editor" style={navCard}>
           <span style={{ fontSize: '1.3rem' }}>📝</span>
           <span>עריכת תפריט</span>
@@ -59,12 +63,13 @@ const navCard: React.CSSProperties = {
   flexDirection: 'column',
   alignItems: 'center',
   gap: 6,
-  padding: '16px 12px',
+  padding: '14px 8px',
   borderRadius: 14,
   border: '1px solid var(--line)',
   background: 'var(--bg-elev)',
   color: 'var(--text)',
   textDecoration: 'none',
-  fontSize: '0.9rem',
+  fontSize: '0.78rem',
   fontWeight: 600,
+  textAlign: 'center',
 }
