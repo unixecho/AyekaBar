@@ -1,0 +1,198 @@
+'use client'
+
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import Link from 'next/link'
+
+type Lang = 'he' | 'en' | 'ar'
+const LANGS: Lang[] = ['he', 'en', 'ar']
+const RTL: Record<Lang, boolean> = { he: true, ar: true, en: false }
+
+const LINKS = {
+  menu: '/menu',
+  loyalty: '/loyalty',
+  instagram: 'https://www.instagram.com/ayeka_bar/',
+  review: 'https://www.google.com/search?sca_esv=bf5b70d178609590&si=APenkKm7iecQ4G6P-TsbSMFKIQtv3EFIqRAFw-i8uEbk55Z-_7KuVymh7UmzzptLxAMIed7ULsObX2FBkuw7nT2KAF8MiqFu6xqzwWnw0NKO515Um1Z0Z8-i9F5axbTKJbSaHBIaHv9J&q=%D7%90%D7%99%D7%99%D7%9B%D7%94+Reviews&sa=X#',
+}
+const NAV = {
+  gmaps: 'https://maps.app.goo.gl/RkQKuohRE2WnxehDA',
+  waze: 'https://waze.com/ul/hsvbbtt1nb',
+  amaps: 'https://maps.apple/r/I8JK.APxMAXYhS',
+}
+const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
+
+const I18N: Record<Lang, {
+  brand: ReactNode; tagline: string; navigate: string; menu: string; instagram: string
+  review: string; loyalty: string; langName: string; footer: string
+}> = {
+  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', langName: 'עברית', footer: '© אייכה בר' },
+  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', review: 'Leave a review', loyalty: 'Loyalty Club', langName: 'English', footer: '© Ayeka Bar' },
+  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', review: 'اترك تقييماً', loyalty: 'نادي الولاء', langName: 'العربية', footer: '© אייכה בר' },
+}
+
+const ICONS = {
+  navigate: <path d="M3 11l19-9-9 19-2-8-8-2z" />,
+  menu: <><path d="M4 5h16" /><path d="M4 10h16" /><path d="M4 15h10" /><path d="M4 20h7" /></>,
+  loyalty: <><rect x="2" y="6" width="20" height="14" rx="3" /><path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" /><circle cx="12" cy="13" r="2" /><path d="M9 17c0-1.7 1.3-3 3-3s3 1.3 3 3" /></>,
+  instagram: <><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></>,
+  review: <path d="M12 3l2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L4.3 9.4l6-.9z" />,
+  pin: <><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" /><circle cx="12" cy="11" r="2.2" /></>,
+}
+
+function Ic({ children }: { children: ReactNode }) {
+  return <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+}
+
+export default function Portal() {
+  const [lang, setLang] = useState<Lang>('he')
+  const [langOpen, setLangOpen] = useState(false)
+  const [navOpen, setNavOpen] = useState(false)
+  const t = I18N[lang]
+
+  useEffect(() => {
+    const saved = localStorage.getItem('siteLanguage')
+    if (saved && (LANGS as string[]).includes(saved)) setLang(saved as Lang)
+  }, [])
+  useEffect(() => {
+    document.documentElement.lang = lang
+    document.documentElement.dir = RTL[lang] ? 'rtl' : 'ltr'
+  }, [lang])
+  useEffect(() => {
+    const onClick = () => setLangOpen(false)
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [])
+
+  function pickLang(l: Lang) { setLang(l); localStorage.setItem('siteLanguage', l); setLangOpen(false) }
+
+  let d = 0
+  const delay = () => `${260 + (d++) * 85}ms`
+
+  return (
+    <main style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 'calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px)', position: 'relative' }}>
+      {/* language switch pinned to physical left */}
+      <div style={{ position: 'fixed', left: 14, top: 'calc(env(safe-area-inset-top) + 14px)', zIndex: 50 }}
+        onClick={(e) => e.stopPropagation()}>
+        <button aria-label="Language" className="press" onClick={() => setLangOpen((v) => !v)} style={globeStyle(langOpen)}>
+          <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9" /><path d="M3 12h18" />
+            <path d="M12 3c2.5 2.5 3.8 5.8 3.8 9S14.5 18.5 12 21C9.5 18.5 8.2 15.2 8.2 12S9.5 5.5 12 3z" />
+          </svg>
+        </button>
+        {langOpen && (
+          <div role="menu" style={langMenuStyle}>
+            {LANGS.map((l) => (
+              <button key={l} role="menuitem" onClick={() => pickLang(l)} style={langOptStyle(l === lang)}>
+                {I18N[l].langName}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 26 }}>
+        {/* brand */}
+        <div style={{ textAlign: 'center', animation: `rise-in .6s var(--ease) .1s backwards` }}>
+          <h1 style={{ fontSize: '2.6rem', fontWeight: 800, color: 'var(--text)', textShadow: '0 0 26px rgba(255,94,58,0.6), 0 0 4px rgba(255,138,92,0.75)', margin: 0, letterSpacing: 1 }}>{t.brand}</h1>
+          <p style={{ color: 'var(--text-dim)', marginTop: 8, fontSize: '1rem', fontWeight: 500 }}>{t.tagline}</p>
+        </div>
+
+        {/* actions */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Navigate — expandable */}
+          <div style={{ animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+            <button className="press" onClick={() => setNavOpen((v) => !v)} style={{ ...btnStyle(false), width: '100%' }}>
+              <span style={icWrap}><Ic>{ICONS.navigate}</Ic></span>
+              <span style={{ flex: 1, textAlign: 'start' }}>{t.navigate}</span>
+              <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-faint)', transform: navOpen ? 'rotate(180deg)' : 'none', transition: 'transform .3s var(--ease)' }}><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            <div style={{ display: 'grid', gridTemplateRows: navOpen ? '1fr' : '0fr', transition: 'grid-template-rows .4s var(--ease)' }}>
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 2px' }}>
+                  {(['gmaps', 'waze', 'amaps'] as const).map((p) => (
+                    <a key={p} href={NAV[p]} target="_blank" rel="noopener noreferrer" className="press" style={subOptStyle}>
+                      <span style={{ ...icWrap, color: 'var(--neon-soft)' }}><Ic>{ICONS.pin}</Ic></span>
+                      <span style={{ flex: 1, textAlign: 'start' }}>{NAV_LABELS[p]}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Menu — hero */}
+          <Link href={LINKS.menu} className="press" style={{ ...btnStyle(true), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+            <span style={icWrap}><Ic>{ICONS.menu}</Ic></span>
+            <span style={{ flex: 1, textAlign: 'start' }}>{t.menu}</span>
+            <Arrow />
+          </Link>
+
+          {/* Loyalty */}
+          <Link href={LINKS.loyalty} className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+            <span style={icWrap}><Ic>{ICONS.loyalty}</Ic></span>
+            <span style={{ flex: 1, textAlign: 'start' }}>{t.loyalty}</span>
+            <Arrow />
+          </Link>
+
+          {/* Instagram */}
+          <a href={LINKS.instagram} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+            <span style={icWrap}><Ic>{ICONS.instagram}</Ic></span>
+            <span style={{ flex: 1, textAlign: 'start' }}>{t.instagram}</span>
+            <Arrow />
+          </a>
+
+          {/* Review */}
+          <a href={LINKS.review} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+            <span style={icWrap}><Ic>{ICONS.review}</Ic></span>
+            <span style={{ flex: 1, textAlign: 'start' }}>{t.review}</span>
+            <Arrow />
+          </a>
+        </div>
+
+        <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)', margin: 0, animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>{t.footer}</p>
+      </div>
+    </main>
+  )
+}
+
+function Arrow() {
+  return <svg className="dir-flip" viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-faint)' }}><path d="M9 6l6 6-6 6" /></svg>
+}
+
+const icWrap: CSSProperties = { width: 26, display: 'grid', placeItems: 'center', color: 'var(--neon-soft)', flex: '0 0 auto' }
+
+function btnStyle(hero: boolean): CSSProperties {
+  return {
+    display: 'flex', alignItems: 'center', gap: 12, padding: '15px 16px', borderRadius: 15,
+    border: hero ? '1px solid transparent' : '1px solid var(--line)',
+    background: hero ? 'linear-gradient(135deg, rgba(255,94,58,0.18), rgba(255,138,92,0.1))' : 'var(--bg-elev)',
+    boxShadow: hero ? '0 0 24px rgba(255,94,58,0.22)' : 'none',
+    color: 'var(--text)', textDecoration: 'none', fontWeight: 600, fontSize: '1rem',
+    fontFamily: 'inherit', cursor: 'pointer', width: '100%',
+  }
+}
+const subOptStyle: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 13,
+  border: '1px solid var(--line)', background: 'rgba(20,20,32,0.62)', color: 'var(--text)',
+  textDecoration: 'none', fontWeight: 600, fontSize: '0.98rem',
+}
+function globeStyle(open: boolean): CSSProperties {
+  return {
+    width: 38, height: 38, display: 'grid', placeItems: 'center', borderRadius: 12,
+    border: `1px solid ${open ? 'var(--neon-2)' : 'var(--line)'}`,
+    background: open ? 'rgba(56,225,255,0.06)' : 'rgba(255,255,255,0.02)',
+    color: 'var(--text)', cursor: 'pointer', boxShadow: open ? '0 0 18px rgba(56,225,255,0.4)' : 'none',
+  }
+}
+const langMenuStyle: CSSProperties = {
+  position: 'absolute', top: 46, left: 0, minWidth: 132, background: 'var(--bg-elev-2)',
+  border: '1px solid var(--line-strong)', borderRadius: 14, padding: 6, boxShadow: '0 18px 40px rgba(0,0,0,0.55)',
+  display: 'flex', flexDirection: 'column', gap: 2,
+}
+function langOptStyle(active: boolean): CSSProperties {
+  return {
+    border: 0, background: active ? 'rgba(255,94,58,0.14)' : 'transparent',
+    boxShadow: active ? 'inset 0 0 0 1px rgba(255,94,58,0.3)' : 'none',
+    color: active ? 'var(--text)' : 'var(--text-dim)', textAlign: 'start', font: 'inherit', fontWeight: 500,
+    padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
+  }
+}

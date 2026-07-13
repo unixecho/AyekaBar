@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { splitName } from '@/lib/staff/name'
 import StaffManager from '@/components/StaffManager'
@@ -35,7 +36,35 @@ export default async function OwnerDashboardPage() {
         <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>ניהול</span>
       </div>
 
+      {/* Quick links */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        <Link href="/owner/editor" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }}>📝</span>
+          <span>עריכת תפריט</span>
+        </Link>
+        <Link href="/menu" target="_blank" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }}>🍽️</span>
+          <span>צפייה בתפריט</span>
+        </Link>
+      </div>
+
       <StaffManager currentUserId={user.id} />
     </main>
   )
+}
+
+const navCard: React.CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 6,
+  padding: '16px 12px',
+  borderRadius: 14,
+  border: '1px solid var(--line)',
+  background: 'var(--bg-elev)',
+  color: 'var(--text)',
+  textDecoration: 'none',
+  fontSize: '0.9rem',
+  fontWeight: 600,
 }
