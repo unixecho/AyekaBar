@@ -104,6 +104,7 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
 
   return (
     <div className="menu-page">
+      <div className="app-bg" aria-hidden />
       <div className="menu-scrim" aria-hidden />
 
       <div className="menu-sticky" ref={stickyRef}>

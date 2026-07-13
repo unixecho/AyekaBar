@@ -1,0 +1,28 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="f-face" cx="42%" cy="33%" r="78%">
+      <stop offset="0" stop-color="#eccb95"/>
+      <stop offset="46%" stop-color="#cf9456"/>
+      <stop offset="100%" stop-color="#794c24"/>
+    </radialGradient>
+    <linearGradient id="f-rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e6ba7c"/>
+      <stop offset="50%" stop-color="#9c6630"/>
+      <stop offset="100%" stop-color="#5b3a1a"/>
+    </linearGradient>
+    <linearGradient id="f-letter" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fce7c4"/>
+      <stop offset="100%" stop-color="#d59b54"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="32" cy="32" r="31" fill="url(#f-rim)"/>
+  <circle cx="32" cy="32" r="31" fill="none" stroke="#4d3014" stroke-width="0.6" opacity=".55"/>
+  <circle cx="32" cy="32" r="27" fill="url(#f-face)"/>
+  <circle cx="32" cy="32" r="24.5" fill="none" stroke="#6c431f" stroke-width="0.7" opacity=".6"/>
+
+  <text x="32" y="44.5" text-anchor="middle" font-family="Rubik, system-ui, sans-serif"
+        font-weight="800" font-size="34" fill="#46290f" opacity=".5">א</text>
+  <text x="32" y="43.5" text-anchor="middle" font-family="Rubik, system-ui, sans-serif"
+        font-weight="800" font-size="34" fill="url(#f-letter)">א</text>
+</svg>

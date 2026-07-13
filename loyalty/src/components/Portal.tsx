@@ -69,6 +69,9 @@ export default function Portal() {
 
   return (
     <main style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 'calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px)', position: 'relative' }}>
+      <div className="app-bg" aria-hidden />
+      <div className="app-scrim" aria-hidden />
+
       {/* language switch pinned to physical left */}
       <div style={{ position: 'fixed', left: 14, top: 'calc(env(safe-area-inset-top) + 14px)', zIndex: 50 }}
         onClick={(e) => e.stopPropagation()}>
@@ -92,6 +95,9 @@ export default function Portal() {
       <div style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 26 }}>
         {/* brand */}
         <div style={{ textAlign: 'center', animation: `rise-in .6s var(--ease) .1s backwards` }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/assets/logo.svg" alt="אייכה בר" width={84} height={84}
+            style={{ display: 'block', margin: '0 auto 10px', filter: 'drop-shadow(0 0 20px rgba(255,94,58,0.45))' }} />
           <h1 style={{ fontSize: '2.6rem', fontWeight: 800, color: 'var(--text)', textShadow: '0 0 26px rgba(255,94,58,0.6), 0 0 4px rgba(255,138,92,0.75)', margin: 0, letterSpacing: 1 }}>{t.brand}</h1>
           <p style={{ color: 'var(--text-dim)', marginTop: 8, fontSize: '1rem', fontWeight: 500 }}>{t.tagline}</p>
         </div>
