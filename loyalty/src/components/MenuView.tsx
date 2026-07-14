@@ -88,16 +88,36 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
 
   useEffect(() => { centerChip(openId, true) }, [openId, menu, lang, centerChip])
 
+  // Track sticky-header height in a CSS var so scroll-margin-top lands an opened
+  // category's top just below the sticky bar.
+  useEffect(() => {
+    const setH = () => document.documentElement.style.setProperty('--sticky-h', `${stickyRef.current?.offsetHeight ?? 108}px`)
+    setH()
+    window.addEventListener('resize', setH)
+    return () => window.removeEventListener('resize', setH)
+  }, [menu, lang])
+
+  // On open, scroll so the category's TOP sits under the sticky bar — but wait
+  // for the accordion (and the collapsing sibling) to finish animating, so we
+  // scroll to the settled position, not the pre-collapse one. Skip on mount.
+  const firstOpen = useRef(true)
+  useEffect(() => {
+    if (firstOpen.current) { firstOpen.current = false; return }
+    if (!openId) return
+    const sec = document.getElementById(`cat-${openId}`)
+    if (!sec) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    let done = false
+    const go = () => { if (done) return; done = true; sec.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }) }
+    const body = sec.querySelector('.cat-body')
+    const onEnd = (e: Event) => { if ((e as TransitionEvent).propertyName === 'grid-template-rows') go() }
+    body?.addEventListener('transitionend', onEnd)
+    const fallback = window.setTimeout(go, 520)
+    return () => { body?.removeEventListener('transitionend', onEnd); clearTimeout(fallback) }
+  }, [openId])
+
   function openCategory(id: string) {
-    const next = openId === id ? null : id
-    setOpenId(next)
-    if (next) {
-      requestAnimationFrame(() => {
-        const sec = document.getElementById(`cat-${id}`)
-        const stickyH = stickyRef.current?.offsetHeight ?? 0
-        if (sec) window.scrollTo({ top: sec.getBoundingClientRect().top + window.pageYOffset - (stickyH + 10), behavior: 'smooth' })
-      })
-    }
+    setOpenId((cur) => (cur === id ? null : id))
   }
 
   const brand = menu ? (loc(menu.name, lang) || 'אייכה בר') : 'אייכה בר'
