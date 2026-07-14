@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { splitName } from '@/lib/staff/name'
+import OwnerHeader from '@/components/OwnerHeader'
 import StaffManager from '@/components/StaffManager'
 
 export default async function OwnerDashboardPage() {
@@ -29,15 +30,10 @@ export default async function OwnerDashboardPage() {
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text)', textShadow: '0 0 18px rgba(255,94,58,0.5)', margin: 0 }}>
-          אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר
-        </h1>
-        <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>ניהול</span>
-      </div>
+      <OwnerHeader right="ניהול" />
 
       {/* Quick links */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
+      <div className="rise" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20, animationDelay: '140ms' }}>
         <Link href="/owner/customers" style={navCard}>
           <span style={{ fontSize: '1.3rem' }}>👥</span>
           <span>לקוחות ונקודות</span>
@@ -56,7 +52,9 @@ export default async function OwnerDashboardPage() {
         </Link>
       </div>
 
-      <StaffManager currentUserId={user.id} />
+      <div className="rise" style={{ animationDelay: '210ms' }}>
+        <StaffManager currentUserId={user.id} />
+      </div>
     </main>
   )
 }

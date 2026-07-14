@@ -123,7 +123,7 @@ export default function MenuEditor() {
       {cats.map((cat, ci) => {
         const open = openCat === cat.id
         return (
-          <div key={cat.id} style={card}>
+          <div key={cat.id} className="rise" style={{ ...card, animationDelay: `${Math.min(ci, 8) * 35}ms` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input value={cat.icon ?? ''} onChange={(e) => edit((d) => { d[ci].icon = e.target.value })}
                 aria-label={T.icon} style={{ ...input, width: 46, textAlign: 'center', fontSize: '1.1rem' }} />

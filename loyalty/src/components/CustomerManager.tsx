@@ -59,14 +59,14 @@ export default function CustomerManager() {
 
       {/* stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-        <StatTile label="לקוחות" value={stats?.customers} />
-        <StatTile label="נקודות פעילות" value={stats?.points_outstanding} accent />
-        <StatTile label="ביקורים היום" value={stats?.visits_today} />
-        <StatTile label="חדשים השבוע" value={stats?.new_this_week} />
+        <StatTile label="לקוחות" value={stats?.customers} delay={0} />
+        <StatTile label="נקודות פעילות" value={stats?.points_outstanding} accent delay={40} />
+        <StatTile label="ביקורים היום" value={stats?.visits_today} delay={80} />
+        <StatTile label="חדשים השבוע" value={stats?.new_this_week} delay={120} />
       </div>
 
       {/* search */}
-      <input value={q} onChange={(e) => { setOffset(0); setQ(e.target.value) }} placeholder="חיפוש לפי שם, אימייל או טלפון…" style={input} />
+      <input value={q} onChange={(e) => { setOffset(0); setQ(e.target.value) }} placeholder="חיפוש לפי שם, אימייל או טלפון…" className="rise" style={{ ...input, animationDelay: '150ms' }} />
 
       {/* list */}
       {list === null ? (
@@ -75,8 +75,8 @@ export default function CustomerManager() {
         <p style={{ color: 'var(--text-faint)', textAlign: 'center', padding: '18px 0' }}>לא נמצאו לקוחות.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {list.map((c) => (
-            <button key={c.id} onClick={() => setSelected(c.id)} className="press" style={rowStyle}>
+          {list.map((c, i) => (
+            <button key={c.id} onClick={() => setSelected(c.id)} className="press rise" style={{ ...rowStyle, animationDelay: `${Math.min(i, 8) * 35}ms` }}>
               <div style={{ minWidth: 0, flex: 1, textAlign: 'start' }}>
                 <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{custName(c) || c.email || c.phone || '—'}</div>
                 {custName(c) && <div dir="ltr" style={{ fontSize: '0.76rem', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'start' }}>{c.email ?? c.phone}</div>}
@@ -135,9 +135,9 @@ function CustomerDetail({ id, onBack, onStats }: { id: string; onBack: () => voi
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <button onClick={onBack} className="press" style={{ ...ghost, alignSelf: 'flex-start' }}>← חזרה לרשימה</button>
+      <button onClick={onBack} className="press rise" style={{ ...ghost, alignSelf: 'flex-start' }}>← חזרה לרשימה</button>
 
-      <div style={card}>
+      <div className="rise" style={{ ...card, animationDelay: '50ms' }}>
         <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{custName(c) || c.email || '—'}</div>
         {custName(c) && c.email && <div dir="ltr" style={{ fontSize: '0.85rem', color: 'var(--text-dim)', textAlign: 'start' }}>{c.email}</div>}
         {c.phone && <div dir="ltr" style={{ fontSize: '0.85rem', color: 'var(--text-dim)', textAlign: 'start' }}>{c.phone}</div>}
@@ -149,7 +149,7 @@ function CustomerDetail({ id, onBack, onStats }: { id: string; onBack: () => voi
       </div>
 
       {/* adjust */}
-      <div style={card}>
+      <div className="rise" style={{ ...card, animationDelay: '100ms' }}>
         <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text)', marginBottom: 8 }}>עדכון נקודות ידני</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <input value={delta} onChange={(e) => setDelta(e.target.value)} inputMode="numeric" placeholder="כמות" dir="ltr" style={{ ...input, width: 90 }} />
@@ -162,18 +162,18 @@ function CustomerDetail({ id, onBack, onStats }: { id: string; onBack: () => voi
         {msg && <p style={{ fontSize: '0.82rem', color: msg.includes('✓') ? 'var(--neon-soft)' : '#ff6b6b', margin: '8px 0 0' }}>{msg}</p>}
       </div>
 
-      <HistoryBlock title="עדכונים ידניים" empty="אין עדכונים" rows={d.adjustments.map((a) => ({ id: a.id, left: `${a.delta > 0 ? '+' : ''}${a.delta} ✦`, right: `${heDateTime(a.created_at)}${a.reason ? ' · ' + a.reason : ''}`, accent: a.delta > 0 }))} />
-      <HistoryBlock title="ביקורים אחרונים" empty="אין ביקורים" rows={d.visits.map((v) => ({ id: v.id, left: `+${v.points_awarded} ✦`, right: heDateTime(v.visit_timestamp), accent: true }))} />
+      <HistoryBlock delay={150} title="עדכונים ידניים" empty="אין עדכונים" rows={d.adjustments.map((a) => ({ id: a.id, left: `${a.delta > 0 ? '+' : ''}${a.delta} ✦`, right: `${heDateTime(a.created_at)}${a.reason ? ' · ' + a.reason : ''}`, accent: a.delta > 0 }))} />
+      <HistoryBlock delay={190} title="ביקורים אחרונים" empty="אין ביקורים" rows={d.visits.map((v) => ({ id: v.id, left: `+${v.points_awarded} ✦`, right: heDateTime(v.visit_timestamp), accent: true }))} />
       {d.redemptions.length > 0 && (
-        <HistoryBlock title="מימושים" empty="" rows={d.redemptions.map((r) => ({ id: r.id, left: `-${r.points_deducted} ✦`, right: heDateTime(r.redeemed_at), accent: false }))} />
+        <HistoryBlock delay={230} title="מימושים" empty="" rows={d.redemptions.map((r) => ({ id: r.id, left: `-${r.points_deducted} ✦`, right: heDateTime(r.redeemed_at), accent: false }))} />
       )}
     </div>
   )
 }
 
-function HistoryBlock({ title, empty, rows }: { title: string; empty: string; rows: { id: string; left: string; right: string; accent: boolean }[] }) {
+function HistoryBlock({ title, empty, rows, delay }: { title: string; empty: string; rows: { id: string; left: string; right: string; accent: boolean }[]; delay: number }) {
   return (
-    <div>
+    <div className="rise" style={{ animationDelay: `${delay}ms` }}>
       <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 8px' }}>{title}</h3>
       {rows.length === 0 ? <p style={{ fontSize: '0.82rem', color: 'var(--text-faint)', margin: 0 }}>{empty}</p> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -189,9 +189,9 @@ function HistoryBlock({ title, empty, rows }: { title: string; empty: string; ro
   )
 }
 
-function StatTile({ label, value, accent }: { label: string; value?: number; accent?: boolean }) {
+function StatTile({ label, value, accent, delay }: { label: string; value?: number; accent?: boolean; delay: number }) {
   return (
-    <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14, padding: '14px 16px' }}>
+    <div className="rise" style={{ background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14, padding: '14px 16px', animationDelay: `${delay}ms` }}>
       <div style={{ fontSize: '1.5rem', fontWeight: 800, color: accent ? 'var(--neon-soft)' : 'var(--text)' }}>{value ?? '—'}</div>
       <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 2 }}>{label}</div>
     </div>

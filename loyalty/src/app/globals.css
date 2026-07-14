@@ -45,8 +45,16 @@ html, body {
 .press { transition: transform .12s var(--ease), filter .12s ease; }
 .press:active { transform: scale(.96); filter: brightness(1.18); }
 
+/* ---- Shared entrance reveals (page/section presentation) ----
+   .rise: fade + rise up, for text/cards/rows. .pop: spring scale-in, for
+   round icons/logos/tiles. Both use fill-mode "backwards" so the element
+   holds its pre-animation state during animation-delay (no flash). Pair
+   with an inline animationDelay for staggering — see components for usage. */
+.rise { animation: rise-in .55s var(--ease) backwards; }
+.pop  { animation: handoff-pop .5s cubic-bezier(.34,1.56,.64,1) backwards; }
+
 @media (prefers-reduced-motion: reduce) {
-  .press, [style*="handoff"], [style*="rise-in"] { animation: none !important; transition: none !important; }
+  .press, .rise, .pop, [style*="handoff"], [style*="rise-in"] { animation: none !important; transition: none !important; }
 }
 
 /* ---- Skeleton loading (premium shimmer) ---- */

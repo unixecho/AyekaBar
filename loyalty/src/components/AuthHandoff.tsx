@@ -68,10 +68,8 @@ export function AuthHandoff({
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 300 }}>
         <div dir="ltr" style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 28 }}>
           <Tile delay={0.1}>
-            {/* Ayeka Bar mark — swap for the real logo/glyph */}
-            <svg width={30} height={30} viewBox="0 0 24 24" fill="none" stroke="var(--neon)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 3h12M6 3v4a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3M12 13v6M8 21h8" />
-            </svg>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/assets/logo.svg" alt="" width={34} height={34} style={{ display: 'block' }} />
           </Tile>
           <div style={{ display: 'flex', gap: 7 }} aria-hidden>
             {[0, 1, 2].map(i => (

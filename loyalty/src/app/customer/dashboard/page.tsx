@@ -113,26 +113,32 @@ export default async function CustomerDashboardPage() {
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 440, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text)', textShadow: '0 0 18px rgba(255,94,58,0.5)', margin: 0 }}>
-          אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר
-        </h1>
+      <div className="rise" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, animationDelay: '20ms' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/assets/logo.svg" alt="" width={32} height={32} style={{ display: 'block' }} />
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text)', textShadow: '0 0 18px rgba(255,94,58,0.5)', margin: 0 }}>
+            אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר
+          </h1>
+        </div>
         <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>מועדון נאמנות</span>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <PointsCard
-          points={customer.points}
-          totalVisits={customer.totalVisits}
-          nextRewardName={nextReward?.rewardNameHe ?? nextReward?.rewardName ?? null}
-          nextRewardPoints={nextReward?.requiredPoints ?? null}
-          progress={progressToNext}
-        />
+        <div className="rise" style={{ animationDelay: '90ms' }}>
+          <PointsCard
+            points={customer.points}
+            totalVisits={customer.totalVisits}
+            nextRewardName={nextReward?.rewardNameHe ?? nextReward?.rewardName ?? null}
+            nextRewardPoints={nextReward?.requiredPoints ?? null}
+            progress={progressToNext}
+          />
+        </div>
 
         {/* How it works */}
-        <div style={{
+        <div className="rise" style={{
           background: 'var(--bg-elev)', border: '1px solid var(--line)',
-          borderRadius: 18, padding: '18px 20px',
+          borderRadius: 18, padding: '18px 20px', animationDelay: '160ms',
         }}>
           <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 10px' }}>איך צוברים נקודות?</h2>
           <ol style={{ margin: 0, padding: '0 20px 0 0', color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.8 }}>
@@ -143,21 +149,21 @@ export default async function CustomerDashboardPage() {
         </div>
 
         {/* Rewards */}
-        <div>
+        <div className="rise" style={{ animationDelay: '230ms' }}>
           <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 10px' }}>הפרסים שלי</h2>
           <RewardsList rewards={rewards} customerPoints={customer.points} />
         </div>
 
         {/* Visit history */}
         {recentVisits.length > 0 && (
-          <div>
+          <div className="rise" style={{ animationDelay: '300ms' }}>
             <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 10px' }}>ביקורים אחרונים</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {recentVisits.map((v) => (
-                <div key={v.id} style={{
+              {recentVisits.map((v, i) => (
+                <div key={v.id} className="rise" style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   background: 'var(--bg-elev)', border: '1px solid var(--line)',
-                  borderRadius: 12, padding: '12px 16px',
+                  borderRadius: 12, padding: '12px 16px', animationDelay: `${300 + Math.min(i, 6) * 35}ms`,
                 }}>
                   <span style={{ fontSize: '0.88rem', color: 'var(--text-dim)' }}>
                     {new Date(v.visit_timestamp).toLocaleDateString('he-IL')}

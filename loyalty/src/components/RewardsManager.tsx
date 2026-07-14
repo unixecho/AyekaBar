@@ -61,7 +61,7 @@ export default function RewardsManager() {
       <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', margin: 0 }}>הפרסים שהלקוחות רואים במועדון, לפי כמות נקודות.</p>
 
       {/* add */}
-      <form onSubmit={add} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <form onSubmit={add} className="rise" style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10, animationDelay: '60ms' }}>
         <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text)' }}>פרס חדש</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <input value={nameHe} onChange={(e) => setNameHe(e.target.value)} placeholder="שם הפרס" required style={{ ...input, flex: 1 }} />
@@ -78,8 +78,8 @@ export default function RewardsManager() {
         <p style={{ color: 'var(--text-faint)', textAlign: 'center', padding: '14px 0' }}>אין עדיין פרסים.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {rewards.map((r) => (
-            <div key={r.id} style={{ ...card, opacity: busyId === r.id ? 0.55 : (r.active ? 1 : 0.6) }}>
+          {rewards.map((r, i) => (
+            <div key={r.id} className="rise" style={{ ...card, opacity: busyId === r.id ? 0.55 : (r.active ? 1 : 0.6), animationDelay: `${Math.min(i, 8) * 40}ms` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input defaultValue={r.reward_name_he ?? ''} onBlur={(e) => { if (e.target.value.trim() !== (r.reward_name_he ?? '')) patch(r.id, { reward_name_he: e.target.value }) }}
                   style={{ ...input, flex: 1, fontWeight: 600 }} />

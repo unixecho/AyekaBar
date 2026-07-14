@@ -122,7 +122,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       </div>
 
       {/* Add form */}
-      <form onSubmit={addMember} style={cardStyle}>
+      <form onSubmit={addMember} className="rise" style={{ ...cardStyle, animationDelay: '60ms' }}>
         <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)' }}>{T.addTitle}</div>
         <input
           type="email" required dir="ltr" value={email}
@@ -173,10 +173,11 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
           <p style={{ color: 'var(--text-faint)', fontSize: '0.85rem', textAlign: 'center', padding: '18px 0' }}>{T.empty}</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {members.map((m) => (
+            {members.map((m, i) => (
               <MemberRow
                 key={m.auth_user_id}
                 m={m}
+                delay={Math.min(i, 8) * 40}
                 isSelf={m.auth_user_id === currentUserId}
                 busy={busyId === m.auth_user_id}
                 onBadge={(badge) => patchMember(m.auth_user_id, { badge })}
@@ -192,9 +193,9 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 }
 
 function MemberRow({
-  m, isSelf, busy, onBadge, onToggleOwner, onRemove,
+  m, delay, isSelf, busy, onBadge, onToggleOwner, onRemove,
 }: {
-  m: Member; isSelf: boolean; busy: boolean
+  m: Member; delay: number; isSelf: boolean; busy: boolean
   onBadge: (badge: string) => void
   onToggleOwner: () => void
   onRemove: () => void
@@ -206,10 +207,10 @@ function MemberRow({
     || (m.email?.[0] ?? '?').toUpperCase()
 
   return (
-    <div style={{
+    <div className="rise" style={{
       background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14,
       padding: '13px 14px', display: 'flex', flexDirection: 'column', gap: 10,
-      opacity: busy ? 0.55 : 1, transition: 'opacity .2s var(--ease)',
+      opacity: busy ? 0.55 : 1, transition: 'opacity .2s var(--ease)', animationDelay: `${delay}ms`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div aria-hidden style={{

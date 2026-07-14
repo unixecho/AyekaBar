@@ -130,7 +130,8 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
       <div className="menu-sticky" ref={stickyRef}>
         <header className="menu-topbar">
           <div className={`menu-lang${langOpen ? ' open' : ''}`} ref={langRef}>
-            <button className="menu-globe" aria-label="Language" aria-expanded={langOpen}
+            <button className="menu-globe rise" aria-label="Language" aria-expanded={langOpen}
+              style={{ animationDelay: '20ms' }}
               onClick={(e) => { e.stopPropagation(); setLangOpen((v) => !v) }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="9" /><path d="M3 12h18" />
@@ -145,9 +146,9 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
             </div>
           </div>
 
-          <div className="menu-brand">{brand}</div>
+          <div className="menu-brand rise" style={{ animationDelay: '90ms' }}>{brand}</div>
 
-          <Link className="menu-back" href="/" aria-label={MENU_UI.back[lang]}>
+          <Link className="menu-back rise" href="/" aria-label={MENU_UI.back[lang]} style={{ animationDelay: '20ms' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 12H5" /><path d="M15 6l6 6-6 6" />
             </svg>
@@ -155,7 +156,7 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
         </header>
 
         {menu && menu.categories.length > 0 && (
-          <div className="menu-chips-wrap">
+          <div className="menu-chips-wrap rise" style={{ animationDelay: '160ms' }}>
             <nav className="menu-chips" ref={chipsRef} aria-label="categories">
               {menu.categories.map((cat) => (
                 <button key={cat.id} data-chip={cat.id} type="button"
@@ -175,9 +176,9 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
         ) : !menu || menu.categories.length === 0 ? (
           <p className="menu-empty">{MENU_UI.unavailable[lang]}</p>
         ) : (
-          menu.categories.map((cat) => (
+          menu.categories.map((cat, i) => (
             <CategorySection key={cat.id} cat={cat} lang={lang} open={cat.id === openId}
-              badges={menu.badges} onToggle={() => openCategory(cat.id)} />
+              badges={menu.badges} delay={Math.min(i, 8) * 45} onToggle={() => openCategory(cat.id)} />
           ))
         )}
       </main>
@@ -188,13 +189,13 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
 }
 
 function CategorySection({
-  cat, lang, open, badges, onToggle,
+  cat, lang, open, badges, delay, onToggle,
 }: {
   cat: MenuCategory; lang: Lang; open: boolean
-  badges: Record<string, { he?: string; en?: string; ar?: string }>; onToggle: () => void
+  badges: Record<string, { he?: string; en?: string; ar?: string }>; delay: number; onToggle: () => void
 }) {
   return (
-    <section className={`cat${open ? ' open' : ''}`} id={`cat-${cat.id}`}>
+    <section className={`cat rise${open ? ' open' : ''}`} id={`cat-${cat.id}`} style={{ animationDelay: `${delay}ms` }}>
       <button className="cat-head" type="button" aria-expanded={open} onClick={onToggle}>
         <span className="ic">{cat.icon ?? ''}</span>
         <span className="ttl">{loc(cat.title, lang)}</span>

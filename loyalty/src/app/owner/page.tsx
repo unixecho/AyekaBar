@@ -47,23 +47,26 @@ export default function OwnerSignInPage() {
   return (
     <main style={pageStyle}>
       <div style={cardStyle}>
-        <div style={{ textAlign: 'center' }}>
+        <div className="rise" style={{ textAlign: 'center', animationDelay: '40ms' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/assets/logo.svg" alt="" width={56} height={56}
+            style={{ display: 'block', margin: '0 auto 10px', filter: 'drop-shadow(0 0 16px rgba(255,94,58,0.4))' }} />
           <h1 style={brandStyle}>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</h1>
           <p style={{ color: 'var(--text-dim)', margin: '4px 0 0', fontSize: '0.9rem' }}>{t.tagline}</p>
         </div>
 
-        <button onClick={() => setAuthOpen(true)} className="press" style={googleBtnStyle}>
+        <button onClick={() => setAuthOpen(true)} className="press rise" style={{ ...googleBtnStyle, animationDelay: '160ms' }}>
           <GoogleG size={18} />{t.google}
         </button>
         {error && !authOpen && (
           <p style={{ color: '#ff6b6b', fontSize: '0.85rem', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>{error}</p>
         )}
 
-        <p style={{ color: 'var(--text-faint)', fontSize: '0.8rem', textAlign: 'center', margin: 0, lineHeight: 1.5 }}>
+        <p className="rise" style={{ color: 'var(--text-faint)', fontSize: '0.8rem', textAlign: 'center', margin: 0, lineHeight: 1.5, animationDelay: '230ms' }}>
           {t.hint}
         </p>
 
-        <Link href="/" style={{ color: 'var(--text-faint)', fontSize: '0.82rem', textAlign: 'center', textDecoration: 'none' }}>
+        <Link href="/" className="rise" style={{ color: 'var(--text-faint)', fontSize: '0.82rem', textAlign: 'center', textDecoration: 'none', animationDelay: '300ms' }}>
           {t.back}
         </Link>
       </div>
@@ -80,12 +83,14 @@ export default function OwnerSignInPage() {
 const pageStyle: React.CSSProperties = {
   minHeight: '100dvh', display: 'flex', alignItems: 'center',
   justifyContent: 'center', padding: '24px 20px',
+  background: 'radial-gradient(ellipse 80% 40% at 85% -5%, rgba(255,94,58,0.14), transparent 60%), var(--bg)',
 }
 const cardStyle: React.CSSProperties = {
   width: '100%', maxWidth: 360,
   background: 'var(--bg-elev)', border: '1px solid var(--line)',
   borderRadius: 20, padding: '32px 24px',
   display: 'flex', flexDirection: 'column', gap: 20,
+  animation: 'rise-in .5s var(--ease) backwards',
 }
 const brandStyle: React.CSSProperties = {
   fontSize: '1.8rem', fontWeight: 800, color: 'var(--text)',

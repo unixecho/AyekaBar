@@ -9,26 +9,34 @@ export default async function StaffDashboardPage() {
   if (!user) redirect('/staff')
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4 py-8">
-      <div className="w-full max-w-sm space-y-6 text-center">
+    <main style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
+      <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 24, textAlign: 'center' }}>
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-amber-400">אייכה בר</h1>
-          <p className="text-zinc-400">קוד QR לצוות</p>
+        <div className="rise" style={{ animationDelay: '20ms', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/assets/logo.svg" alt="" width={48} height={48} style={{ display: 'block' }} />
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text)', textShadow: '0 0 18px rgba(255,94,58,0.5)', margin: 0 }}>
+            אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר
+          </h1>
+          <p style={{ color: 'var(--text-dim)', margin: 0, fontSize: '0.9rem' }}>קוד QR לצוות</p>
         </div>
 
-        {/* QR component handles fetch + refresh */}
-        <QRDisplay />
+        <div className="rise" style={{ animationDelay: '110ms' }}>
+          <QRDisplay />
+        </div>
 
         {/* Instructions for staff */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-right">
-          <p className="text-sm font-semibold text-zinc-300 mb-2">הוראות לצוות:</p>
-          <ol className="text-sm text-zinc-500 space-y-1 list-decimal list-inside">
+        <div className="rise" style={{
+          background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 18,
+          padding: 16, textAlign: 'start', animationDelay: '200ms',
+        }}>
+          <p style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 8px' }}>הוראות לצוות:</p>
+          <ol style={{ margin: 0, padding: '0 20px 0 0', color: 'var(--text-dim)', fontSize: '0.85rem', lineHeight: 1.7 }}>
             <li>הצג את הקוד ללקוח לפני שעוזב</li>
             <li>הלקוח סורק עם המצלמה שלו</li>
             <li>הנקודה נצברת אוטומטית</li>
           </ol>
-          <p className="text-xs text-zinc-600 mt-3">
+          <p style={{ fontSize: '0.76rem', color: 'var(--text-faint)', margin: '10px 0 0' }}>
             הקוד מתחדש כל 15 דקות ותקף לשימוש חד-פעמי
           </p>
         </div>
