@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 
 interface Customer {
-  id: string; email: string | null; phone: string | null
+  id: string; first_name: string | null; last_name: string | null
+  email: string | null; phone: string | null
   points: number; total_visits: number; last_visit_at: string | null; created_at: string
 }
+
+const custName = (c: { first_name: string | null; last_name: string | null }) =>
+  [c.first_name, c.last_name].filter(Boolean).join(' ')
 interface Stats { customers: number; points_outstanding: number; visits_today: number; new_this_week: number }
 interface Detail {
   customer: Customer
@@ -48,7 +52,10 @@ export default function CustomerManager() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>לקוחות ונקודות</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>לקוחות ונקודות</h2>
+        <a href="/api/owner/customers?export=csv" className="press" style={{ ...ghost, textDecoration: 'none' }}>⬇ ייצוא CSV</a>
+      </div>
 
       {/* stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
@@ -59,7 +66,7 @@ export default function CustomerManager() {
       </div>
 
       {/* search */}
-      <input value={q} onChange={(e) => { setOffset(0); setQ(e.target.value) }} placeholder="חיפוש לפי אימייל או טלפון…" dir="ltr" style={input} />
+      <input value={q} onChange={(e) => { setOffset(0); setQ(e.target.value) }} placeholder="חיפוש לפי שם, אימייל או טלפון…" style={input} />
 
       {/* list */}
       {list === null ? (
@@ -71,8 +78,9 @@ export default function CustomerManager() {
           {list.map((c) => (
             <button key={c.id} onClick={() => setSelected(c.id)} className="press" style={rowStyle}>
               <div style={{ minWidth: 0, flex: 1, textAlign: 'start' }}>
-                <div dir="ltr" style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'start' }}>{c.email ?? c.phone ?? '—'}</div>
-                <div style={{ fontSize: '0.76rem', color: 'var(--text-faint)' }}>{c.total_visits} ביקורים · ביקור אחרון {heDate(c.last_visit_at)}</div>
+                <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{custName(c) || c.email || c.phone || '—'}</div>
+                {custName(c) && <div dir="ltr" style={{ fontSize: '0.76rem', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'start' }}>{c.email ?? c.phone}</div>}
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-faint)' }}>{c.total_visits} ביקורים · {heDate(c.last_visit_at)}</div>
               </div>
               <span style={pointsChip}>{c.points} ✦</span>
             </button>
@@ -130,7 +138,8 @@ function CustomerDetail({ id, onBack, onStats }: { id: string; onBack: () => voi
       <button onClick={onBack} className="press" style={{ ...ghost, alignSelf: 'flex-start' }}>← חזרה לרשימה</button>
 
       <div style={card}>
-        <div dir="ltr" style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', textAlign: 'start' }}>{c.email ?? '—'}</div>
+        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{custName(c) || c.email || '—'}</div>
+        {custName(c) && c.email && <div dir="ltr" style={{ fontSize: '0.85rem', color: 'var(--text-dim)', textAlign: 'start' }}>{c.email}</div>}
         {c.phone && <div dir="ltr" style={{ fontSize: '0.85rem', color: 'var(--text-dim)', textAlign: 'start' }}>{c.phone}</div>}
         <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
           <Stat label="נקודות" value={c.points} accent />

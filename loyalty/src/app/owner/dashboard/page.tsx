@@ -37,10 +37,14 @@ export default async function OwnerDashboardPage() {
       </div>
 
       {/* Quick links */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
         <Link href="/owner/customers" style={navCard}>
           <span style={{ fontSize: '1.3rem' }}>👥</span>
           <span>לקוחות ונקודות</span>
+        </Link>
+        <Link href="/owner/rewards" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }}>🎁</span>
+          <span>קטלוג פרסים</span>
         </Link>
         <Link href="/owner/editor" style={navCard}>
           <span style={{ fontSize: '1.3rem' }}>📝</span>

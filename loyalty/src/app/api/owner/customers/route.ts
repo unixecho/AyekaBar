@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOwner } from '@/lib/owner/guard'
 
-const LIST_COLS = 'id, email, phone, points, total_visits, last_visit_at, created_at'
+const LIST_COLS = 'id, first_name, last_name, email, phone, points, total_visits, last_visit_at, created_at'
+
+const CSV_COLS = ['first_name', 'last_name', 'email', 'phone', 'points', 'total_visits', 'last_visit_at', 'created_at'] as const
+function csvCell(v: unknown): string {
+  const s = v == null ? '' : String(v)
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireOwner()
@@ -14,6 +20,19 @@ export async function GET(request: NextRequest) {
     const { data, error } = await service.rpc('loyalty_overview')
     if (error) return NextResponse.json({ error: 'stats failed' }, { status: 500 })
     return NextResponse.json({ stats: data })
+  }
+
+  // ?export=csv → download the full roster as CSV (UTF-8 BOM for Excel)
+  if (url.searchParams.get('export')) {
+    const { data } = await service.from('customers').select(LIST_COLS).order('created_at', { ascending: true }).limit(10000)
+    const rows = (data ?? []) as Record<string, unknown>[]
+    const csv = [CSV_COLS.join(','), ...rows.map((r) => CSV_COLS.map((c) => csvCell(r[c])).join(','))].join('\n')
+    return new NextResponse('﻿' + csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="ayeka-customers-${new Date().toISOString().slice(0, 10)}.csv"`,
+      },
+    })
   }
 
   // ?id=… → one customer + history
@@ -35,7 +54,7 @@ export async function GET(request: NextRequest) {
   const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0)
 
   let query = service.from('customers').select(LIST_COLS, { count: 'exact' })
-  if (q) query = query.or(`email.ilike.%${q}%,phone.ilike.%${q}%`)
+  if (q) query = query.or(`email.ilike.%${q}%,phone.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`)
   query = query.order('last_visit_at', { ascending: false, nullsFirst: false }).range(offset, offset + limit - 1)
 
   const { data, count, error } = await query
