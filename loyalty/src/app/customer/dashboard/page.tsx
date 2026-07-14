@@ -62,19 +62,21 @@ async function getProfile(): Promise<ProfileData | null> {
   const customer = await getOrFetchCustomer(supabase, user.id)
   if (!customer) return null
 
-  const { data: rewards } = await supabase
-    .from('rewards')
-    .select('id, reward_name, reward_name_he, required_points')
-    .eq('business_id', process.env.NEXT_PUBLIC_BUSINESS_ID!)
-    .eq('active', true)
-    .order('required_points', { ascending: true })
-
-  const { data: visits } = await supabase
-    .from('visit_logs')
-    .select('id, points_awarded, visit_timestamp')
-    .eq('customer_id', customer.id)
-    .order('visit_timestamp', { ascending: false })
-    .limit(10)
+  // Independent of each other — run in parallel instead of one-after-another.
+  const [{ data: rewards }, { data: visits }] = await Promise.all([
+    supabase
+      .from('rewards')
+      .select('id, reward_name, reward_name_he, required_points')
+      .eq('business_id', process.env.NEXT_PUBLIC_BUSINESS_ID!)
+      .eq('active', true)
+      .order('required_points', { ascending: true }),
+    supabase
+      .from('visit_logs')
+      .select('id, points_awarded, visit_timestamp')
+      .eq('customer_id', customer.id)
+      .order('visit_timestamp', { ascending: false })
+      .limit(10),
+  ])
 
   return {
     customer: {
