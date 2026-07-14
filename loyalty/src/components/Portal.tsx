@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 
 type Lang = 'he' | 'en' | 'ar'
@@ -47,6 +47,7 @@ export default function Portal() {
   const [langOpen, setLangOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const t = I18N[lang]
+  const langRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('siteLanguage')
@@ -56,10 +57,18 @@ export default function Portal() {
     document.documentElement.lang = lang
     document.documentElement.dir = RTL[lang] ? 'rtl' : 'ltr'
   }, [lang])
+  // Close on outside click only — must check containment, not just "any click",
+  // otherwise the click that OPENS the menu also closes it in the same tick
+  // (stopPropagation on the wrapper doesn't reliably stop this listener from
+  // also firing), so the dropdown could never actually stay open.
   useEffect(() => {
-    const onClick = () => setLangOpen(false)
+    const onClick = (e: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(e.target as Node)) setLangOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLangOpen(false) }
     document.addEventListener('click', onClick)
-    return () => document.removeEventListener('click', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey) }
   }, [])
 
   function pickLang(l: Lang) { setLang(l); localStorage.setItem('siteLanguage', l); setLangOpen(false) }
@@ -73,8 +82,7 @@ export default function Portal() {
       <div className="app-scrim" aria-hidden />
 
       {/* language switch pinned to physical left */}
-      <div style={{ position: 'fixed', left: 14, top: 'calc(env(safe-area-inset-top) + 14px)', zIndex: 50 }}
-        onClick={(e) => e.stopPropagation()}>
+      <div ref={langRef} style={{ position: 'fixed', left: 14, top: 'calc(env(safe-area-inset-top) + 14px)', zIndex: 50 }}>
         <button aria-label="Language" className="press" onClick={() => setLangOpen((v) => !v)} style={globeStyle(langOpen)}>
           <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="9" /><path d="M3 12h18" />
