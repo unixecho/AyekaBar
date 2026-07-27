@@ -1,24 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+import { requireStaff } from '@/lib/staff/guard'
 import { generateQRToken, getExpiresAt } from '@/lib/loyalty/qr'
 
-export async function POST(request: NextRequest) {
+// Mints the check-in QR token staff show to customers. This is the one thing
+// standing between "customer visited the bar" and "customer awarded themselves
+// a point", so it MUST be staff-gated — a signed-in session is not enough.
+export async function POST() {
   try {
-    // Verify the requester is authenticated (staff)
-    const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await requireStaff()
+    if (!auth.ok) return auth.res
 
     const businessId = process.env.NEXT_PUBLIC_BUSINESS_ID!
     const token = await generateQRToken(businessId)
     const expiresAt = getExpiresAt()
 
-    // Store the token in the database via service role (bypasses RLS)
-    const serviceClient = createServiceClient()
-    const { error: insertError } = await serviceClient
+    const { error: insertError } = await auth.service
       .from('loyalty_qr_tokens')
       .insert({
         token,

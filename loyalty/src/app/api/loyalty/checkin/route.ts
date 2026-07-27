@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Customer not found. Please sign in again.' }, { status: 404 })
     }
 
-    const ip = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? null
     const deviceInfo = request.headers.get('user-agent') ?? null
 
     // 4. Call the award_points DB function — handles all fraud checks atomically

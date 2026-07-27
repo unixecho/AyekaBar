@@ -3,10 +3,10 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { rewardId } = body as { rewardId: string }
+    const body = await request.json().catch(() => null) as { rewardId?: string } | null
+    const rewardId = body?.rewardId
 
-    if (!rewardId) {
+    if (!rewardId || typeof rewardId !== 'string') {
       return NextResponse.json({ error: 'Missing rewardId' }, { status: 400 })
     }
 
@@ -19,10 +19,11 @@ export async function POST(request: NextRequest) {
 
     const serviceClient = createServiceClient()
 
-    // Get customer
+    // The customer is resolved from the caller's own session — never from the
+    // request body — so one customer can never redeem against another's balance.
     const { data: customer, error: customerError } = await serviceClient
       .from('customers')
-      .select('id, points')
+      .select('id')
       .eq('auth_user_id', user.id)
       .single()
 
@@ -30,55 +31,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
     }
 
-    // Get reward
-    const { data: reward, error: rewardError } = await serviceClient
-      .from('rewards')
-      .select('id, reward_name, required_points, active')
-      .eq('id', rewardId)
-      .single()
+    // Check + deduct + audit row, atomically (see migration 008). Doing this in
+    // JS was a double-spend race.
+    const { data: result, error: rpcError } = await serviceClient.rpc('redeem_reward', {
+      p_customer_id: customer.id,
+      p_reward_id: rewardId,
+      p_business_id: process.env.NEXT_PUBLIC_BUSINESS_ID!,
+    })
 
-    if (rewardError || !reward) {
-      return NextResponse.json({ error: 'Reward not found' }, { status: 404 })
-    }
-
-    if (!reward.active) {
-      return NextResponse.json({ error: 'This reward is no longer available' }, { status: 400 })
-    }
-
-    if (customer.points < reward.required_points) {
-      return NextResponse.json({
-        error: `Not enough points. Need ${reward.required_points}, have ${customer.points}.`,
-      }, { status: 400 })
-    }
-
-    // Deduct points and create redemption record atomically
-    const { error: deductError } = await serviceClient
-      .from('customers')
-      .update({ points: customer.points - reward.required_points })
-      .eq('id', customer.id)
-
-    if (deductError) {
+    if (rpcError) {
+      console.error('redeem_reward RPC error:', rpcError)
       return NextResponse.json({ error: 'Failed to redeem reward' }, { status: 500 })
     }
 
-    const { error: redemptionError } = await serviceClient
-      .from('reward_redemptions')
-      .insert({
-        customer_id: customer.id,
-        reward_id: reward.id,
-        points_deducted: reward.required_points,
-      })
+    const data = result as {
+      success: boolean
+      error?: string
+      required?: number
+      available?: number
+      reward_name?: string
+      points_deducted?: number
+      remaining_points?: number
+    }
 
-    if (redemptionError) {
-      // Non-critical log failure — points already deducted
-      console.error('Failed to log redemption:', redemptionError)
+    if (!data.success) {
+      const mapped: Record<string, { status: number; message: string }> = {
+        reward_not_found:    { status: 404, message: 'Reward not found' },
+        reward_inactive:     { status: 400, message: 'This reward is no longer available' },
+        insufficient_points: {
+          status: 400,
+          message: `Not enough points. Need ${data.required}, have ${data.available}.`,
+        },
+      }
+      const m = mapped[data.error ?? ''] ?? { status: 400, message: 'Failed to redeem reward' }
+      return NextResponse.json({ error: m.message }, { status: m.status })
     }
 
     return NextResponse.json({
       success: true,
-      reward: reward.reward_name,
-      pointsDeducted: reward.required_points,
-      remainingPoints: customer.points - reward.required_points,
+      reward: data.reward_name,
+      pointsDeducted: data.points_deducted,
+      remainingPoints: data.remaining_points,
     })
   } catch (error) {
     console.error('redeem error:', error)
