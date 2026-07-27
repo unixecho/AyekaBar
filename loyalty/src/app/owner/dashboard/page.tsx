@@ -4,6 +4,8 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { splitName } from '@/lib/staff/name'
 import OwnerHeader from '@/components/OwnerHeader'
 import StaffManager from '@/components/StaffManager'
+import LoyaltyToggle from '@/components/LoyaltyToggle'
+import { getLoyaltyEnabled } from '@/lib/settings/server'
 
 export default async function OwnerDashboardPage() {
   const supabase = createClient()
@@ -28,9 +30,16 @@ export default async function OwnerDashboardPage() {
       .eq('auth_user_id', user.id)
   }
 
+  const loyaltyEnabled = await getLoyaltyEnabled()
+
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       <OwnerHeader right="ניהול" />
+
+      {/* Loyalty club on/off */}
+      <div style={{ marginBottom: 16 }}>
+        <LoyaltyToggle initialEnabled={loyaltyEnabled} />
+      </div>
 
       {/* Quick links */}
       <div className="rise" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20, animationDelay: '140ms' }}>

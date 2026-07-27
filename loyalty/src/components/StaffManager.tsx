@@ -4,18 +4,22 @@ import { useEffect, useState, useCallback } from 'react'
 import { BADGE_OPTIONS, badgeMeta } from '@/lib/staff/badges'
 
 interface Member {
-  auth_user_id: string
+  id: string
+  /** null = pending invite: authorized by email, hasn't signed in with Google yet. */
+  auth_user_id: string | null
   role: 'staff' | 'owner'
   badge: string | null
   first_name: string | null
   last_name: string | null
   email: string | null
   created_at: string
+  invited_at: string | null
+  claimed_at: string | null
 }
 
 const T = {
   title: 'ניהול צוות',
-  subtitle: 'הוסף/י אנשי צוות לפי אימייל ושייך/י תפקיד. אנשי צוות נכנסים עם Google.',
+  subtitle: 'הוסף/י אנשי צוות לפי אימייל — גם לפני שנכנסו לראשונה. בכניסה עם Google הם יזוהו אוטומטית ויקבלו גישה לחלון הצוות.',
   addTitle: 'הוספת איש/אשת צוות',
   emailPh: 'האימייל של איש הצוות (Google)',
   addBtn: 'הוסף',
@@ -27,8 +31,18 @@ const T = {
   makeOwner: 'הפוך/הפכי לבעלים',
   removeOwner: 'הסר/י בעלות',
   remove: 'הסר/י מהצוות',
+  revoke: 'בטל/י הזמנה',
   confirmRemove: 'להסיר את איש הצוות מהרשימה?',
+  confirmRevoke: 'לבטל את ההזמנה לאימייל הזה?',
+  pending: 'ממתין לכניסה ראשונה',
+  pendingNote: 'ההרשאה תיכנס לתוקף ברגע שיתחבר/תתחבר עם Google מהאימייל הזה.',
+  active: 'מחובר/ת',
+  addedPending: 'נוסף/ה. ההרשאה תופעל בכניסה הראשונה עם Google מהאימייל הזה.',
+  addedActive: 'נוסף/ה לצוות. הגישה פעילה מיד.',
+  updated: 'האימייל כבר היה ברשימה — התפקיד עודכן.',
 }
+
+type Notice = { kind: 'ok' | 'err'; text: string } | null
 
 export default function StaffManager({ currentUserId }: { currentUserId: string }) {
   const [members, setMembers] = useState<Member[] | null>(null)
@@ -38,7 +52,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
   const [badge, setBadge] = useState(BADGE_OPTIONS[0].key)
   const [asOwner, setAsOwner] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [addError, setAddError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice>(null)
 
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -59,7 +73,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 
   async function addMember(e: React.FormEvent) {
     e.preventDefault()
-    setAdding(true); setAddError(null)
+    setAdding(true); setNotice(null)
     try {
       const res = await fetch('/api/owner/staff', {
         method: 'POST',
@@ -69,46 +83,50 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'שמירה נכשלה')
       setEmail(''); setAsOwner(false)
+      setNotice({
+        kind: 'ok',
+        text: json.updated ? T.updated : json.pending ? T.addedPending : T.addedActive,
+      })
       await load()
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'שמירה נכשלה')
+      setNotice({ kind: 'err', text: err instanceof Error ? err.message : 'שמירה נכשלה' })
     } finally {
       setAdding(false)
     }
   }
 
-  async function patchMember(authUserId: string, patch: { badge?: string; role?: 'staff' | 'owner' }) {
-    setBusyId(authUserId)
+  async function patchMember(id: string, patch: { badge?: string; role?: 'staff' | 'owner' }) {
+    setBusyId(id)
     try {
       const res = await fetch('/api/owner/staff', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authUserId, ...patch }),
+        body: JSON.stringify({ id, ...patch }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      setMembers((cur) => cur?.map((m) => m.auth_user_id === authUserId ? json.member : m) ?? cur)
+      setMembers((cur) => cur?.map((m) => m.id === id ? json.member : m) ?? cur)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'עדכון נכשל')
+      setNotice({ kind: 'err', text: err instanceof Error ? err.message : 'עדכון נכשל' })
     } finally {
       setBusyId(null)
     }
   }
 
-  async function removeMember(authUserId: string) {
-    if (!confirm(T.confirmRemove)) return
-    setBusyId(authUserId)
+  async function removeMember(m: Member) {
+    if (!confirm(m.auth_user_id ? T.confirmRemove : T.confirmRevoke)) return
+    setBusyId(m.id)
     try {
       const res = await fetch('/api/owner/staff', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authUserId }),
+        body: JSON.stringify({ id: m.id }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      setMembers((cur) => cur?.filter((m) => m.auth_user_id !== authUserId) ?? cur)
+      setMembers((cur) => cur?.filter((x) => x.id !== m.id) ?? cur)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'מחיקה נכשלה')
+      setNotice({ kind: 'err', text: err instanceof Error ? err.message : 'מחיקה נכשלה' })
     } finally {
       setBusyId(null)
     }
@@ -153,7 +171,12 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
           <input type="checkbox" checked={asOwner} onChange={(e) => setAsOwner(e.target.checked)} />
           {T.ownerGrant} ⭐
         </label>
-        {addError && <p style={{ color: '#ff6b6b', fontSize: '0.82rem', margin: 0, lineHeight: 1.5 }}>{addError}</p>}
+        {notice && (
+          <p style={{
+            color: notice.kind === 'err' ? '#ff6b6b' : 'var(--neon-soft)',
+            fontSize: '0.82rem', margin: 0, lineHeight: 1.5,
+          }}>{notice.text}</p>
+        )}
         <button type="submit" disabled={adding || !email} className="press" style={addBtnStyle}>
           {adding ? T.adding : T.addBtn}
         </button>
@@ -175,14 +198,14 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {members.map((m, i) => (
               <MemberRow
-                key={m.auth_user_id}
+                key={m.id}
                 m={m}
                 delay={Math.min(i, 8) * 40}
-                isSelf={m.auth_user_id === currentUserId}
-                busy={busyId === m.auth_user_id}
-                onBadge={(badge) => patchMember(m.auth_user_id, { badge })}
-                onToggleOwner={() => patchMember(m.auth_user_id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
-                onRemove={() => removeMember(m.auth_user_id)}
+                isSelf={!!m.auth_user_id && m.auth_user_id === currentUserId}
+                busy={busyId === m.id}
+                onBadge={(badge) => patchMember(m.id, { badge })}
+                onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
+                onRemove={() => removeMember(m)}
               />
             ))}
           </div>
@@ -201,6 +224,7 @@ function MemberRow({
   onRemove: () => void
 }) {
   const meta = badgeMeta(m.badge, m.role)
+  const pending = !m.auth_user_id
   const name = [m.first_name, m.last_name].filter(Boolean).join(' ')
     || m.email?.split('@')[0] || 'משתמש'
   const inits = ((m.first_name?.[0] ?? '') + (m.last_name?.[0] ?? '')).trim()
@@ -208,39 +232,58 @@ function MemberRow({
 
   return (
     <div className="rise" style={{
-      background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14,
+      background: 'var(--bg-elev)',
+      border: `1px solid ${pending ? 'rgba(255,255,255,0.09)' : 'var(--line)'}`,
+      borderStyle: pending ? 'dashed' : 'solid',
+      borderRadius: 14,
       padding: '13px 14px', display: 'flex', flexDirection: 'column', gap: 10,
       opacity: busy ? 0.55 : 1, transition: 'opacity .2s var(--ease)', animationDelay: `${delay}ms`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div aria-hidden style={{
           width: 42, height: 42, borderRadius: 999, flex: '0 0 auto',
-          background: `${meta.color}22`, border: `1px solid ${meta.color}55`, color: meta.color,
+          background: pending ? 'rgba(255,255,255,0.04)' : `${meta.color}22`,
+          border: `1px ${pending ? 'dashed' : 'solid'} ${pending ? 'var(--line-strong)' : `${meta.color}55`}`,
+          color: pending ? 'var(--text-faint)' : meta.color,
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.95rem',
-        }}>{inits}</div>
+        }}>{pending ? '✉' : inits}</div>
 
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-            {isSelf && <span style={{ fontSize: '0.68rem', color: 'var(--text-faint)', border: '1px solid var(--line-strong)', borderRadius: 999, padding: '1px 7px' }}>{T.you}</span>}
+            {isSelf && <span style={chipStyle}>{T.you}</span>}
+            {pending && (
+              <span style={{ ...chipStyle, color: '#fbbf24', borderColor: 'rgba(251,191,36,0.35)' }}>
+                ⏳ {T.pending}
+              </span>
+            )}
           </div>
           <div dir="ltr" style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
-          <div dir="ltr" style={{ fontSize: '0.62rem', color: 'var(--text-faint)', textAlign: 'start', fontFamily: 'monospace', marginTop: 2 }}>{m.auth_user_id}</div>
+          {!pending && (
+            <div dir="ltr" style={{ fontSize: '0.62rem', color: 'var(--text-faint)', textAlign: 'start', fontFamily: 'monospace', marginTop: 2 }}>{m.auth_user_id}</div>
+          )}
         </div>
 
         <span style={{
           display: 'flex', alignItems: 'center', gap: 5, flex: '0 0 auto',
           background: `${meta.color}18`, border: `1px solid ${meta.color}44`, color: meta.color,
           borderRadius: 999, padding: '4px 10px', fontSize: '0.76rem', fontWeight: 700,
+          opacity: pending ? 0.75 : 1,
         }}>
           <span>{meta.emoji}</span>{meta.he}
         </span>
       </div>
 
+      {pending && (
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-faint)', margin: 0, lineHeight: 1.5 }}>
+          {T.pendingNote}
+        </p>
+      )}
+
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <select
-          value={m.badge && !['owner'].includes(m.badge) ? m.badge : (BADGE_OPTIONS.find(b => b.key === m.badge)?.key ?? '')}
+          value={BADGE_OPTIONS.find((b) => b.key === m.badge)?.key ?? (m.badge ?? '')}
           onChange={(e) => onBadge(e.target.value)}
           disabled={busy}
           style={selectStyle}
@@ -259,7 +302,7 @@ function MemberRow({
             </button>
             <button type="button" onClick={onRemove} disabled={busy} className="press"
               style={{ ...ghostBtn, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto' }}>
-              {T.remove}
+              {pending ? T.revoke : T.remove}
             </button>
           </>
         )}
@@ -281,6 +324,10 @@ function SkeletonRow() {
   )
 }
 
+const chipStyle: React.CSSProperties = {
+  fontSize: '0.68rem', color: 'var(--text-faint)',
+  border: '1px solid var(--line-strong)', borderRadius: 999, padding: '1px 7px',
+}
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 16,
   padding: '16px', display: 'flex', flexDirection: 'column', gap: 12,

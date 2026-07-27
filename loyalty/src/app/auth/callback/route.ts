@@ -15,13 +15,23 @@ export async function GET(request: NextRequest) {
       const { data: { user } } = await supabase.auth.getUser()
       let dest = '/customer/dashboard'
       if (user) {
-        const { data: staff } = await supabase
-          .from('staff')
-          .select('role')
-          .eq('auth_user_id', user.id)
-          .maybeSingle()
-        if (staff?.role === 'owner') dest = '/owner/dashboard'
-        else if (staff?.role === 'staff') dest = '/staff/dashboard'
+        // Link any pending invite the owner created for this email before the
+        // person's first sign-in, then route by the resulting role. Returns the
+        // existing role unchanged when there's nothing to claim.
+        const { data: claimed } = await supabase.rpc('claim_staff_invite')
+        let role = claimed as string | null
+
+        if (!role) {
+          const { data: staff } = await supabase
+            .from('staff')
+            .select('role')
+            .eq('auth_user_id', user.id)
+            .maybeSingle()
+          role = staff?.role ?? null
+        }
+
+        if (role === 'owner') dest = '/owner/dashboard'
+        else if (role === 'staff') dest = '/staff/dashboard'
       }
       return NextResponse.redirect(`${origin}${dest}`)
     }

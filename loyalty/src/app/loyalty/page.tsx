@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getLoyaltyEnabled } from '@/lib/settings/server'
 
 const REWARDS = [
   { pts: 10, label: 'כוס בירה חינם', icon: '🍺' },
@@ -7,7 +8,9 @@ const REWARDS = [
   { pts: 50, label: 'פרס VIP', icon: '⭐' },
 ]
 
-export default function LoyaltyLandingPage() {
+export default async function LoyaltyLandingPage() {
+  const enabled = await getLoyaltyEnabled()
+
   return (
     <main style={{
       minHeight: '100dvh',
@@ -41,9 +44,21 @@ export default function LoyaltyLandingPage() {
           <p style={{ color: 'var(--text-dim)', marginTop: 8, fontSize: '1.05rem', fontWeight: 400 }}>
             מועדון נאמנות
           </p>
+          {!enabled && (
+            <div className="rise" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 12,
+              borderRadius: 999, padding: '5px 14px',
+              background: 'rgba(255,94,58,0.12)', border: '1px solid rgba(255,94,58,0.3)',
+              color: 'var(--neon-soft)', fontSize: '0.82rem', fontWeight: 700,
+              animationDelay: '110ms',
+            }}>
+              ✦ בקרוב
+            </div>
+          )}
         </div>
 
-        {/* Loyalty teaser */}
+        {/* Rewards teaser — the whole point of showing this page while the club
+            is still dark: people see what's coming. */}
         <div className="rise" style={{
           background: 'var(--bg-elev)',
           border: '1px solid var(--line)',
@@ -78,42 +93,53 @@ export default function LoyaltyLandingPage() {
           ))}
         </div>
 
-        {/* CTAs */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Link href="/customer" className="rise press" style={{
-            display: 'block',
-            width: '100%',
-            borderRadius: 14,
-            background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-            boxShadow: 'var(--glow)',
-            padding: '14px 0',
-            textAlign: 'center',
-            fontSize: '1.05rem',
-            fontWeight: 700,
-            color: '#fff',
-            textDecoration: 'none',
-            animationDelay: '540ms',
-          }}>
-            אני לקוח/ה
-          </Link>
+        {enabled ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Link href="/customer" className="rise press" style={{
+              display: 'block',
+              width: '100%',
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
+              boxShadow: 'var(--glow)',
+              padding: '14px 0',
+              textAlign: 'center',
+              fontSize: '1.05rem',
+              fontWeight: 700,
+              color: '#fff',
+              textDecoration: 'none',
+              animationDelay: '540ms',
+            }}>
+              אני לקוח/ה
+            </Link>
 
-          <Link href="/staff" className="rise press" style={{
-            display: 'block',
-            width: '100%',
-            borderRadius: 14,
-            border: '1px solid var(--line-strong)',
-            background: 'rgba(255,255,255,0.03)',
-            padding: '14px 0',
-            textAlign: 'center',
-            fontSize: '1.05rem',
-            fontWeight: 600,
-            color: 'var(--text-dim)',
-            textDecoration: 'none',
-            animationDelay: '610ms',
+            <Link href="/staff" className="rise press" style={{
+              display: 'block',
+              width: '100%',
+              borderRadius: 14,
+              border: '1px solid var(--line-strong)',
+              background: 'rgba(255,255,255,0.03)',
+              padding: '14px 0',
+              textAlign: 'center',
+              fontSize: '1.05rem',
+              fontWeight: 600,
+              color: 'var(--text-dim)',
+              textDecoration: 'none',
+              animationDelay: '610ms',
+            }}>
+              צוות בר
+            </Link>
+          </div>
+        ) : (
+          <div className="rise" style={{
+            borderRadius: 14, border: '1px dashed var(--line-strong)',
+            background: 'rgba(255,255,255,0.02)', padding: '16px 18px',
+            textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.9rem',
+            lineHeight: 1.6, animationDelay: '540ms',
           }}>
-            צוות בר
-          </Link>
-        </div>
+            המועדון ייפתח בקרוב.<br />
+            בינתיים — סרקו את הברקוד בבר, עיינו בתפריט, ועקבו אחרינו לעדכון.
+          </div>
+        )}
 
         <p className="rise" style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)', margin: 0, animationDelay: '670ms' }}>
           כל ביקור = נקודה אחת. ללא כרטיס, ללא אפליקציה.

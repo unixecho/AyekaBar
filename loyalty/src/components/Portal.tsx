@@ -22,11 +22,11 @@ const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
 
 const I18N: Record<Lang, {
   brand: ReactNode; tagline: string; navigate: string; menu: string; instagram: string
-  review: string; loyalty: string; langName: string; footer: string
+  review: string; loyalty: string; soon: string; langName: string; footer: string
 }> = {
-  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', langName: 'עברית', footer: '© אייכה בר' },
-  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', review: 'Leave a review', loyalty: 'Loyalty Club', langName: 'English', footer: '© Ayeka Bar' },
-  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', review: 'اترك تقييماً', loyalty: 'نادي الولاء', langName: 'العربية', footer: '© אייכה בר' },
+  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', langName: 'עברית', footer: '© אייכה בר' },
+  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', langName: 'English', footer: '© Ayeka Bar' },
+  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', langName: 'العربية', footer: '© אייכה בר' },
 }
 
 const ICONS = {
@@ -42,7 +42,7 @@ function Ic({ children }: { children: ReactNode }) {
   return <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
 }
 
-export default function Portal() {
+export default function Portal({ loyaltyEnabled = false }: { loyaltyEnabled?: boolean }) {
   const [lang, setLang] = useState<Lang>('he')
   const [langOpen, setLangOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
@@ -140,12 +140,24 @@ export default function Portal() {
             <Arrow />
           </Link>
 
-          {/* Loyalty */}
-          <Link href={LINKS.loyalty} className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
-            <span style={icWrap}><Ic>{ICONS.loyalty}</Ic></span>
-            <span style={{ flex: 1, textAlign: 'start' }}>{t.loyalty}</span>
-            <Arrow />
-          </Link>
+          {/* Loyalty — a teaser until the owner switches the club on */}
+          {loyaltyEnabled ? (
+            <Link href={LINKS.loyalty} className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+              <span style={icWrap}><Ic>{ICONS.loyalty}</Ic></span>
+              <span style={{ flex: 1, textAlign: 'start' }}>{t.loyalty}</span>
+              <Arrow />
+            </Link>
+          ) : (
+            <div aria-disabled style={{
+              ...btnStyle(false), cursor: 'default', color: 'var(--text-dim)',
+              background: 'rgba(255,255,255,0.02)', borderStyle: 'dashed',
+              animation: `rise-in .55s var(--ease) ${delay()} backwards`,
+            }}>
+              <span style={{ ...icWrap, color: 'var(--text-faint)' }}><Ic>{ICONS.loyalty}</Ic></span>
+              <span style={{ flex: 1, textAlign: 'start' }}>{t.loyalty}</span>
+              <span style={soonChip}>{t.soon}</span>
+            </div>
+          )}
 
           {/* Instagram */}
           <a href={LINKS.instagram} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
@@ -173,6 +185,13 @@ function Arrow() {
 }
 
 const icWrap: CSSProperties = { width: 26, display: 'grid', placeItems: 'center', color: 'var(--neon-soft)', flex: '0 0 auto' }
+
+const soonChip: CSSProperties = {
+  flex: '0 0 auto', borderRadius: 999, padding: '3px 10px',
+  fontSize: '0.72rem', fontWeight: 700, letterSpacing: 0.3,
+  color: 'var(--neon-soft)', background: 'rgba(255,94,58,0.12)',
+  border: '1px solid rgba(255,94,58,0.28)',
+}
 
 function btnStyle(hero: boolean): CSSProperties {
   return {

@@ -8,6 +8,16 @@ export default async function StaffDashboardPage() {
 
   if (!user) redirect('/staff')
 
+  // Being signed in with Google is not being staff. Middleware gates this too
+  // (and claims a pending invite on the way in), but check here as well —
+  // same defense-in-depth pattern as the /owner/* pages.
+  const { data: me } = await supabase
+    .from('staff')
+    .select('role')
+    .eq('auth_user_id', user.id)
+    .maybeSingle()
+  if (!me) redirect('/staff?denied=1')
+
   return (
     <main style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
       <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 24, textAlign: 'center' }}>
