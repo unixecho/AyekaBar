@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
+import { PORTAL_LINKS_DEFAULT, type PortalLinkKey } from '@/lib/settings/keys'
 
 type Lang = 'he' | 'en' | 'ar'
 const LANGS: Lang[] = ['he', 'en', 'ar']
@@ -10,13 +11,6 @@ const RTL: Record<Lang, boolean> = { he: true, ar: true, en: false }
 const LINKS = {
   menu: '/menu',
   loyalty: '/loyalty',
-  instagram: 'https://www.instagram.com/ayeka_bar/',
-  review: 'https://www.google.com/search?sca_esv=bf5b70d178609590&si=APenkKm7iecQ4G6P-TsbSMFKIQtv3EFIqRAFw-i8uEbk55Z-_7KuVymh7UmzzptLxAMIed7ULsObX2FBkuw7nT2KAF8MiqFu6xqzwWnw0NKO515Um1Z0Z8-i9F5axbTKJbSaHBIaHv9J&q=%D7%90%D7%99%D7%99%D7%9B%D7%94+Reviews&sa=X#',
-}
-const NAV = {
-  gmaps: 'https://maps.app.goo.gl/RkQKuohRE2WnxehDA',
-  waze: 'https://waze.com/ul/hsvbbtt1nb',
-  amaps: 'https://maps.apple/r/I8JK.APxMAXYhS',
 }
 const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
 
@@ -42,7 +36,13 @@ function Ic({ children }: { children: ReactNode }) {
   return <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
 }
 
-export default function Portal({ loyaltyEnabled = false }: { loyaltyEnabled?: boolean }) {
+export default function Portal({
+  loyaltyEnabled = false,
+  links = PORTAL_LINKS_DEFAULT,
+}: {
+  loyaltyEnabled?: boolean
+  links?: Record<PortalLinkKey, string>
+}) {
   const [lang, setLang] = useState<Lang>('he')
   const [langOpen, setLangOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
@@ -123,7 +123,7 @@ export default function Portal({ loyaltyEnabled = false }: { loyaltyEnabled?: bo
               <div style={{ overflow: 'hidden' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 2px' }}>
                   {(['gmaps', 'waze', 'amaps'] as const).map((p) => (
-                    <a key={p} href={NAV[p]} target="_blank" rel="noopener noreferrer" className="press" style={subOptStyle}>
+                    <a key={p} href={links[p]} target="_blank" rel="noopener noreferrer" className="press" style={subOptStyle}>
                       <span style={{ ...icWrap, color: 'var(--neon-soft)' }}><Ic>{ICONS.pin}</Ic></span>
                       <span style={{ flex: 1, textAlign: 'start' }}>{NAV_LABELS[p]}</span>
                     </a>
@@ -160,14 +160,14 @@ export default function Portal({ loyaltyEnabled = false }: { loyaltyEnabled?: bo
           )}
 
           {/* Instagram */}
-          <a href={LINKS.instagram} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+          <a href={links.instagram} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
             <span style={icWrap}><Ic>{ICONS.instagram}</Ic></span>
             <span style={{ flex: 1, textAlign: 'start' }}>{t.instagram}</span>
             <Arrow />
           </a>
 
           {/* Review */}
-          <a href={LINKS.review} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+          <a href={links.review} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
             <span style={icWrap}><Ic>{ICONS.review}</Ic></span>
             <span style={{ flex: 1, textAlign: 'start' }}>{t.review}</span>
             <Arrow />

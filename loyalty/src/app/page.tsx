@@ -1,7 +1,7 @@
 import Portal from '@/components/Portal'
-import { getLoyaltyEnabled } from '@/lib/settings/server'
+import { getLoyaltyEnabled, getPortalLinks } from '@/lib/settings/server'
 
 export default async function HomePage() {
-  const loyaltyEnabled = await getLoyaltyEnabled()
-  return <Portal loyaltyEnabled={loyaltyEnabled} />
+  const [loyaltyEnabled, links] = await Promise.all([getLoyaltyEnabled(), getPortalLinks()])
+  return <Portal loyaltyEnabled={loyaltyEnabled} links={links} />
 }
