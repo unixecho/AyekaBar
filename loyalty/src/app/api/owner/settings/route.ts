@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache'
 import { requireOwner } from '@/lib/owner/guard'
 import {
   LOYALTY_ENABLED, LOYALTY_ENABLED_DEFAULT,
+  LOYALTY_VISIBLE, LOYALTY_VISIBLE_DEFAULT,
   PORTAL_LINKS, PORTAL_LINKS_DEFAULT, type PortalLinkKey,
   SETTINGS_TAG,
 } from '@/lib/settings/keys'
@@ -19,15 +20,17 @@ export async function GET() {
   const { data, error } = await auth.service
     .from('app_settings')
     .select('key, value, updated_at')
-    .in('key', [LOYALTY_ENABLED, PORTAL_LINKS])
+    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS])
 
   if (error) return NextResponse.json({ error: 'טעינת ההגדרות נכשלה' }, { status: 500 })
 
   const loyaltyRow = data?.find((r) => r.key === LOYALTY_ENABLED)
+  const visibleRow = data?.find((r) => r.key === LOYALTY_VISIBLE)
   const linksRow = data?.find((r) => r.key === PORTAL_LINKS)
 
   return NextResponse.json({
     loyaltyEnabled: (loyaltyRow?.value as boolean | undefined) ?? LOYALTY_ENABLED_DEFAULT,
+    loyaltyVisible: (visibleRow?.value as boolean | undefined) ?? LOYALTY_VISIBLE_DEFAULT,
     updatedAt: loyaltyRow?.updated_at ?? null,
     portalLinks: { ...PORTAL_LINKS_DEFAULT, ...(linksRow?.value as Partial<Record<PortalLinkKey, string>> | undefined) },
     portalLinksUpdatedAt: linksRow?.updated_at ?? null,
@@ -39,7 +42,7 @@ export async function PATCH(request: NextRequest) {
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { loyaltyEnabled?: unknown; portalLinks?: unknown } | null
+    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown } | null
 
   if (body && 'loyaltyEnabled' in body) {
     if (typeof body.loyaltyEnabled !== 'boolean') {
@@ -66,6 +69,33 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       loyaltyEnabled: data.value as boolean,
+      updatedAt: data.updated_at,
+    })
+  }
+
+  if (body && 'loyaltyVisible' in body) {
+    if (typeof body.loyaltyVisible !== 'boolean') {
+      return NextResponse.json({ error: 'ערך לא תקין' }, { status: 400 })
+    }
+
+    const { data, error } = await auth.service
+      .from('app_settings')
+      .upsert({
+        key: LOYALTY_VISIBLE,
+        value: body.loyaltyVisible,
+        is_public: true, // the signed-out portal decides whether to render the button
+        updated_at: new Date().toISOString(),
+        updated_by: auth.userId,
+      }, { onConflict: 'key' })
+      .select('value, updated_at')
+      .single()
+
+    if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
+
+    revalidateTag(SETTINGS_TAG)
+
+    return NextResponse.json({
+      loyaltyVisible: data.value as boolean,
       updatedAt: data.updated_at,
     })
   }

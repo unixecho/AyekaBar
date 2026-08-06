@@ -1,5 +1,6 @@
 import {
   LOYALTY_ENABLED, LOYALTY_ENABLED_DEFAULT,
+  LOYALTY_VISIBLE, LOYALTY_VISIBLE_DEFAULT,
   PORTAL_LINKS, PORTAL_LINKS_DEFAULT, type PortalLinkKey,
   SETTINGS_TAG,
 } from './keys'
@@ -37,6 +38,11 @@ export async function readSetting<T>(key: string, fallback: T): Promise<T> {
 /** Is the loyalty club live, or still "coming soon"? */
 export function getLoyaltyEnabled(): Promise<boolean> {
   return readSetting<boolean>(LOYALTY_ENABLED, LOYALTY_ENABLED_DEFAULT)
+}
+
+/** Does the loyalty entry show on the portal at all? Independent of access. */
+export function getLoyaltyVisible(): Promise<boolean> {
+  return readSetting<boolean>(LOYALTY_VISIBLE, LOYALTY_VISIBLE_DEFAULT)
 }
 
 /** The portal's external link destinations (Instagram, review, navigate). */

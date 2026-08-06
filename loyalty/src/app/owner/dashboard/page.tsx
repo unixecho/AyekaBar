@@ -7,7 +7,7 @@ import StaffManager from '@/components/StaffManager'
 import LoyaltyToggle from '@/components/LoyaltyToggle'
 import PortalLinksEditor from '@/components/PortalLinksEditor'
 import SignOutButton from '@/components/SignOutButton'
-import { getLoyaltyEnabled, getPortalLinks } from '@/lib/settings/server'
+import { getLoyaltyEnabled, getLoyaltyVisible, getPortalLinks } from '@/lib/settings/server'
 
 export default async function OwnerDashboardPage() {
   const supabase = createClient()
@@ -32,7 +32,11 @@ export default async function OwnerDashboardPage() {
       .eq('auth_user_id', user.id)
   }
 
-  const [loyaltyEnabled, portalLinks] = await Promise.all([getLoyaltyEnabled(), getPortalLinks()])
+  const [loyaltyEnabled, loyaltyVisible, portalLinks] = await Promise.all([
+    getLoyaltyEnabled(),
+    getLoyaltyVisible(),
+    getPortalLinks(),
+  ])
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
@@ -45,7 +49,7 @@ export default async function OwnerDashboardPage() {
 
       {/* Loyalty club on/off */}
       <div style={{ marginBottom: 16 }}>
-        <LoyaltyToggle initialEnabled={loyaltyEnabled} />
+        <LoyaltyToggle initialEnabled={loyaltyEnabled} initialVisible={loyaltyVisible} />
       </div>
 
       {/* Portal button destinations */}

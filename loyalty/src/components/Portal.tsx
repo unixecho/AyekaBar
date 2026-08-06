@@ -38,9 +38,12 @@ function Ic({ children }: { children: ReactNode }) {
 
 export default function Portal({
   loyaltyEnabled = false,
+  loyaltyVisible = true,
   links = PORTAL_LINKS_DEFAULT,
 }: {
   loyaltyEnabled?: boolean
+  /** Off = no loyalty entry on the portal at all, teaser included. */
+  loyaltyVisible?: boolean
   links?: Record<PortalLinkKey, string>
 }) {
   const [lang, setLang] = useState<Lang>('he')
@@ -140,8 +143,11 @@ export default function Portal({
             <Arrow />
           </Link>
 
-          {/* Loyalty — a teaser until the owner switches the club on */}
-          {loyaltyEnabled ? (
+          {/* Loyalty — hidden entirely when the owner hides it, otherwise a
+              teaser until the club is switched on. Skipping the block also
+              skips its delay() call, so the buttons below simply move one step
+              earlier in the stagger instead of leaving a gap in the timing. */}
+          {loyaltyVisible && (loyaltyEnabled ? (
             <Link href={LINKS.loyalty} className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
               <span style={icWrap}><Ic>{ICONS.loyalty}</Ic></span>
               <span style={{ flex: 1, textAlign: 'start' }}>{t.loyalty}</span>
@@ -157,7 +163,7 @@ export default function Portal({
               <span style={{ flex: 1, textAlign: 'start' }}>{t.loyalty}</span>
               <span style={soonChip}>{t.soon}</span>
             </div>
-          )}
+          ))}
 
           {/* Instagram */}
           <a href={links.instagram} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>

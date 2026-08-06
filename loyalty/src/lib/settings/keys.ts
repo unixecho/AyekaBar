@@ -11,6 +11,17 @@ export const SETTINGS_TAG = 'app-settings'
  *  club advertised as "coming soon". */
 export const LOYALTY_ENABLED_DEFAULT = false
 
+/** Does the loyalty entry appear on the portal at all? Separate from
+ *  LOYALTY_ENABLED, which controls access. Together they give three states:
+ *  visible+enabled = live, visible+disabled = "בקרוב" teaser, hidden = no
+ *  button on the portal. Hiding is portal-only — /loyalty itself still obeys
+ *  LOYALTY_ENABLED, so a hidden club stays reachable by direct link or QR. */
+export const LOYALTY_VISIBLE = 'loyalty_visible'
+
+/** Defaults to visible, so the switch failing open leaves the portal looking
+ *  exactly as LOYALTY_ENABLED alone used to make it. */
+export const LOYALTY_VISIBLE_DEFAULT = true
+
 /** The portal's external link buttons — owner-editable so a wrong Instagram
  *  handle or a moved Google review link doesn't need a code deploy. */
 export const PORTAL_LINKS = 'portal_links'

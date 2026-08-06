@@ -3,106 +3,175 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+// Two independent switches, because "is the club running" and "does the portal
+// advertise it" are different decisions:
+//   visible + enabled  -> live button on the portal
+//   visible + disabled -> "בקרוב" teaser (the announcement)
+//   hidden             -> no loyalty button on the portal at all
+// Hiding is portal-only on purpose — /loyalty still obeys the access switch,
+// so a hidden-but-enabled club stays reachable by direct link or QR.
+
 const T = {
   title: 'מועדון הנאמנות',
-  on: 'פעיל — הלקוחות רואים ונרשמים',
-  off: 'בקרוב — הכפתור בפורטל מסומן "בקרוב"',
-  hint: 'כשהמועדון כבוי, הברקודים ממשיכים להוביל לפורטל והתפריט עובד כרגיל. הכניסה ללקוחות ולצוות חסומה, ואזור הניהול נשאר פתוח לך.',
-  saving: 'שומר…',
-  failed: 'שינוי המצב נכשל. נסה/י שוב.',
   live: 'פעיל',
   soon: 'בקרוב',
+  hidden: 'מוסתר',
+
+  accessLabel: 'גישה למועדון',
+  accessOn: 'הלקוחות נרשמים וצוברים נקודות',
+  accessOff: 'הכניסה ללקוחות ולצוות חסומה',
+
+  visibleLabel: 'הצגה בדף הבית',
+  visibleOn: 'הכפתור מופיע בפורטל',
+  visibleOff: 'הכפתור מוסתר לגמרי מהפורטל',
+
+  hintLive: 'המועדון פעיל ומוצג בדף הבית.',
+  hintSoon: 'הכפתור בדף הבית מסומן "בקרוב" — כך מכריזים על המועדון לפני הפתיחה.',
+  hintHiddenOn: 'המועדון פעיל אך מוסתר מדף הבית — נגיש רק דרך קישור ישיר או ברקוד.',
+  hintHiddenOff: 'המועדון כבוי ומוסתר לגמרי. הלקוחות לא רואים אותו בכלל.',
+  hintAlways: 'בכל מצב: הברקודים ממשיכים להוביל לפורטל, התפריט עובד כרגיל, ואזור הניהול נשאר פתוח לך.',
+
+  failed: 'שינוי המצב נכשל. נסה/י שוב.',
 }
 
-export default function LoyaltyToggle({ initialEnabled }: { initialEnabled: boolean }) {
+export default function LoyaltyToggle({
+  initialEnabled,
+  initialVisible = true,
+}: {
+  initialEnabled: boolean
+  initialVisible?: boolean
+}) {
   const [enabled, setEnabled] = useState(initialEnabled)
-  const [busy, setBusy] = useState(false)
+  const [visible, setVisible] = useState(initialVisible)
+  const [busy, setBusy] = useState<'enabled' | 'visible' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
-  async function toggle() {
-    const next = !enabled
-    setBusy(true); setError(null)
-    setEnabled(next) // optimistic — the switch should feel instant
+  async function save(
+    field: 'enabled' | 'visible',
+    next: boolean,
+    apply: (v: boolean) => void,
+  ) {
+    setBusy(field); setError(null)
+    apply(next) // optimistic — the switch should feel instant
     try {
       const res = await fetch('/api/owner/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ loyaltyEnabled: next }),
+        body: JSON.stringify(
+          field === 'enabled' ? { loyaltyEnabled: next } : { loyaltyVisible: next }
+        ),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? T.failed)
-      setEnabled(json.loyaltyEnabled)
+      apply(field === 'enabled' ? json.loyaltyEnabled : json.loyaltyVisible)
       router.refresh()
     } catch (err) {
-      setEnabled(!next) // roll back
+      apply(!next) // roll back
       setError(err instanceof Error ? err.message : T.failed)
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
 
-  const accent = enabled ? 'var(--neon)' : 'var(--line-strong)'
+  const status = !visible ? 'hidden' : enabled ? 'live' : 'soon'
+  const statusText = status === 'hidden' ? T.hidden : status === 'live' ? T.live : T.soon
+  const hint =
+    status === 'live' ? T.hintLive
+      : status === 'soon' ? T.hintSoon
+        : enabled ? T.hintHiddenOn : T.hintHiddenOff
+
+  // Only a live club gets the neon treatment — a hidden one should read as
+  // switched off at a glance, even while access is still on.
+  const hot = status === 'live'
 
   return (
     <div className="rise" style={{
       background: 'var(--bg-elev)',
-      border: `1px solid ${enabled ? 'rgba(255,94,58,0.35)' : 'var(--line)'}`,
-      borderRadius: 16, padding: '16px', display: 'flex', flexDirection: 'column', gap: 12,
+      border: `1px solid ${hot ? 'rgba(255,94,58,0.35)' : 'var(--line)'}`,
+      borderRadius: 16, padding: '16px', display: 'flex', flexDirection: 'column', gap: 14,
       transition: 'border-color .3s var(--ease)',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span aria-hidden style={{ fontSize: '1.3rem' }}>{enabled ? '💳' : '⏳'}</span>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--text)' }}>{T.title}</span>
-            <span style={{
-              borderRadius: 999, padding: '2px 9px', fontSize: '0.7rem', fontWeight: 700,
-              color: enabled ? 'var(--neon-soft)' : 'var(--text-faint)',
-              background: enabled ? 'rgba(255,94,58,0.12)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${enabled ? 'rgba(255,94,58,0.3)' : 'var(--line-strong)'}`,
-            }}>{enabled ? T.live : T.soon}</span>
-          </div>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', margin: '3px 0 0', lineHeight: 1.5 }}>
-            {enabled ? T.on : T.off}
-          </p>
-        </div>
-
-        {/* Switch */}
-        <button
-          type="button" role="switch" aria-checked={enabled} aria-label={T.title}
-          onClick={toggle} disabled={busy} className="press"
-          style={{
-            flex: '0 0 auto', width: 52, height: 30, borderRadius: 999, cursor: 'pointer',
-            border: `1px solid ${enabled ? 'transparent' : 'var(--line-strong)'}`,
-            background: enabled
-              ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))'
-              : 'var(--bg-elev-2)',
-            boxShadow: enabled ? 'var(--glow)' : 'none',
-            // ltr so the knob starts at the physical left in Hebrew too —
-            // translateX is not direction-aware, the flex start would be.
-            direction: 'ltr',
-            padding: 3, display: 'flex', alignItems: 'center',
-            opacity: busy ? 0.6 : 1,
-            transition: 'background .3s var(--ease), box-shadow .3s var(--ease), opacity .2s var(--ease)',
-          }}
-        >
-          {/* knob moves to the physical right when on, in RTL and LTR alike */}
-          <span aria-hidden style={{
-            width: 22, height: 22, borderRadius: 999, background: '#fff',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
-            transform: `translateX(${enabled ? 22 : 0}px)`,
-            transition: 'transform .28s var(--ease)',
-          }} />
-        </button>
+      {/* Title + combined status */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span aria-hidden style={{ fontSize: '1.3rem' }}>
+          {status === 'hidden' ? '🙈' : status === 'live' ? '💳' : '⏳'}
+        </span>
+        <span style={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--text)' }}>{T.title}</span>
+        <span style={{
+          borderRadius: 999, padding: '2px 9px', fontSize: '0.7rem', fontWeight: 700,
+          color: hot ? 'var(--neon-soft)' : 'var(--text-faint)',
+          background: hot ? 'rgba(255,94,58,0.12)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${hot ? 'rgba(255,94,58,0.3)' : 'var(--line-strong)'}`,
+        }}>{statusText}</span>
       </div>
 
-      <p style={{ fontSize: '0.76rem', color: 'var(--text-faint)', margin: 0, lineHeight: 1.55, borderTop: `1px solid ${accent === 'var(--neon)' ? 'rgba(255,94,58,0.15)' : 'var(--line)'}`, paddingTop: 10 }}>
-        {T.hint}
+      <Row
+        label={T.accessLabel}
+        description={enabled ? T.accessOn : T.accessOff}
+        checked={enabled}
+        busy={busy === 'enabled'}
+        onToggle={() => save('enabled', !enabled, setEnabled)}
+      />
+
+      <Row
+        label={T.visibleLabel}
+        description={visible ? T.visibleOn : T.visibleOff}
+        checked={visible}
+        busy={busy === 'visible'}
+        onToggle={() => save('visible', !visible, setVisible)}
+      />
+
+      <p style={{
+        fontSize: '0.76rem', color: 'var(--text-faint)', margin: 0, lineHeight: 1.55,
+        borderTop: `1px solid ${hot ? 'rgba(255,94,58,0.15)' : 'var(--line)'}`, paddingTop: 10,
+      }}>
+        {hint}<br />{T.hintAlways}
       </p>
 
       {error && <p style={{ color: '#ff6b6b', fontSize: '0.82rem', margin: 0 }}>{error}</p>}
+    </div>
+  )
+}
+
+function Row({ label, description, checked, busy, onToggle }: {
+  label: string; description: string; checked: boolean; busy: boolean; onToggle: () => void
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)' }}>{label}</div>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', margin: '2px 0 0', lineHeight: 1.5 }}>
+          {description}
+        </p>
+      </div>
+
+      <button
+        type="button" role="switch" aria-checked={checked} aria-label={label}
+        onClick={onToggle} disabled={busy} className="press"
+        style={{
+          flex: '0 0 auto', width: 52, height: 30, borderRadius: 999, cursor: 'pointer',
+          border: `1px solid ${checked ? 'transparent' : 'var(--line-strong)'}`,
+          background: checked
+            ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))'
+            : 'var(--bg-elev-2)',
+          boxShadow: checked ? 'var(--glow)' : 'none',
+          // ltr so the knob starts at the physical left in Hebrew too —
+          // translateX is not direction-aware, the flex start would be.
+          direction: 'ltr',
+          padding: 3, display: 'flex', alignItems: 'center',
+          opacity: busy ? 0.6 : 1,
+          transition: 'background .3s var(--ease), box-shadow .3s var(--ease), opacity .2s var(--ease)',
+        }}
+      >
+        {/* knob moves to the physical right when on, in RTL and LTR alike */}
+        <span aria-hidden style={{
+          width: 22, height: 22, borderRadius: 999, background: '#fff',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
+          transform: `translateX(${checked ? 22 : 0}px)`,
+          transition: 'transform .28s var(--ease)',
+        }} />
+      </button>
     </div>
   )
 }
