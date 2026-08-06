@@ -1,4 +1,12 @@
 -- AyekaBar menu backend schema.
+--
+-- Numbered 000 because it predates the loyalty migrations (001+): it was
+-- applied while the menu still shipped from the retired vanilla site, and it
+-- lived at the repo root as `supabase/schema.sql` until GitHub Pages was
+-- scrapped. It is NOT dead history — the Next.js app reads `public_menus`
+-- (lib/menu/) and the owner editor writes `menus.draft` / calls
+-- `publish_menu()`. Apply this first on a fresh project, then 001..009.
+--
 -- Run this once in the Supabase SQL editor (Project → SQL Editor → New query) for a fresh project.
 --
 -- Model: each bar/business is one row in `menus`, identified by a unique `slug`.
