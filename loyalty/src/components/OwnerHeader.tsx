@@ -10,7 +10,13 @@ export default function OwnerHeader({ right }: { right: ReactNode }) {
           אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר
         </h1>
       </div>
-      <span className="rise" style={{ animationDelay: '90ms', fontSize: '0.82rem', color: 'var(--text-faint)' }}>{right}</span>
+      <div className="rise" style={{ animationDelay: '90ms', display: 'flex', alignItems: 'center', gap: 8 }}>
+        {typeof right === 'string' ? (
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>{right}</span>
+        ) : (
+          right
+        )}
+      </div>
     </div>
   )
 }

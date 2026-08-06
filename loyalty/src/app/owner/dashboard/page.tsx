@@ -6,6 +6,7 @@ import OwnerHeader from '@/components/OwnerHeader'
 import StaffManager from '@/components/StaffManager'
 import LoyaltyToggle from '@/components/LoyaltyToggle'
 import PortalLinksEditor from '@/components/PortalLinksEditor'
+import SignOutButton from '@/components/SignOutButton'
 import { getLoyaltyEnabled, getPortalLinks } from '@/lib/settings/server'
 
 export default async function OwnerDashboardPage() {
@@ -35,7 +36,12 @@ export default async function OwnerDashboardPage() {
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <OwnerHeader right="ניהול" />
+      <OwnerHeader right={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>ניהול</span>
+          <SignOutButton />
+        </div>
+      } />
 
       {/* Loyalty club on/off */}
       <div style={{ marginBottom: 16 }}>

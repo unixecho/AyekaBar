@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import CustomerManager from '@/components/CustomerManager'
+import SignOutButton from '@/components/SignOutButton'
 
 export default async function OwnerCustomersPage() {
   const supabase = createClient()
@@ -18,7 +19,12 @@ export default async function OwnerCustomersPage() {
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <OwnerHeader right={<Link href="/owner/dashboard" style={{ color: 'inherit', textDecoration: 'none' }}>← ניהול</Link>} />
+      <OwnerHeader right={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Link href="/owner/dashboard" style={{ textDecoration: 'none', fontSize: '0.82rem', color: 'var(--text-faint)' }}>← ניהול</Link>
+          <SignOutButton />
+        </div>
+      } />
       <div className="rise" style={{ animationDelay: '140ms' }}>
         <CustomerManager />
       </div>
