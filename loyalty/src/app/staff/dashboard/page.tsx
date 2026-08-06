@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import QRDisplay from '@/components/QRDisplay'
+import SignOutButton from '@/components/SignOutButton'
 
 export default async function StaffDashboardPage() {
   const supabase = createClient()
@@ -49,6 +50,12 @@ export default async function StaffDashboardPage() {
           <p style={{ fontSize: '0.76rem', color: 'var(--text-faint)', margin: '10px 0 0' }}>
             הקוד מתחדש כל 15 דקות ותקף לשימוש חד-פעמי
           </p>
+        </div>
+
+        {/* Shared-device bars hand this screen between shifts, so staff need a
+            way off it without clearing browser data. */}
+        <div className="rise" style={{ animationDelay: '260ms', display: 'flex', justifyContent: 'center' }}>
+          <SignOutButton />
         </div>
       </div>
     </main>

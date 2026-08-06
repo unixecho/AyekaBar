@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import PointsCard from '@/components/PointsCard'
 import RewardsList from '@/components/RewardsList'
+import SignOutButton from '@/components/SignOutButton'
 
 interface CustomerRow {
   id: string
@@ -123,7 +124,10 @@ export default async function CustomerDashboardPage() {
             אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר
           </h1>
         </div>
-        <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>מועדון נאמנות</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>מועדון נאמנות</span>
+          <SignOutButton />
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
