@@ -19,6 +19,20 @@ interface Variant {
   excluded_uids: string[]
   is_default: boolean
   sort_order: number | null
+  schedule_enabled: boolean | null
+  schedule_days: number[] | null
+  schedule_start: string | null
+  schedule_end: string | null
+}
+
+const DAY_SHORT = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']
+
+function scheduleLabel(v: Variant): string | null {
+  if (!v.schedule_enabled || !v.schedule_start || !v.schedule_end) return null
+  const days = (v.schedule_days ?? []).length
+    ? (v.schedule_days ?? []).map((d) => DAY_SHORT[d]).join('׳, ') + '׳'
+    : 'כל יום'
+  return `${days} · ${v.schedule_start}–${v.schedule_end}`
 }
 
 const T = {
@@ -169,6 +183,13 @@ export default function MenuVersionBar() {
           <span style={{ fontSize: '0.76rem', color: 'var(--text-faint)' }}>
             {active.excluded_uids.length ? T.hidden(active.excluded_uids.length) : T.allItems}
           </span>
+          {scheduleLabel(active) && (
+            <span style={{
+              fontSize: '0.72rem', fontWeight: 700, color: 'var(--neon-soft)',
+              border: '1px solid rgba(255,94,58,0.3)', background: 'rgba(255,94,58,0.10)',
+              borderRadius: 999, padding: '2px 9px',
+            }}>⏱ {scheduleLabel(active)}</span>
+          )}
           <button type="button" onClick={() => setWizard({ mode: 'edit', variant: active })}
             disabled={busy} className="press" style={ghost}>
             {T.edit}
@@ -187,6 +208,12 @@ export default function MenuVersionBar() {
           categories={categories}
           initialName={wizard.mode === 'edit' ? loc(wizard.variant.name, 'he') : ''}
           initialExcluded={wizard.mode === 'edit' ? wizard.variant.excluded_uids : []}
+          initialSchedule={{
+            enabled: wizard.mode === 'edit' ? !!wizard.variant.schedule_enabled : false,
+            days: wizard.mode === 'edit' ? (wizard.variant.schedule_days ?? []) : [],
+            start: (wizard.mode === 'edit' && wizard.variant.schedule_start) || '12:00',
+            end: (wizard.mode === 'edit' && wizard.variant.schedule_end) || '17:00',
+          }}
           variantId={wizard.mode === 'edit' ? wizard.variant.id : null}
           onClose={() => setWizard(null)}
           onSaved={async () => { setWizard(null); await load() }}

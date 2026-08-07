@@ -22,5 +22,6 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "//exclude": "archive/ holds shipped-then-removed features kept for reuse on other businesses. It sits outside src/ so Next never routes it, and is excluded here so its stale @/ imports don't fail the build. See archive/*/README.md.",
+  "exclude": ["node_modules", "archive"]
 }

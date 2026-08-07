@@ -8,7 +8,6 @@ import LanguageSwitch, { useLanguage, type Lang } from '@/components/LanguageSwi
 const LINKS = {
   menu: '/menu',
   loyalty: '/loyalty',
-  team: '/team',
 }
 const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
 
@@ -120,13 +119,6 @@ export default function Portal({
               <span style={soonChip}>{t.soon}</span>
             </div>
           ))}
-
-          {/* Team */}
-          <Link href={LINKS.team} className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
-            <span style={icWrap}><Ic>{ICONS.team}</Ic></span>
-            <span style={{ flex: 1, textAlign: 'start' }}>{t.team}</span>
-            <Arrow />
-          </Link>
 
           {/* Instagram */}
           <a href={links.instagram} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>

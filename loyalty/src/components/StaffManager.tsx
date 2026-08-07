@@ -52,10 +52,6 @@ const T = {
   addedPending: 'נוסף/ה. ההרשאה תופעל בכניסה הראשונה עם Google מהאימייל הזה.',
   addedActive: 'נוסף/ה לצוות. הגישה פעילה מיד.',
   updated: 'האימייל כבר היה ברשימה — התפקיד עודכן.',
-  onSite: 'מוצג/ת בעמוד הצוות',
-  offSite: 'מוסתר/ת מעמוד הצוות',
-  siteHint: 'עמוד הצוות באתר מתעדכן מהרשימה הזו. איש צוות חדש מוסתר כברירת מחדל — סמן/י אותו כדי לפרסם את שמו ותפקידו באתר הפומבי.',
-  viewTeam: 'צפייה בעמוד הצוות ↗',
 }
 
 type Notice = { kind: 'ok' | 'err'; text: string } | null
@@ -216,16 +212,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 
       {/* Roster */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', margin: '0 0 6px' }}>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>{T.roster}</h3>
-          <a href="/team" target="_blank" rel="noopener noreferrer"
-            style={{ fontSize: '0.78rem', color: 'var(--neon-soft)', textDecoration: 'none', fontWeight: 600 }}>
-            {T.viewTeam}
-          </a>
-        </div>
-        <p style={{ fontSize: '0.78rem', color: 'var(--text-faint)', margin: '0 0 12px', lineHeight: 1.55 }}>
-          {T.siteHint}
-        </p>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 12px' }}>{T.roster}</h3>
 
         {members === null ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -246,7 +233,6 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                 busy={busyId === m.id}
                 onBadge={(badge) => patchMember(m.id, { badge })}
                 onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
-                onToggleSite={() => patchMember(m.id, { showOnSite: !m.show_on_site })}
                 onDisplayName={(displayName) => patchMember(m.id, { displayName })}
                 onRemove={() => askRemove(m)}
               />
@@ -261,12 +247,11 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 }
 
 function MemberRow({
-  m, delay, isSelf, busy, onBadge, onToggleOwner, onToggleSite, onDisplayName, onRemove,
+  m, delay, isSelf, busy, onBadge, onToggleOwner, onDisplayName, onRemove,
 }: {
   m: Member; delay: number; isSelf: boolean; busy: boolean
   onBadge: (badge: string) => void
   onToggleOwner: () => void
-  onToggleSite: () => void
   onDisplayName: (name: string | null) => void
   onRemove: () => void
 }) {
@@ -367,23 +352,6 @@ function MemberRow({
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <RolePicker value={m.badge} disabled={busy} onChange={onBadge} />
-
-        {/* Publish on the public team page. Available for the owner's own row
-            too — they belong on the page as much as anyone. */}
-        {!pending && (
-          <button
-            type="button" onClick={onToggleSite} disabled={busy}
-            role="switch" aria-checked={m.show_on_site} className="press"
-            style={{
-              ...ghostBtn,
-              color: m.show_on_site ? 'var(--neon-soft)' : 'var(--text-faint)',
-              borderColor: m.show_on_site ? 'rgba(255,94,58,0.35)' : 'var(--line-strong)',
-              background: m.show_on_site ? 'rgba(255,94,58,0.10)' : 'transparent',
-            }}
-          >
-            {m.show_on_site ? `👁 ${T.onSite}` : `🚫 ${T.offSite}`}
-          </button>
-        )}
 
         {!isSelf && (
           <>

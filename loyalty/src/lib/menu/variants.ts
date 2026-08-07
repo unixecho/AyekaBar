@@ -66,6 +66,61 @@ export interface MenuVariant {
   excludedUids: string[]
   isDefault: boolean
   sortOrder: number | null
+  /** Applies automatically during its window, reverting to default outside. */
+  scheduleEnabled: boolean
+  /** JS getDay(): 0=Sunday … 5=Friday. Empty = every day. */
+  scheduleDays: number[]
+  scheduleStart: string | null
+  scheduleEnd: string | null
+  /** The manually-chosen version, used when no schedule is open. */
+  isActive: boolean
+}
+
+/** Weekday at the bar, not on the visitor's device. */
+export function barDayOfWeek(now: Date = new Date()): number {
+  const name = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem', weekday: 'short',
+  }).format(now)
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(name)
+}
+
+/** Is this version's window open right now? Same wrap-past-midnight rule as
+ *  happy hour, and an empty day list means every day. */
+export function isScheduleOpen(v: MenuVariant, now?: Date): boolean {
+  if (!v.scheduleEnabled || !v.scheduleStart || !v.scheduleEnd) return false
+  if (v.scheduleDays.length && !v.scheduleDays.includes(barDayOfWeek(now))) return false
+
+  const start = toMinutes(v.scheduleStart)
+  const end = toMinutes(v.scheduleEnd)
+  const t = barTimeMinutes(now)
+  return end > start ? t >= start && t < end : t >= start || t < end
+}
+
+/**
+ * Which version the menu should show right now.
+ *
+ *   1. A scheduled version whose window is open wins — that's the whole point
+ *      of scheduling: Friday takes over by itself.
+ *   2. Otherwise the manually-selected version, UNLESS it is itself scheduled
+ *      and currently closed. That's what makes the menu "revert back to normal
+ *      when the timing expired" without anyone touching it.
+ *   3. Otherwise the default.
+ */
+export function resolveVariant(
+  variants: MenuVariant[],
+  now?: Date,
+): MenuVariant | null {
+  if (!variants.length) return null
+
+  const open = variants
+    .filter((v) => isScheduleOpen(v, now))
+    .sort((a, b) => (a.sortOrder ?? 1e9) - (b.sortOrder ?? 1e9))
+  if (open.length) return open[0]
+
+  const active = variants.find((v) => v.isActive)
+  if (active && !active.scheduleEnabled) return active
+
+  return variants.find((v) => v.isDefault) ?? active ?? null
 }
 
 /**
@@ -110,8 +165,8 @@ export const HAPPY_HOUR_DEFAULT: HappyHour = {
 }
 
 /** The bar is in Harish. A visitor's phone may be on any timezone, and using
- *  it would show tourists the wrong prices — so always ask what time it is
- *  *at the bar*, never what time it is on the device. */
+ *  it would show tourists the wrong prices (and the wrong menu) — so always
+ *  ask what time it is *at the bar*, never on the device. */
 export function barTimeMinutes(now: Date = new Date()): number {
   const hhmm = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Jerusalem',
@@ -121,7 +176,7 @@ export function barTimeMinutes(now: Date = new Date()): number {
   return h * 60 + m
 }
 
-function toMinutes(hhmm: string): number {
+export function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
   return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0)
 }

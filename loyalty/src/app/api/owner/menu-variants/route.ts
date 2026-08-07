@@ -8,7 +8,49 @@ import { logAudit } from '@/lib/owner/audit'
 // Owner-only CRUD for named menu variants ("רגיל" / "יום שישי") plus the
 // switch for which one the public menu shows.
 
-const COLS = 'id, name, excluded_uids, is_default, sort_order'
+const COLS = 'id, name, excluded_uids, is_default, sort_order, schedule_enabled, schedule_days, schedule_start, schedule_end'
+
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+interface SchedulePatch {
+  schedule_enabled: boolean
+  schedule_days: number[]
+  schedule_start: string | null
+  schedule_end: string | null
+}
+
+/** Parse an incoming schedule. A version that claims to be scheduled but has
+ *  no window would never apply — reject rather than store something inert. */
+function parseSchedule(input: unknown):
+  | { ok: true; value: SchedulePatch }
+  | { ok: false; error: string } {
+  if (typeof input !== 'object' || input === null) return { ok: false, error: 'תזמון לא תקין' }
+  const o = input as Record<string, unknown>
+  const enabled = o.enabled === true
+
+  if (!enabled) {
+    return { ok: true, value: { schedule_enabled: false, schedule_days: [], schedule_start: null, schedule_end: null } }
+  }
+
+  if (typeof o.start !== 'string' || !TIME_RE.test(o.start)) return { ok: false, error: 'שעת התחלה לא תקינה' }
+  if (typeof o.end !== 'string' || !TIME_RE.test(o.end)) return { ok: false, error: 'שעת סיום לא תקינה' }
+
+  const days = Array.isArray(o.days)
+    ? (o.days as unknown[])
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+    : []
+
+  return {
+    ok: true,
+    value: {
+      schedule_enabled: true,
+      schedule_days: Array.from(new Set(days)).sort(),
+      schedule_start: o.start,
+      schedule_end: o.end,
+    },
+  }
+}
 
 /** Resolve the single menu row, minting item uids the first time anything
  *  needs to reference an item. Doing it here rather than in a SQL backfill
@@ -71,7 +113,7 @@ export async function POST(request: NextRequest) {
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { nameHe?: unknown; excludedUids?: unknown } | null
+    { nameHe?: unknown; excludedUids?: unknown; schedule?: unknown } | null
 
   const nameHe = typeof body?.nameHe === 'string' ? body.nameHe.trim() : ''
   if (!nameHe) return NextResponse.json({ error: 'חסר שם לגרסה' }, { status: 400 })
@@ -84,6 +126,9 @@ export async function POST(request: NextRequest) {
   const menu = await loadMenu(auth.service)
   if (!menu) return NextResponse.json({ error: 'התפריט לא נמצא' }, { status: 404 })
 
+  const sched = parseSchedule(body?.schedule ?? { enabled: false })
+  if (!sched.ok) return NextResponse.json({ error: sched.error }, { status: 400 })
+
   const { data, error } = await auth.service
     .from('menu_variants')
     .insert({
@@ -91,6 +136,7 @@ export async function POST(request: NextRequest) {
       name: { he: nameHe },
       excluded_uids: excluded,
       is_default: false,
+      ...sched.value,
     })
     .select(COLS)
     .single()
@@ -153,6 +199,17 @@ export async function PATCH(request: NextRequest) {
     patch.excluded_uids = Array.isArray(body.excludedUids)
       ? (body.excludedUids as unknown[]).filter((x): x is string => typeof x === 'string')
       : []
+  }
+
+  if (body && 'schedule' in body) {
+    if (row.is_default) {
+      // Scheduling the default would leave nothing to fall back to when the
+      // window closes.
+      return NextResponse.json({ error: 'אי אפשר לתזמן את הגרסה הרגילה' }, { status: 400 })
+    }
+    const s = parseSchedule(body.schedule)
+    if (!s.ok) return NextResponse.json({ error: s.error }, { status: 400 })
+    Object.assign(patch, s.value)
   }
 
   const { data, error } = await auth.service

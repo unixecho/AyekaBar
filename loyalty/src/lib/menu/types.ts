@@ -1,7 +1,7 @@
 // Menu domain types + i18n helpers. Mirrors the shape stored in Supabase
 // (public.menus.published -> { categories: [...] }) and the legacy menu-data.js.
 
-import { applyVariant } from './variants'
+import { applyVariant, resolveVariant, type MenuVariant } from './variants'
 
 export type Lang = 'he' | 'en' | 'ar'
 export const LANGS: Lang[] = ['he', 'en', 'ar']
@@ -38,6 +38,8 @@ export interface MenuData {
   publishedAt: string | null
   /** Name of the variant on show, e.g. "יום שישי". Null on the default. */
   variantName?: Localized | null
+  /** Every version + schedule, so the client can re-resolve as time passes. */
+  variants: MenuVariant[]
 }
 
 // This deployment shows one bar. The menu lives in public.menus (by slug); the
@@ -65,12 +67,65 @@ export function normalizeMenuRow(row: PublicMenuRow | null): MenuData | null {
   return {
     name: row.name ?? {},
     badges: row.badges ?? {},
-    // Variant filtering happens here so every reader — server first paint and
-    // client poll alike — sees the same menu. `applyVariant` no-ops when the
-    // list is empty, which is also the pre-migration shape.
-    categories: applyVariant(row.menu?.categories ?? [], row.variant_excluded_uids),
+    // Raw, unfiltered. Which version applies depends on the time of day now
+    // that versions can be scheduled, so filtering happens in
+    // applyResolvedVariant() where the clock is available — and gets redone
+    // client-side each minute.
+    categories: row.menu?.categories ?? [],
     publishedAt: row.published_at ?? null,
+    // Pre-migration fallback: the joined active variant from public_menus.
     variantName: row.variant_name ?? null,
+    variants: [],
+  }
+}
+
+/** Row shape of public.public_menu_variants (migration 015). */
+export interface PublicVariantRow {
+  id: string
+  name: Localized | null
+  excluded_uids: string[] | null
+  is_default: boolean
+  sort_order: number | null
+  schedule_enabled: boolean | null
+  schedule_days: number[] | null
+  schedule_start: string | null
+  schedule_end: string | null
+  is_active: boolean | null
+}
+
+export const PUBLIC_VARIANT_COLS =
+  'id,name,excluded_uids,is_default,sort_order,schedule_enabled,schedule_days,schedule_start,schedule_end,is_active'
+
+export function normalizeVariantRow(r: PublicVariantRow): MenuVariant {
+  return {
+    id: r.id,
+    name: r.name ?? {},
+    excludedUids: r.excluded_uids ?? [],
+    isDefault: !!r.is_default,
+    sortOrder: r.sort_order,
+    scheduleEnabled: !!r.schedule_enabled,
+    scheduleDays: r.schedule_days ?? [],
+    scheduleStart: r.schedule_start,
+    scheduleEnd: r.schedule_end,
+    isActive: !!r.is_active,
+  }
+}
+
+/**
+ * Resolve which version applies at `now` and filter the menu to it. Pure, so
+ * the server first paint and the client's per-minute re-check agree.
+ */
+export function applyResolvedVariant(menu: MenuData, now?: Date): MenuData {
+  if (!menu.variants.length) {
+    // No variant table yet (pre-015) — fall back to whatever public_menus
+    // joined in, which is the manually-active version.
+    return menu
+  }
+  const chosen = resolveVariant(menu.variants, now)
+  return {
+    ...menu,
+    categories: applyVariant(menu.categories, chosen?.excludedUids),
+    variantName: chosen?.name ?? null,
   }
 }
 

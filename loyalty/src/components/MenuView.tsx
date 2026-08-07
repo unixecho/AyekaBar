@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import {
-  LANGS, RTL, MENU_UI, loc, fmtPrice,
+  LANGS, RTL, MENU_UI, loc, fmtPrice, applyResolvedVariant,
   type Lang, type MenuData, type MenuCategory, type MenuItem,
 } from '@/lib/menu/types'
 import { fetchMenuClient, fetchMenuStamp, fetchHappyHour } from '@/lib/menu/client'
@@ -16,9 +16,9 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
   const [menu, setMenu] = useState<MenuData | null>(initial)
   const [loading, setLoading] = useState(initial === null)
   const [happyHour, setHappyHour] = useState<HappyHour | null>(null)
-  // Re-evaluate every minute so the discount appears and disappears on time
-  // for a customer sitting with the menu open.
-  const [, setMinuteTick] = useState(0)
+  // Re-evaluate every minute so a scheduled menu version and the Happy Hour
+  // window both start and end on time for a customer sitting with the page open.
+  const [minuteTick, setMinuteTick] = useState(0)
   const [lang, setLang] = useState<Lang>('he')
   const [openId, setOpenId] = useState<string | null>(initial?.categories[0]?.id ?? null)
   const chipsRef = useRef<HTMLDivElement>(null)
@@ -81,13 +81,22 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
   }, [])
 
   const happyActive = isHappyHourActive(happyHour)
-  const variantLabel = menu?.variantName ? loc(menu.variantName, lang) : ''
-  const categories = useMemo(
-    () => (menu ? applyHappyHour(menu.categories, happyHour) : []),
-    // minuteTick is intentionally not referenced here — the state update alone
-    // re-runs this on each tick, which is what makes the window close on time.
+
+  // Resolve the scheduled version, then apply Happy Hour on top. Both are
+  // time-dependent, so both are recomputed on the minute tick — that's what
+  // makes "יום שישי" take over and hand back automatically without a reload.
+  const resolved = useMemo(
+    () => (menu ? applyResolvedVariant(menu) : null),
+    // minuteTick is intentionally unreferenced: the state update alone re-runs
+    // this, which is the point.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [menu, happyHour, happyActive],
+    [menu, minuteTick],
+  )
+  const variantLabel = resolved?.variantName ? loc(resolved.variantName, lang) : ''
+  const categories = useMemo(
+    () => (resolved ? applyHappyHour(resolved.categories, happyHour) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resolved, happyHour, happyActive, minuteTick],
   )
 
   const centerChip = useCallback((id: string | null, instant = false) => {

@@ -1,18 +1,24 @@
 import { createClient } from '@/lib/supabase/client'
 import {
-  MENU_SLUG, PUBLIC_MENU_COLS, normalizeMenuRow,
-  type MenuData, type PublicMenuRow,
+  MENU_SLUG, PUBLIC_MENU_COLS, PUBLIC_VARIANT_COLS,
+  normalizeMenuRow, normalizeVariantRow,
+  type MenuData, type PublicMenuRow, type PublicVariantRow,
 } from './types'
 import { HAPPY_HOUR_DEFAULT, type HappyHour } from './variants'
 
-/** Client-side fetch (live polling while the page is open). */
+/** Client-side fetch (live polling while the page is open). Returns the menu
+ *  UNRESOLVED — MenuView applies the variant itself so it can re-resolve as
+ *  the clock crosses a schedule boundary without refetching. */
 export async function fetchMenuClient(): Promise<MenuData | null> {
   const supabase = createClient()
+
   const { data, error } = await supabase
     .from('public_menus')
     .select(PUBLIC_MENU_COLS)
     .eq('slug', MENU_SLUG)
     .single()
+
+  let menu: MenuData | null
   if (error) {
     // Pre-migration fallback — see the same note in fetch.ts.
     const { data: legacy, error: legacyError } = await supabase
@@ -21,9 +27,20 @@ export async function fetchMenuClient(): Promise<MenuData | null> {
       .eq('slug', MENU_SLUG)
       .single()
     if (legacyError) return null
-    return normalizeMenuRow(legacy as PublicMenuRow)
+    menu = normalizeMenuRow(legacy as PublicMenuRow)
+  } else {
+    menu = normalizeMenuRow(data as PublicMenuRow)
   }
-  return normalizeMenuRow(data as PublicMenuRow)
+  if (!menu) return null
+
+  const { data: rows } = await supabase
+    .from('public_menu_variants')
+    .select(PUBLIC_VARIANT_COLS)
+    .eq('slug', MENU_SLUG)
+
+  if (rows) menu.variants = (rows as PublicVariantRow[]).map(normalizeVariantRow)
+
+  return menu
 }
 
 /** Happy-hour config for the public menu. Read client-side so the discount

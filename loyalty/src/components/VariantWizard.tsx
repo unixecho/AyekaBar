@@ -33,24 +33,47 @@ const T = {
   summary: (on: number, total: number) => `${on} מתוך ${total} פריטים מוצגים`,
   nameRequired: 'צריך שם לגרסה',
   noneLeft: 'צריך להשאיר לפחות פריט אחד',
-  allOn: 'הכל',
-  allOff: 'כבוי',
+  badWindow: 'שעת ההתחלה והסיום זהות',
   expand: 'פתיחה',
+  rename: 'שם הגרסה',
+  schedTitle: 'תזמון אוטומטי',
+  schedHint: 'הגרסה תיכנס לתוקף לבד בימים ובשעות שנבחרו, ותחזור לתפריט הרגיל כשהחלון נסגר.',
+  schedDays: 'ימים',
+  schedDaysHint: 'בלי בחירה — כל יום.',
+  schedFrom: 'משעה',
+  schedTo: 'עד שעה',
+  schedOvernight: 'החלון ימשיך אחרי חצות',
+  schedManual: 'ללא תזמון — הגרסה מוצגת רק כשבוחרים אותה ידנית.',
 }
 
+export interface VariantSchedule {
+  enabled: boolean
+  /** JS getDay(): 0=Sunday … 5=Friday. Empty = every day. */
+  days: number[]
+  start: string
+  end: string
+}
+
+const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
+const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`)
+
 export default function VariantWizard({
-  categories, initialName, initialExcluded, variantId, onClose, onSaved,
+  categories, initialName, initialExcluded, initialSchedule, variantId, onClose, onSaved,
 }: {
   categories: MenuCategory[]
   initialName: string
   initialExcluded: string[]
+  initialSchedule: VariantSchedule
   /** null = creating */
   variantId: string | null
   onClose: () => void
   onSaved: () => void | Promise<void>
 }) {
+  // Editing jumps straight to the content step, but the name stays editable
+  // there — renaming shouldn't mean recreating the version.
   const [step, setStep] = useState<1 | 2>(variantId ? 2 : 1)
   const [name, setName] = useState(initialName)
+  const [sched, setSched] = useState<VariantSchedule>(initialSchedule)
   const [excluded, setExcluded] = useState<Set<string>>(new Set(initialExcluded))
   const [open, setOpen] = useState<Set<string>>(() => {
     // Open the categories that already differ from "everything on", so an
@@ -111,10 +134,15 @@ export default function VariantWizard({
     const trimmed = name.trim()
     if (!trimmed) { setErr(T.nameRequired); setStep(1); return }
     if (shownCount === 0) { setErr(T.noneLeft); return }
+    if (sched.enabled && sched.start === sched.end) { setErr(T.badWindow); return }
 
     setSaving(true); setErr(null)
     try {
-      const payload = { nameHe: trimmed, excludedUids: Array.from(excluded) }
+      const payload = {
+        nameHe: trimmed,
+        excludedUids: Array.from(excluded),
+        schedule: sched,
+      }
       const res = await fetch('/api/owner/menu-variants', {
         method: variantId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -173,6 +201,94 @@ export default function VariantWizard({
             </p>
 
             <div className="sheet-scroll">
+              {/* Rename in place — no need to recreate a version to fix a typo. */}
+              <div className="pick-cat" style={{ padding: 12 }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-dim)', marginBottom: 6 }}>
+                  {T.rename}
+                </label>
+                <input
+                  value={name} maxLength={40} onChange={(e) => setName(e.target.value)}
+                  placeholder={T.namePh}
+                  style={{
+                    width: '100%', padding: '11px 12px', borderRadius: 11,
+                    border: '1px solid var(--line-strong)', background: 'var(--bg-elev-2)',
+                    color: 'var(--text)', fontSize: '0.94rem', fontFamily: 'inherit', outline: 'none',
+                  }}
+                />
+              </div>
+
+              {/* Automatic schedule */}
+              <div className="pick-cat" style={{ padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)' }}>{T.schedTitle}</div>
+                    <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                      {sched.enabled ? T.schedHint : T.schedManual}
+                    </p>
+                  </div>
+                  <button type="button" role="switch" aria-checked={sched.enabled}
+                    onClick={() => setSched((s) => ({ ...s, enabled: !s.enabled }))}
+                    className="press" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
+                    aria-label={T.schedTitle}>
+                    <Switch on={sched.enabled} />
+                  </button>
+                </div>
+
+                {sched.enabled && (
+                  <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div>
+                      <label style={labelStyle}>{T.schedDays}</label>
+                      <div className="hh-percent-grid">
+                        {DAY_LABELS.map((d, i) => {
+                          const on = sched.days.includes(i)
+                          return (
+                            <button key={i} type="button" className="press hh-percent-btn"
+                              data-on={on ? 'true' : undefined}
+                              onClick={() => setSched((s) => ({
+                                ...s,
+                                days: on ? s.days.filter((x) => x !== i) : [...s.days, i].sort(),
+                              }))}>{d}</button>
+                          )
+                        })}
+                      </div>
+                      <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: 'var(--text-faint)' }}>
+                        {T.schedDaysHint}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label style={labelStyle}>{T.schedFrom}</label>
+                      <div className="hh-hours" dir="ltr">
+                        {HOURS.map((h) => (
+                          <button key={h} type="button" className="press hh-hour"
+                            data-on={h === sched.start ? 'true' : undefined}
+                            onClick={() => setSched((s) => ({ ...s, start: h }))}>{h}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={labelStyle}>{T.schedTo}</label>
+                      <div className="hh-hours" dir="ltr">
+                        {HOURS.map((h) => (
+                          <button key={h} type="button" className="press hh-hour"
+                            data-on={h === sched.end ? 'true' : undefined}
+                            onClick={() => setSched((s) => ({ ...s, end: h }))}>{h}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {sched.end <= sched.start && (
+                      <p style={{
+                        margin: 0, padding: '10px 12px', borderRadius: 11,
+                        background: 'rgba(255,94,58,0.10)', border: '1px solid rgba(255,94,58,0.28)',
+                        color: 'var(--neon-soft)', fontSize: '0.78rem', fontWeight: 600,
+                      }}>⌛ {T.schedOvernight}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {categories.map((cat) => {
                 const uids = (cat.items ?? []).map((i) => i.uid).filter((u): u is string => !!u)
                 if (!uids.length) return null
@@ -274,6 +390,10 @@ export function Switch({ on, partial = false, small = false }: {
   )
 }
 
+const labelStyle: CSSProperties = {
+  display: 'block', fontSize: '0.78rem', fontWeight: 700,
+  color: 'var(--text-dim)', marginBottom: 7,
+}
 const errStyle: CSSProperties = { color: '#ff6b6b', fontSize: '0.82rem', margin: '10px 0 0' }
 const primary: CSSProperties = {
   width: '100%', padding: '14px 0', borderRadius: 14, border: 'none',

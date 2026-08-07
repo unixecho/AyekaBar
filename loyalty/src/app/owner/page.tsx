@@ -39,7 +39,13 @@ export default function OwnerSignInPage() {
     setAuthBusy(true); setError(null)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=/owner/dashboard` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/owner/dashboard`,
+        // Force the account chooser. Without it Google silently reuses whichever
+        // account the browser is already signed into, which is the wrong one
+        // for anyone who holds a personal and a work account.
+        queryParams: { prompt: 'select_account' },
+      },
     })
     if (error) { setAuthBusy(false); setError(t.googleError) }
   }

@@ -41,7 +41,10 @@ export default function StaffSignInPage() {
     setAuthBusy(true); setError(null)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=/staff/dashboard` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/staff/dashboard`,
+        queryParams: { prompt: 'select_account' },
+      },
     })
     if (error) { setAuthBusy(false); setError(t.googleError) }
   }
