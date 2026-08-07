@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { requireOwner } from '@/lib/owner/guard'
 import { splitName } from '@/lib/staff/name'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 type Service = SupabaseClient
 
-const COLS = 'id, auth_user_id, role, badge, first_name, last_name, email, created_at, invited_at, claimed_at'
+const COLS = 'id, auth_user_id, role, badge, first_name, last_name, email, created_at, invited_at, claimed_at, show_on_site, display_order'
 
 /** `ilike` is our case-insensitive equality check, but `%` and `_` are legal in
  *  the local part of an address and would act as LIKE wildcards. */
@@ -121,7 +122,10 @@ export async function PATCH(request: NextRequest) {
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { id?: string; badge?: string | null; role?: string } | null
+    {
+      id?: string; badge?: string | null; role?: string
+      showOnSite?: unknown; displayOrder?: unknown
+    } | null
   const id = body?.id
   if (!id) return NextResponse.json({ error: 'חסר מזהה' }, { status: 400 })
 
@@ -130,6 +134,31 @@ export async function PATCH(request: NextRequest) {
 
   const patch: Record<string, unknown> = {}
   if (body && 'badge' in body) patch.badge = body.badge?.trim() || null
+
+  // Publish/unpublish on the public team page.
+  if (body && 'showOnSite' in body) {
+    if (typeof body.showOnSite !== 'boolean') {
+      return NextResponse.json({ error: 'ערך לא תקין' }, { status: 400 })
+    }
+    // A pending invite is just an email the owner typed — the person hasn't
+    // signed in, and public_staff filters them out anyway. Refuse rather than
+    // silently storing a flag that does nothing.
+    if (body.showOnSite && !row.auth_user_id) {
+      return NextResponse.json(
+        { error: 'אפשר להציג באתר רק אחרי הכניסה הראשונה' },
+        { status: 400 }
+      )
+    }
+    patch.show_on_site = body.showOnSite
+  }
+
+  if (body && 'displayOrder' in body) {
+    const v = body.displayOrder
+    if (v !== null && (typeof v !== 'number' || !Number.isInteger(v))) {
+      return NextResponse.json({ error: 'סדר לא תקין' }, { status: 400 })
+    }
+    patch.display_order = v
+  }
   if (body?.role) {
     if (body.role !== 'staff' && body.role !== 'owner') {
       return NextResponse.json({ error: 'תפקיד לא תקין' }, { status: 400 })
@@ -148,6 +177,10 @@ export async function PATCH(request: NextRequest) {
     .from('staff').update(patch).eq('id', id).select(COLS).single()
 
   if (error) return NextResponse.json({ error: 'עדכון נכשל' }, { status: 500 })
+
+  // /team is ISR-cached; publishing someone should show up now, not in 5 min.
+  revalidatePath('/team')
+
   return NextResponse.json({ member: data })
 }
 

@@ -11,20 +11,22 @@ const RTL: Record<Lang, boolean> = { he: true, ar: true, en: false }
 const LINKS = {
   menu: '/menu',
   loyalty: '/loyalty',
+  team: '/team',
 }
 const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
 
 const I18N: Record<Lang, {
   brand: ReactNode; tagline: string; navigate: string; menu: string; instagram: string
-  review: string; loyalty: string; soon: string; langName: string; footer: string
+  review: string; loyalty: string; soon: string; team: string; langName: string; footer: string
 }> = {
-  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', langName: 'עברית', footer: '© אייכה בר' },
-  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', langName: 'English', footer: '© Ayeka Bar' },
-  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', langName: 'العربية', footer: '© אייכה בר' },
+  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', langName: 'עברית', footer: '© אייכה בר' },
+  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', langName: 'English', footer: '© Ayeka Bar' },
+  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', langName: 'العربية', footer: '© אייכה בר' },
 }
 
 const ICONS = {
   navigate: <path d="M3 11l19-9-9 19-2-8-8-2z" />,
+  team: <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><circle cx="17" cy="9.5" r="2.4" /><path d="M15.5 14.2c2.6-.5 5 1.3 5 4.3" /></>,
   menu: <><path d="M4 5h16" /><path d="M4 10h16" /><path d="M4 15h10" /><path d="M4 20h7" /></>,
   loyalty: <><rect x="2" y="6" width="20" height="14" rx="3" /><path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" /><circle cx="12" cy="13" r="2" /><path d="M9 17c0-1.7 1.3-3 3-3s3 1.3 3 3" /></>,
   instagram: <><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></>,
@@ -164,6 +166,13 @@ export default function Portal({
               <span style={soonChip}>{t.soon}</span>
             </div>
           ))}
+
+          {/* Team */}
+          <Link href={LINKS.team} className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+            <span style={icWrap}><Ic>{ICONS.team}</Ic></span>
+            <span style={{ flex: 1, textAlign: 'start' }}>{t.team}</span>
+            <Arrow />
+          </Link>
 
           {/* Instagram */}
           <a href={links.instagram} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
