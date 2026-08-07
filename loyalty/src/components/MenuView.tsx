@@ -7,6 +7,7 @@ import {
   type Lang, type MenuData, type MenuCategory, type MenuItem,
 } from '@/lib/menu/types'
 import { fetchMenuClient, fetchMenuStamp } from '@/lib/menu/client'
+import LanguageSwitch from '@/components/LanguageSwitch'
 
 const POLL_MS = 30_000
 
@@ -15,9 +16,6 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
   const [loading, setLoading] = useState(initial === null)
   const [lang, setLang] = useState<Lang>('he')
   const [openId, setOpenId] = useState<string | null>(initial?.categories[0]?.id ?? null)
-  const [langOpen, setLangOpen] = useState(false)
-
-  const langRef = useRef<HTMLDivElement>(null)
   const chipsRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef<HTMLDivElement>(null)
 
@@ -32,7 +30,7 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
   }, [lang])
 
   function pickLang(l: Lang) {
-    setLang(l); localStorage.setItem('siteLanguage', l); setLangOpen(false)
+    setLang(l); localStorage.setItem('siteLanguage', l)
   }
 
   // If the server couldn't fetch, try from the client.
@@ -66,15 +64,6 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
     document.addEventListener('visibilitychange', onVis)
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
   }, [refresh])
-
-  // Close the language menu on outside click / Escape.
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => { if (langRef.current && !langRef.current.contains(e.target as Node)) setLangOpen(false) }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLangOpen(false) }
-    document.addEventListener('click', onClick)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey) }
-  }, [])
 
   const centerChip = useCallback((id: string | null, instant = false) => {
     const chips = chipsRef.current
@@ -129,21 +118,10 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
 
       <div className="menu-sticky" ref={stickyRef}>
         <header className="menu-topbar">
-          <div className={`menu-lang${langOpen ? ' open' : ''}`} ref={langRef}>
-            <button className="menu-globe rise" aria-label="Language" aria-expanded={langOpen}
-              style={{ animationDelay: '20ms' }}
-              onClick={(e) => { e.stopPropagation(); setLangOpen((v) => !v) }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="9" /><path d="M3 12h18" />
-                <path d="M12 3c2.5 2.5 3.8 5.8 3.8 9S14.5 18.5 12 21C9.5 18.5 8.2 15.2 8.2 12S9.5 5.5 12 3z" />
-              </svg>
-            </button>
-            <div className="menu-lang-menu" role="menu">
-              {LANGS.map((l) => (
-                <button key={l} role="menuitem" className={`menu-lang-opt${l === lang ? ' active' : ''}`}
-                  onClick={() => pickLang(l)}>{MENU_UI.langName[l]}</button>
-              ))}
-            </div>
+          {/* Same control as the portal and team page — inline so it sits in
+              the sticky topbar rather than floating over the menu. */}
+          <div className="rise" style={{ animationDelay: '20ms' }}>
+            <LanguageSwitch lang={lang} onChange={pickLang} variant="inline" />
           </div>
 
           <div className="menu-brand rise" style={{ animationDelay: '90ms' }}>{brand}</div>

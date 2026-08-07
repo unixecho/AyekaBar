@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 
 interface Reward {
   id: string; reward_name: string | null; reward_name_he: string | null
@@ -14,6 +15,7 @@ export default function RewardsManager() {
   const [adding, setAdding] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/owner/rewards', { cache: 'no-store' })
@@ -41,12 +43,21 @@ export default function RewardsManager() {
       body: JSON.stringify({ id, ...fields }),
     })
     const j = await res.json(); setBusyId(null)
-    if (!res.ok) { alert(j.error ?? 'עדכון נכשל'); return }
+    if (!res.ok) { setErr(j.error ?? 'עדכון נכשל'); return }
+    setErr(null)
     setRewards((cur) => cur?.map((r) => r.id === id ? j.reward : r) ?? cur)
   }
 
+  function askRemove(r: Reward) {
+    setConfirmReq({
+      title: 'למחוק את הפרס?',
+      body: `"${r.reward_name_he ?? r.reward_name ?? ''}" יוסר מהקטלוג ולא יוצג יותר ללקוחות.`,
+      confirmLabel: 'מחיקה',
+      onConfirm: () => { void remove(r.id) },
+    })
+  }
+
   async function remove(id: string) {
-    if (!confirm('למחוק את הפרס?')) return
     setBusyId(id)
     const res = await fetch('/api/owner/rewards', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
@@ -91,12 +102,14 @@ export default function RewardsManager() {
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
                   <input type="checkbox" checked={r.active} onChange={(e) => patch(r.id, { active: e.target.checked })} /> פעיל
                 </label>
-                <button onClick={() => remove(r.id)} className="press" style={{ ...ghost, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto' }}>מחיקה</button>
+                <button onClick={() => askRemove(r)} className="press" style={{ ...ghost, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto' }}>מחיקה</button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmSheet request={confirmReq} onClose={() => setConfirmReq(null)} />
     </div>
   )
 }

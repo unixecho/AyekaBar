@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { MENU_SLUG, type MenuCategory, type MenuItem, type Localized } from '@/lib/menu/types'
+import { MENU_SLUG, loc, type MenuCategory, type MenuItem, type Localized } from '@/lib/menu/types'
+import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 
 const T = {
   title: 'עורך התפריט',
@@ -19,7 +20,7 @@ const T = {
   catTitle: 'שם הקטגוריה', catNote: 'הערת קטגוריה',
   mustTry: 'חובה לטעום', badgeNew: 'חדש', sold: 'אזל',
   viewMenu: 'צפייה בתפריט', dash: '← ניהול',
-  confirmDelCat: 'למחוק את הקטגוריה על כל הפריטים שלה?',
+  confirmDelCat: 'למחוק את הקטגוריה?',
   empty: 'אין עדיין קטגוריות. הוסף/י אחת למטה.',
 }
 
@@ -46,6 +47,7 @@ export default function MenuEditor() {
   const [publishedAt, setPublishedAt] = useState<string | null>(null)
   const [openCat, setOpenCat] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -95,7 +97,12 @@ export default function MenuEditor() {
 
   // category ops
   const addCat = () => edit((d) => { d.push({ id: 'cat-' + Date.now().toString(36), icon: '🍽️', title: { he: 'קטגוריה חדשה' }, items: [] }) })
-  const delCat = (ci: number) => { if (confirm(T.confirmDelCat)) edit((d) => { d.splice(ci, 1) }) }
+  const delCat = (ci: number) => setConfirmReq({
+    title: T.confirmDelCat,
+    body: `"${loc(cats[ci]?.title, 'he') || ''}" וכל ${cats[ci]?.items?.length ?? 0} הפריטים שבה יימחקו מהטיוטה. השינוי ייכנס לתוקף רק אחרי שמירה.`,
+    confirmLabel: T.del,
+    onConfirm: () => edit((d) => { d.splice(ci, 1) }),
+  })
   const moveCat = (ci: number, dir: -1 | 1) => edit((d) => { const j = ci + dir; if (j < 0 || j >= d.length) return;[d[ci], d[j]] = [d[j], d[ci]] })
   // item ops
   const addItem = (ci: number) => edit((d) => { d[ci].items.push({ he: 'פריט חדש', price: null }) })
@@ -166,6 +173,8 @@ export default function MenuEditor() {
         <button onClick={save} disabled={saving || !dirty} className="press" style={{ ...ghost, opacity: (saving || !dirty) ? 0.5 : 1 }}>{saving ? T.saving : T.save}</button>
         <button onClick={publish} disabled={publishing} className="press" style={{ ...primary, opacity: publishing ? 0.6 : 1 }}>{publishing ? T.publishing : T.publish}</button>
       </div>
+
+      <ConfirmSheet request={confirmReq} onClose={() => setConfirmReq(null)} />
     </div>
   )
 }

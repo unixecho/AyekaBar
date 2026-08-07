@@ -1,17 +1,14 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { type CSSProperties } from 'react'
 import Link from 'next/link'
 import { badgeMeta } from '@/lib/staff/badges'
+import LanguageSwitch, { useLanguage, type Lang } from '@/components/LanguageSwitch'
 import type { TeamMember } from '@/lib/team/fetch'
-
-type Lang = 'he' | 'en' | 'ar'
-const LANGS: Lang[] = ['he', 'en', 'ar']
-const RTL: Record<Lang, boolean> = { he: true, ar: true, en: false }
 
 const I18N: Record<Lang, {
   title: string; tagline: string; leadership: string; team: string
-  empty: string; back: string; langName: string
+  empty: string; back: string
 }> = {
   he: {
     title: 'הצוות',
@@ -20,7 +17,6 @@ const I18N: Record<Lang, {
     team: 'הצוות שלנו',
     empty: 'הצוות יעלה לכאן בקרוב.',
     back: 'חזרה לדף הבית',
-    langName: 'עברית',
   },
   en: {
     title: 'The Team',
@@ -29,7 +25,6 @@ const I18N: Record<Lang, {
     team: 'Our team',
     empty: 'The team will appear here soon.',
     back: 'Back to home',
-    langName: 'English',
   },
   ar: {
     title: 'الطاقم',
@@ -38,7 +33,6 @@ const I18N: Record<Lang, {
     team: 'طاقمنا',
     empty: 'سيظهر الطاقم هنا قريباً.',
     back: 'العودة إلى الصفحة الرئيسية',
-    langName: 'العربية',
   },
 }
 
@@ -48,23 +42,8 @@ const isLeader = (m: TeamMember) =>
   m.role === 'owner' || (m.badge != null && LEAD_BADGES.has(m.badge))
 
 export default function TeamView({ members }: { members: TeamMember[] }) {
-  const [lang, setLang] = useState<Lang>('he')
+  const [lang, setLang] = useLanguage()
   const t = I18N[lang]
-
-  useEffect(() => {
-    const saved = localStorage.getItem('siteLanguage')
-    if (saved && (LANGS as string[]).includes(saved)) setLang(saved as Lang)
-  }, [])
-  useEffect(() => {
-    document.documentElement.lang = lang
-    document.documentElement.dir = RTL[lang] ? 'rtl' : 'ltr'
-  }, [lang])
-
-  function cycleLang() {
-    const next = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]
-    setLang(next)
-    localStorage.setItem('siteLanguage', next)
-  }
 
   const leaders = members.filter(isLeader)
   const rest = members.filter((m) => !isLeader(m))
@@ -77,19 +56,7 @@ export default function TeamView({ members }: { members: TeamMember[] }) {
       <div className="app-bg" aria-hidden />
       <div className="app-scrim" aria-hidden />
 
-      {/* language switch — pinned to the same physical corner in RTL and LTR */}
-      <button
-        onClick={cycleLang} aria-label="Language" className="press"
-        style={{
-          position: 'fixed', left: 14, top: 'calc(env(safe-area-inset-top) + 14px)', zIndex: 50,
-          height: 38, padding: '0 13px', borderRadius: 12,
-          border: '1px solid var(--line)', background: 'rgba(255,255,255,0.02)',
-          color: 'var(--text-dim)', font: 'inherit', fontSize: '0.8rem', fontWeight: 600,
-          cursor: 'pointer',
-        }}
-      >
-        {t.langName}
-      </button>
+      <LanguageSwitch lang={lang} onChange={setLang} />
 
       <div style={{ maxWidth: 940, margin: '0 auto' }}>
         {/* Masthead */}
@@ -223,12 +190,13 @@ function Portrait({ member, color, size }: {
 }) {
   // Derived from the name actually being shown, so an owner who sets the
   // Hebrew spelling "אופיר מינץ" gets "אמ" rather than the Google-profile "OM".
+  // Separated by a middot — "א·מ" reads as initials, "אמ" reads as a word.
   const initials = member.name
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w.charAt(0))
-    .join('') || '?'
+    .join('·') || '?'
 
   const frame: CSSProperties = {
     width: size, height: size, borderRadius: 20, flex: '0 0 auto',
@@ -256,8 +224,10 @@ function Portrait({ member, color, size }: {
       background: `linear-gradient(150deg, ${color}26, ${color}0a 60%, transparent)`,
     }}>
       <span style={{
-        fontSize: size * 0.34, fontWeight: 800, color,
-        letterSpacing: 1, textShadow: `0 0 18px ${color}66`,
+        // The dot carries its own spacing, so extra letter-spacing here just
+        // detaches it from the letters.
+        fontSize: size * 0.30, fontWeight: 800, color,
+        textShadow: `0 0 18px ${color}66`, whiteSpace: 'nowrap',
       }}>{initials}</span>
     </div>
   )

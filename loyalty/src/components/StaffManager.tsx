@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { BADGE_OPTIONS, badgeMeta, PERMISSION_META } from '@/lib/staff/badges'
 import RolePicker from '@/components/RolePicker'
+import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 
 interface Member {
   id: string
@@ -41,8 +42,10 @@ const T = {
   displayNameHint: 'ברירת מחדל: השם מחשבון Google. כאן אפשר לקבוע איך השם ייכתב בעמוד הצוות — גם ראשי התיבות יתעדכנו.',
   remove: 'הסר/י מהצוות',
   revoke: 'בטל/י הזמנה',
-  confirmRemove: 'להסיר את איש הצוות מהרשימה?',
-  confirmRevoke: 'לבטל את ההזמנה לאימייל הזה?',
+  confirmRemove: 'להסיר את איש הצוות?',
+  confirmRemoveBody: 'הגישה שלו/ה לחלון הצוות תיפסק מיד, והוא/היא ייעלמו מעמוד הצוות באתר.',
+  confirmRevoke: 'לבטל את ההזמנה?',
+  confirmRevokeBody: 'האימייל הזה כבר לא יוכל להיכנס לחלון הצוות.',
   pending: 'ממתין לכניסה ראשונה',
   pendingNote: 'ההרשאה תיכנס לתוקף ברגע שיתחבר/תתחבר עם Google מהאימייל הזה.',
   active: 'מחובר/ת',
@@ -68,6 +71,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
   const [notice, setNotice] = useState<Notice>(null)
 
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -132,8 +136,17 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
     }
   }
 
+  function askRemove(m: Member) {
+    const pending = !m.auth_user_id
+    setConfirmReq({
+      title: pending ? T.confirmRevoke : T.confirmRemove,
+      body: pending ? T.confirmRevokeBody : T.confirmRemoveBody,
+      confirmLabel: pending ? T.revoke : T.remove,
+      onConfirm: () => { void removeMember(m) },
+    })
+  }
+
   async function removeMember(m: Member) {
-    if (!confirm(m.auth_user_id ? T.confirmRemove : T.confirmRevoke)) return
     setBusyId(m.id)
     try {
       const res = await fetch('/api/owner/staff', {
@@ -235,12 +248,14 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                 onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
                 onToggleSite={() => patchMember(m.id, { showOnSite: !m.show_on_site })}
                 onDisplayName={(displayName) => patchMember(m.id, { displayName })}
-                onRemove={() => removeMember(m)}
+                onRemove={() => askRemove(m)}
               />
             ))}
           </div>
         )}
       </div>
+
+      <ConfirmSheet request={confirmReq} onClose={() => setConfirmReq(null)} />
     </div>
   )
 }

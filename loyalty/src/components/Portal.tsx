@@ -1,12 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 import { PORTAL_LINKS_DEFAULT, type PortalLinkKey } from '@/lib/settings/keys'
-
-type Lang = 'he' | 'en' | 'ar'
-const LANGS: Lang[] = ['he', 'en', 'ar']
-const RTL: Record<Lang, boolean> = { he: true, ar: true, en: false }
+import LanguageSwitch, { useLanguage, type Lang } from '@/components/LanguageSwitch'
 
 const LINKS = {
   menu: '/menu',
@@ -17,11 +14,11 @@ const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
 
 const I18N: Record<Lang, {
   brand: ReactNode; tagline: string; navigate: string; menu: string; instagram: string
-  review: string; loyalty: string; soon: string; team: string; langName: string; footer: string
+  review: string; loyalty: string; soon: string; team: string; footer: string
 }> = {
-  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', langName: 'עברית', footer: '© אייכה בר' },
-  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', langName: 'English', footer: '© Ayeka Bar' },
-  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', langName: 'العربية', footer: '© אייכה בר' },
+  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', footer: '© אייכה בר' },
+  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', footer: '© Ayeka Bar' },
+  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', footer: '© אייכה בר' },
 }
 
 const ICONS = {
@@ -48,35 +45,9 @@ export default function Portal({
   loyaltyVisible?: boolean
   links?: Record<PortalLinkKey, string>
 }) {
-  const [lang, setLang] = useState<Lang>('he')
-  const [langOpen, setLangOpen] = useState(false)
+  const [lang, setLang] = useLanguage()
   const [navOpen, setNavOpen] = useState(false)
   const t = I18N[lang]
-  const langRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const saved = localStorage.getItem('siteLanguage')
-    if (saved && (LANGS as string[]).includes(saved)) setLang(saved as Lang)
-  }, [])
-  useEffect(() => {
-    document.documentElement.lang = lang
-    document.documentElement.dir = RTL[lang] ? 'rtl' : 'ltr'
-  }, [lang])
-  // Close on outside click only — must check containment, not just "any click",
-  // otherwise the click that OPENS the menu also closes it in the same tick
-  // (stopPropagation on the wrapper doesn't reliably stop this listener from
-  // also firing), so the dropdown could never actually stay open.
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (langRef.current && !langRef.current.contains(e.target as Node)) setLangOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLangOpen(false) }
-    document.addEventListener('click', onClick)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey) }
-  }, [])
-
-  function pickLang(l: Lang) { setLang(l); localStorage.setItem('siteLanguage', l); setLangOpen(false) }
 
   let d = 0
   const delay = () => `${260 + (d++) * 85}ms`
@@ -86,24 +57,7 @@ export default function Portal({
       <div className="app-bg" aria-hidden />
       <div className="app-scrim" aria-hidden />
 
-      {/* language switch pinned to physical left */}
-      <div ref={langRef} style={{ position: 'fixed', left: 14, top: 'calc(env(safe-area-inset-top) + 14px)', zIndex: 50 }}>
-        <button aria-label="Language" className="press" onClick={() => setLangOpen((v) => !v)} style={globeStyle(langOpen)}>
-          <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="9" /><path d="M3 12h18" />
-            <path d="M12 3c2.5 2.5 3.8 5.8 3.8 9S14.5 18.5 12 21C9.5 18.5 8.2 15.2 8.2 12S9.5 5.5 12 3z" />
-          </svg>
-        </button>
-        {langOpen && (
-          <div role="menu" style={langMenuStyle}>
-            {LANGS.map((l) => (
-              <button key={l} role="menuitem" onClick={() => pickLang(l)} style={langOptStyle(l === lang)}>
-                {I18N[l].langName}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <LanguageSwitch lang={lang} onChange={setLang} />
 
       <div style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 26 }}>
         {/* brand */}
@@ -222,25 +176,4 @@ const subOptStyle: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 13,
   border: '1px solid var(--line)', background: 'rgba(20,20,32,0.62)', color: 'var(--text)',
   textDecoration: 'none', fontWeight: 600, fontSize: '0.98rem',
-}
-function globeStyle(open: boolean): CSSProperties {
-  return {
-    width: 38, height: 38, display: 'grid', placeItems: 'center', borderRadius: 12,
-    border: `1px solid ${open ? 'var(--neon-2)' : 'var(--line)'}`,
-    background: open ? 'rgba(56,225,255,0.06)' : 'rgba(255,255,255,0.02)',
-    color: 'var(--text)', cursor: 'pointer', boxShadow: open ? '0 0 18px rgba(56,225,255,0.4)' : 'none',
-  }
-}
-const langMenuStyle: CSSProperties = {
-  position: 'absolute', top: 46, left: 0, minWidth: 132, background: 'var(--bg-elev-2)',
-  border: '1px solid var(--line-strong)', borderRadius: 14, padding: 6, boxShadow: '0 18px 40px rgba(0,0,0,0.55)',
-  display: 'flex', flexDirection: 'column', gap: 2,
-}
-function langOptStyle(active: boolean): CSSProperties {
-  return {
-    border: 0, background: active ? 'rgba(255,94,58,0.14)' : 'transparent',
-    boxShadow: active ? 'inset 0 0 0 1px rgba(255,94,58,0.3)' : 'none',
-    color: active ? 'var(--text)' : 'var(--text-dim)', textAlign: 'start', font: 'inherit', fontWeight: 500,
-    padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
-  }
 }
