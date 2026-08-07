@@ -9,7 +9,7 @@ import HappyHourWizard from '@/components/HappyHourWizard'
 // screen to HappyHourWizard — configuring a discount deserves focus.
 
 const T = {
-  title: 'שעה שמחה',
+  title: 'Happy Hour',
   off: 'כבוי',
   onNow: 'פעיל עכשיו',
   scheduled: 'מוגדר',

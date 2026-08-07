@@ -82,6 +82,10 @@ export default function MenuEditor() {
     setSaving(false)
     if (error) { setMsg(T.loadErr); return false }
     setDirty(false); setSavedTick(true); setTimeout(() => setSavedTick(false), 2000)
+    // The draft is written straight from the browser under RLS, so the audit
+    // trail is reported separately. Fire-and-forget: a failed log line must
+    // never make a successful save look like it failed.
+    void recordAudit('menu.save', 'שמר/ה טיוטת תפריט', { categories: cats.length })
     return true
   }
 
@@ -93,8 +97,24 @@ export default function MenuEditor() {
     setPublishing(false)
     if (error) { setMsg('הפרסום נכשל.'); return }
     setPublishedAt(new Date().toISOString())
+    void recordAudit('menu.publish', 'פרסם/ה את התפריט', {
+      categories: cats.length,
+      items: cats.reduce((n, c) => n + (c.items?.length ?? 0), 0),
+    })
     setMsg(T.published)
     setTimeout(() => setMsg(null), 2500)
+  }
+
+  /** Report an editor action to the audit trail. Never surfaces an error: the
+   *  change already succeeded, and a missing log line is better than telling
+   *  the owner their publish failed when it didn't. */
+  async function recordAudit(action: string, summary: string, detail: Record<string, unknown>) {
+    try {
+      await fetch('/api/owner/audit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, summary, detail }),
+      })
+    } catch { /* ignored on purpose */ }
   }
 
   // category ops

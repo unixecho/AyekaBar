@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireOwner } from '@/lib/owner/guard'
-import { MENU_SLUG, type MenuCategory } from '@/lib/menu/types'
+import { MENU_SLUG, loc, type MenuCategory } from '@/lib/menu/types'
 import { ensureUids } from '@/lib/menu/variants'
+import { logAudit } from '@/lib/owner/audit'
 
 // Owner-only CRUD for named menu variants ("רגיל" / "יום שישי") plus the
 // switch for which one the public menu shows.
@@ -95,6 +96,11 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
+
+  await logAudit(auth.service, auth.userId, 'variant.create',
+    `יצר/ה גרסת תפריט: ${nameHe}`,
+    { variantId: data.id, name: nameHe, hiddenItems: excluded.length })
+
   return NextResponse.json({ variant: data })
 }
 
@@ -112,14 +118,21 @@ export async function PATCH(request: NextRequest) {
   if (!menu) return NextResponse.json({ error: 'התפריט לא נמצא' }, { status: 404 })
 
   const { data: row } = await auth.service
-    .from('menu_variants').select('id, is_default').eq('id', id).eq('menu_id', menu.id).maybeSingle()
+    .from('menu_variants').select('id, is_default, name').eq('id', id).eq('menu_id', menu.id).maybeSingle()
   if (!row) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 })
+
+  const rowName = loc(row.name as Record<string, string>, 'he') || '—'
 
   // Making a variant live is its own action and touches a different table.
   if (body && 'activate' in body && body.activate === true) {
     const { error } = await auth.service
       .from('menus').update({ active_variant_id: id }).eq('id', menu.id)
     if (error) return NextResponse.json({ error: 'ההחלפה נכשלה' }, { status: 500 })
+
+    await logAudit(auth.service, auth.userId, 'variant.activate',
+      `שינה/תה את התפריט המוצג ל: ${rowName}`,
+      { variantId: id, name: rowName })
+
     return NextResponse.json({ activeVariantId: id })
   }
 
@@ -146,6 +159,17 @@ export async function PATCH(request: NextRequest) {
     .from('menu_variants').update(patch).eq('id', id).select(COLS).single()
 
   if (error) return NextResponse.json({ error: 'עדכון נכשל' }, { status: 500 })
+
+  const newName = (patch.name as { he?: string } | undefined)?.he ?? rowName
+  await logAudit(auth.service, auth.userId, 'variant.update',
+    `עדכן/ה את הגרסה: ${newName}`,
+    {
+      variantId: id,
+      name: newName,
+      ...(patch.excluded_uids ? { hiddenItems: (patch.excluded_uids as string[]).length } : {}),
+      ...(patch.name ? { renamedFrom: rowName } : {}),
+    })
+
   return NextResponse.json({ variant: data })
 }
 
@@ -162,11 +186,12 @@ export async function DELETE(request: NextRequest) {
   if (!menu) return NextResponse.json({ error: 'התפריט לא נמצא' }, { status: 404 })
 
   const { data: row } = await auth.service
-    .from('menu_variants').select('id, is_default').eq('id', id).eq('menu_id', menu.id).maybeSingle()
+    .from('menu_variants').select('id, is_default, name').eq('id', id).eq('menu_id', menu.id).maybeSingle()
   if (!row) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 })
   if (row.is_default) {
     return NextResponse.json({ error: 'אי אפשר למחוק את הגרסה הרגילה' }, { status: 400 })
   }
+  const deletedName = loc(row.name as Record<string, string>, 'he') || '—'
 
   // Deleting the live variant must not leave the menu pointing at nothing —
   // fall back to the default before removing the row.
@@ -178,5 +203,9 @@ export async function DELETE(request: NextRequest) {
 
   const { error } = await auth.service.from('menu_variants').delete().eq('id', id)
   if (error) return NextResponse.json({ error: 'מחיקה נכשלה' }, { status: 500 })
+
+  await logAudit(auth.service, auth.userId, 'variant.delete',
+    `מחק/ה את הגרסה: ${deletedName}`, { name: deletedName })
+
   return NextResponse.json({ ok: true })
 }

@@ -1,8 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireOwner } from '@/lib/owner/guard'
 import { SETTINGS_TAG, HAPPY_HOUR_KEY } from '@/lib/settings/keys'
+import { MENU_SLUG, loc, type MenuCategory } from '@/lib/menu/types'
 import { HAPPY_HOUR_DEFAULT, type HappyHour, type HappyHourRule } from '@/lib/menu/variants'
+import { logAudit } from '@/lib/owner/audit'
+
+/** Which categories the discounted items belong to, by name — an audit line
+ *  reading "8 items" is far less useful than "קוקטיילים, בירות". */
+async function categoryNamesFor(service: SupabaseClient, itemIds: string[]): Promise<string[]> {
+  if (!itemIds.length) return []
+  try {
+    const { data } = await service
+      .from('menus').select('draft').eq('slug', MENU_SLUG).single()
+    const cats = (data?.draft?.categories ?? []) as MenuCategory[]
+    const wanted = new Set(itemIds)
+    return cats
+      .filter((c) => (c.items ?? []).some((i) => i.uid && wanted.has(i.uid)))
+      .map((c) => loc(c.title, 'he'))
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
 
@@ -73,6 +94,23 @@ export async function PUT(request: NextRequest) {
   if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
   revalidateTag(SETTINGS_TAG)
+
+  // Record the window, the discount and what it covers — the owner needs to be
+  // able to answer "who put 50% on the cocktails and when".
+  const hh = parsed.value
+  const percents = Array.from(new Set(hh.rules.map((r) => r.percent)))
+  await logAudit(auth.service, auth.userId, 'happy_hour.update',
+    hh.enabled
+      ? `הפעיל/ה Happy Hour ${hh.start}–${hh.end} · ${percents.join('/')}% על ${hh.rules.length} פריטים`
+      : `כיבה/תה את ה-Happy Hour`,
+    {
+      enabled: hh.enabled,
+      start: hh.start,
+      end: hh.end,
+      percents,
+      itemCount: hh.rules.length,
+      categories: await categoryNamesFor(auth.service, hh.rules.map((r) => r.id)),
+    })
 
   return NextResponse.json({ happyHour: data.value as HappyHour })
 }

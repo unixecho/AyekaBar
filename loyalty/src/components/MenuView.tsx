@@ -81,6 +81,7 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
   }, [])
 
   const happyActive = isHappyHourActive(happyHour)
+  const variantLabel = menu?.variantName ? loc(menu.variantName, lang) : ''
   const categories = useMemo(
     () => (menu ? applyHappyHour(menu.categories, happyHour) : []),
     // minuteTick is intentionally not referenced here — the state update alone
@@ -142,9 +143,13 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
 
       <div className="menu-sticky" ref={stickyRef}>
         <header className="menu-topbar">
-          {/* Same control as the portal and team page — inline so it sits in
-              the sticky topbar rather than floating over the menu. */}
-          <div className="rise" style={{ animationDelay: '20ms' }}>
+          {/* .menu-topbar centres its children, so this has to be pulled out
+              of the flow the way the old .menu-lang rule did — otherwise the
+              globe sits inline next to the brand and shoves the title over. */}
+          <div className="rise" style={{
+            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+            zIndex: 50, animationDelay: '20ms',
+          }}>
             <LanguageSwitch lang={lang} onChange={pickLang} variant="inline" />
           </div>
 
@@ -172,25 +177,28 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
         )}
       </div>
 
-      {/* Say why prices are lower than the printed menu, and until when. */}
-      {happyActive && happyHour && (
-        <div
-          className="rise"
-          style={{
-            margin: '10px 14px 0', padding: '10px 14px', borderRadius: 13,
-            display: 'flex', alignItems: 'center', gap: 9,
-            background: 'linear-gradient(135deg, rgba(255,94,58,0.18), rgba(255,138,92,0.08))',
-            border: '1px solid rgba(255,94,58,0.32)',
-          }}
-        >
-          <span aria-hidden style={{ fontSize: '1.05rem' }}>🍹</span>
-          <span style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.9rem' }}>
-            {MENU_UI.happyHour[lang]}
-          </span>
-          <span dir="ltr" style={{ marginInlineStart: 'auto', fontSize: '0.82rem', fontWeight: 600, color: 'var(--neon-soft)' }}>
-            {MENU_UI.happyHourUntil[lang]} {happyHour.end}
-          </span>
+      {/* Which version of the menu this is, right under the nav bar. */}
+      {variantLabel && (
+        <div className="menu-version-banner rise" style={{ animationDelay: '120ms' }}>
+          <span aria-hidden>🍽️</span>
+          <span>{variantLabel}</span>
         </div>
+      )}
+
+      {/* Happy hour leads the page when it's live — centred, ahead of every
+          category, because a discount nobody notices may as well not exist. */}
+      {happyActive && happyHour && (
+        <section className="menu-hh rise" style={{ animationDelay: '150ms' }} aria-live="polite">
+          <span className="menu-hh-glow" aria-hidden />
+          <span className="menu-hh-emoji" aria-hidden>🍹</span>
+          <h2 className="menu-hh-title">{MENU_UI.happyHour[lang]}</h2>
+          <p className="menu-hh-sub">
+            {MENU_UI.happyHourSub[lang]}
+          </p>
+          <span className="menu-hh-window" dir="ltr">
+            {happyHour.start} – {happyHour.end}
+          </span>
+        </section>
       )}
 
       <main className="menu-main">

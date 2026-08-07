@@ -98,7 +98,13 @@ export const MENU_UI = {
     ar: 'القائمة غير متوفرة حالياً. حاول مرة أخرى بعد قليل.',
   },
   menuWord: { he: 'תפריט', en: 'Menu', ar: 'القائمة' },
-  happyHour: { he: 'שעה שמחה', en: 'Happy hour', ar: 'ساعة سعيدة' },
+  // The owner asked for the English name — locals use it as-is.
+  happyHour: { he: 'Happy Hour', en: 'Happy Hour', ar: 'Happy Hour' },
+  happyHourSub: {
+    he: 'מחירים מיוחדים על פריטים נבחרים',
+    en: 'Special prices on selected items',
+    ar: 'أسعار خاصة على أصناف مختارة',
+  },
   // A cheaper price with no explanation reads as a mistake — say why, and
   // until when, so nobody argues about it at the bar.
   happyHourUntil: { he: 'עד', en: 'until', ar: 'حتى' },
