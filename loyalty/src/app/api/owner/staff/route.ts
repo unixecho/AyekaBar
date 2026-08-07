@@ -6,7 +6,7 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 type Service = SupabaseClient
 
-const COLS = 'id, auth_user_id, role, badge, first_name, last_name, email, created_at, invited_at, claimed_at, show_on_site, display_order'
+const COLS = 'id, auth_user_id, role, badge, first_name, last_name, email, created_at, invited_at, claimed_at, show_on_site, display_order, display_name'
 
 /** `ilike` is our case-insensitive equality check, but `%` and `_` are legal in
  *  the local part of an address and would act as LIKE wildcards. */
@@ -124,7 +124,7 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => null) as
     {
       id?: string; badge?: string | null; role?: string
-      showOnSite?: unknown; displayOrder?: unknown
+      showOnSite?: unknown; displayOrder?: unknown; displayName?: unknown
     } | null
   const id = body?.id
   if (!id) return NextResponse.json({ error: 'חסר מזהה' }, { status: 400 })
@@ -150,6 +150,20 @@ export async function PATCH(request: NextRequest) {
       )
     }
     patch.show_on_site = body.showOnSite
+  }
+
+  // Presentation-only override for the public team page. Never touches
+  // first_name/last_name/email — the invite-claim flow matches on those.
+  if (body && 'displayName' in body) {
+    const v = body.displayName
+    if (v !== null && typeof v !== 'string') {
+      return NextResponse.json({ error: 'שם לא תקין' }, { status: 400 })
+    }
+    const trimmed = typeof v === 'string' ? v.trim() : null
+    if (trimmed && trimmed.length > 60) {
+      return NextResponse.json({ error: 'השם ארוך מדי' }, { status: 400 })
+    }
+    patch.display_name = trimmed || null
   }
 
   if (body && 'displayOrder' in body) {

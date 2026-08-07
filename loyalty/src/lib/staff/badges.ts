@@ -29,11 +29,22 @@ export const BADGES: Record<BadgeKey, BadgeMeta> = {
   receptionist:    { key: 'receptionist',    he: 'מארח/ת',         en: 'Host',            ar: 'مضيف/ة',          emoji: '🛎️', color: '#2dd4bf' },
 }
 
-/** Selectable presets in the owner UI (owner badge is implied by role, not picked). */
+/** Selectable job titles in the owner UI. `owner` is in here as a real title —
+ *  the bar has two co-owners who should read as "בעלים" on the team page. It is
+ *  deliberately NOT the same thing as the `role` column, which is admin access
+ *  and is shown separately as "הרשאות". */
 export const BADGE_OPTIONS: BadgeMeta[] = [
-  BADGES.general_manager, BADGES.manager, BADGES.bartender,
+  BADGES.owner, BADGES.general_manager, BADGES.manager, BADGES.bartender,
   BADGES.waiter, BADGES.cook, BADGES.receptionist,
 ]
+
+/** The admin-access chip. Distinct from the `owner` job title above: someone
+ *  can hold admin rights without being an owner of the business (a general
+ *  manager), and an owner can appear publicly without it. */
+export const PERMISSION_META: BadgeMeta = {
+  key: 'permissions', he: 'הרשאות', en: 'Admin', ar: 'صلاحيات',
+  emoji: '🔑', color: '#ff8a5c',
+}
 
 function freeText(badge: string): BadgeMeta {
   return { key: badge, he: badge, en: badge, ar: badge, emoji: '👤', color: '#a8a5b0' }
@@ -43,21 +54,11 @@ const STAFF_FALLBACK: BadgeMeta = {
   key: 'staff', he: 'צוות', en: 'Staff', ar: 'طاقم', emoji: '👤', color: '#a8a5b0',
 }
 
-/** Resolve a stored badge to display meta for the OWNER's roster, where
- *  ownership is the thing that matters — an owner always reads as "בעלים" so
- *  the owner can see at a glance who holds admin rights. */
+/** Resolve a stored badge to display meta. The job title is now always the job
+ *  title — admin access is rendered as its own "הרשאות" chip beside it, so the
+ *  two never overwrite each other. Free text is supported so the owner can
+ *  label someone "Dev" or anything else the presets don't cover. */
 export function badgeMeta(badge: string | null | undefined, role: string): BadgeMeta {
-  if (role === 'owner') return BADGES.owner
-  if (badge && badge in BADGES) return BADGES[badge as BadgeKey]
-  if (badge) return freeText(badge)
-  return STAFF_FALLBACK
-}
-
-/** Resolve a badge for the PUBLIC team page, where the job title is what a
- *  visitor cares about: a co-owner who runs the floor should read as "General
- *  Manager", not have it replaced by the ownership star. Falls back to owner
- *  when no job title was ever assigned. */
-export function publicBadgeMeta(badge: string | null | undefined, role: string): BadgeMeta {
   if (badge && badge in BADGES) return BADGES[badge as BadgeKey]
   if (badge) return freeText(badge)
   if (role === 'owner') return BADGES.owner

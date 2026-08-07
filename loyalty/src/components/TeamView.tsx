@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
-import { publicBadgeMeta } from '@/lib/staff/badges'
+import { badgeMeta } from '@/lib/staff/badges'
 import type { TeamMember } from '@/lib/team/fetch'
 
 type Lang = 'he' | 'en' | 'ar'
@@ -184,8 +184,7 @@ function Section({ label, delay, children }: {
 function Card({ m, lang, featured = false, delay }: {
   m: TeamMember; lang: Lang; featured?: boolean; delay: number
 }) {
-  const meta = publicBadgeMeta(m.badge, m.role)
-  const name = [m.firstName, m.lastName].filter(Boolean).join(' ')
+  const meta = badgeMeta(m.badge, m.role)
   const size = featured ? 132 : 92
 
   return (
@@ -204,7 +203,7 @@ function Card({ m, lang, featured = false, delay }: {
         <h3 style={{
           margin: 0, color: 'var(--text)', fontWeight: 700,
           fontSize: featured ? '1.12rem' : '0.95rem', lineHeight: 1.3,
-        }}>{name}</h3>
+        }}>{m.name}</h3>
         <p style={{
           margin: '5px 0 0', color: meta.color, fontWeight: 600,
           fontSize: featured ? '0.86rem' : '0.78rem',
@@ -222,10 +221,14 @@ function Card({ m, lang, featured = false, delay }: {
 function Portrait({ member, color, size }: {
   member: TeamMember; color: string; size: number
 }) {
-  const initials =
-    ((member.firstName?.[0] ?? '') + (member.lastName?.[0] ?? '')).trim()
-    || member.firstName?.[0]
-    || '?'
+  // Derived from the name actually being shown, so an owner who sets the
+  // Hebrew spelling "אופיר מינץ" gets "אמ" rather than the Google-profile "OM".
+  const initials = member.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w.charAt(0))
+    .join('') || '?'
 
   const frame: CSSProperties = {
     width: size, height: size, borderRadius: 20, flex: '0 0 auto',
@@ -240,7 +243,7 @@ function Portrait({ member, color, size }: {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={member.photoUrl} alt={member.firstName} width={size} height={size}
+        src={member.photoUrl} alt={member.name} width={size} height={size}
         loading="lazy" decoding="async"
         style={{ ...frame, objectFit: 'cover' }}
       />

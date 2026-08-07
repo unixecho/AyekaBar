@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { BADGE_OPTIONS, badgeMeta } from '@/lib/staff/badges'
+import { BADGE_OPTIONS, badgeMeta, PERMISSION_META } from '@/lib/staff/badges'
+import RolePicker from '@/components/RolePicker'
 
 interface Member {
   id: string
@@ -18,6 +19,8 @@ interface Member {
   /** Published on the public /team page? */
   show_on_site: boolean
   display_order: number | null
+  /** Public-facing name override (e.g. Hebrew spelling). */
+  display_name: string | null
 }
 
 const T = {
@@ -27,12 +30,15 @@ const T = {
   emailPh: 'האימייל של איש הצוות (Google)',
   addBtn: 'הוסף',
   adding: 'מוסיף…',
-  ownerGrant: 'הרשאת בעלים',
+  ownerGrant: 'הרשאות ניהול',
   roster: 'הצוות',
   empty: 'עדיין אין אנשי צוות. הוסף/י את הראשון/ה למעלה.',
   you: 'את/ה',
-  makeOwner: 'הפוך/הפכי לבעלים',
-  removeOwner: 'הסר/י בעלות',
+  makeOwner: 'תן/י הרשאות',
+  removeOwner: 'בטל/י הרשאות',
+  displayNameLabel: 'שם לתצוגה באתר',
+  displayNamePh: 'למשל: אופיר מינץ',
+  displayNameHint: 'ברירת מחדל: השם מחשבון Google. כאן אפשר לקבוע איך השם ייכתב בעמוד הצוות — גם ראשי התיבות יתעדכנו.',
   remove: 'הסר/י מהצוות',
   revoke: 'בטל/י הזמנה',
   confirmRemove: 'להסיר את איש הצוות מהרשימה?',
@@ -104,7 +110,10 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 
   async function patchMember(
     id: string,
-    patch: { badge?: string; role?: 'staff' | 'owner'; showOnSite?: boolean },
+    patch: {
+      badge?: string; role?: 'staff' | 'owner'
+      showOnSite?: boolean; displayName?: string | null
+    },
   ) {
     setBusyId(id)
     try {
@@ -225,6 +234,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                 onBadge={(badge) => patchMember(m.id, { badge })}
                 onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
                 onToggleSite={() => patchMember(m.id, { showOnSite: !m.show_on_site })}
+                onDisplayName={(displayName) => patchMember(m.id, { displayName })}
                 onRemove={() => removeMember(m)}
               />
             ))}
@@ -236,16 +246,20 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 }
 
 function MemberRow({
-  m, delay, isSelf, busy, onBadge, onToggleOwner, onToggleSite, onRemove,
+  m, delay, isSelf, busy, onBadge, onToggleOwner, onToggleSite, onDisplayName, onRemove,
 }: {
   m: Member; delay: number; isSelf: boolean; busy: boolean
   onBadge: (badge: string) => void
   onToggleOwner: () => void
   onToggleSite: () => void
+  onDisplayName: (name: string | null) => void
   onRemove: () => void
 }) {
   const meta = badgeMeta(m.badge, m.role)
   const pending = !m.auth_user_id
+  // The roster always identifies people by their REAL name + email — this is
+  // where the owner works out who someone is. The display name is a separate,
+  // clearly-labelled field below that only affects the public page.
   const name = [m.first_name, m.last_name].filter(Boolean).join(' ')
     || m.email?.split('@')[0] || 'משתמש'
   const inits = ((m.first_name?.[0] ?? '') + (m.last_name?.[0] ?? '')).trim()
@@ -285,14 +299,30 @@ function MemberRow({
           )}
         </div>
 
-        <span style={{
-          display: 'flex', alignItems: 'center', gap: 5, flex: '0 0 auto',
-          background: `${meta.color}18`, border: `1px solid ${meta.color}44`, color: meta.color,
-          borderRadius: 999, padding: '4px 10px', fontSize: '0.76rem', fontWeight: 700,
-          opacity: pending ? 0.75 : 1,
-        }}>
-          <span>{meta.emoji}</span>{meta.he}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flex: '0 0 auto' }}>
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: `${meta.color}18`, border: `1px solid ${meta.color}44`, color: meta.color,
+            borderRadius: 999, padding: '4px 10px', fontSize: '0.76rem', fontWeight: 700,
+            opacity: pending ? 0.75 : 1,
+          }}>
+            <span>{meta.emoji}</span>{meta.he}
+          </span>
+
+          {/* Admin access is its own chip now — a co-owner carries the "בעלים"
+              job title AND this, and a general manager can carry this without
+              being an owner of the business. */}
+          {m.role === 'owner' && (
+            <span style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: `${PERMISSION_META.color}18`,
+              border: `1px solid ${PERMISSION_META.color}44`, color: PERMISSION_META.color,
+              borderRadius: 999, padding: '3px 9px', fontSize: '0.7rem', fontWeight: 700,
+            }}>
+              <span>{PERMISSION_META.emoji}</span>{PERMISSION_META.he}
+            </span>
+          )}
+        </div>
       </div>
 
       {pending && (
@@ -301,20 +331,27 @@ function MemberRow({
         </p>
       )}
 
+      {/* Display name — public only, so it sits with the site controls. */}
+      {!pending && (
+        <div>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 5 }}>
+            {T.displayNameLabel}
+          </label>
+          <DisplayNameField
+            value={m.display_name ?? ''}
+            placeholder={name}
+            disabled={busy}
+            onCommit={onDisplayName}
+          />
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', margin: '5px 0 0', lineHeight: 1.5 }}>
+            {T.displayNameHint}
+          </p>
+        </div>
+      )}
+
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <select
-          value={BADGE_OPTIONS.find((b) => b.key === m.badge)?.key ?? (m.badge ?? '')}
-          onChange={(e) => onBadge(e.target.value)}
-          disabled={busy}
-          style={selectStyle}
-        >
-          <option value="" disabled>תפקיד…</option>
-          {BADGE_OPTIONS.map((b) => <option key={b.key} value={b.key}>{b.emoji} {b.he}</option>)}
-          {m.badge && !BADGE_OPTIONS.some(b => b.key === m.badge) && (
-            <option value={m.badge}>{m.badge}</option>
-          )}
-        </select>
+        <RolePicker value={m.badge} disabled={busy} onChange={onBadge} />
 
         {/* Publish on the public team page. Available for the owner's own row
             too — they belong on the page as much as anyone. */}
@@ -349,6 +386,39 @@ function MemberRow({
   )
 }
 
+/** Local draft + explicit commit on blur/Enter, so every keystroke isn't a
+ *  PATCH. Empty clears the override back to the Google name. */
+function DisplayNameField({ value, placeholder, disabled, onCommit }: {
+  value: string; placeholder: string; disabled: boolean
+  onCommit: (name: string | null) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => { setDraft(value) }, [value])
+
+  const commit = () => {
+    const next = draft.trim()
+    if (next === (value ?? '').trim()) return
+    onCommit(next || null)
+  }
+
+  return (
+    <input
+      value={draft} disabled={disabled} placeholder={placeholder} maxLength={60}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.currentTarget.blur() }
+        if (e.key === 'Escape') { setDraft(value); e.currentTarget.blur() }
+      }}
+      style={{
+        width: '100%', padding: '10px 12px', borderRadius: 11,
+        border: '1px solid var(--line-strong)', background: 'var(--bg-elev-2)',
+        color: 'var(--text)', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none',
+      }}
+    />
+  )
+}
+
 function SkeletonRow() {
   return (
     <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -380,11 +450,6 @@ const addBtnStyle: React.CSSProperties = {
   background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
   boxShadow: 'var(--glow)', color: '#fff', fontSize: '0.95rem',
   fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
-}
-const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 9, border: '1px solid var(--line-strong)',
-  background: 'var(--bg-elev-2)', color: 'var(--text)', fontSize: '0.82rem',
-  fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
 }
 const ghostBtn: React.CSSProperties = {
   padding: '7px 11px', borderRadius: 9, border: '1px solid var(--line-strong)',
