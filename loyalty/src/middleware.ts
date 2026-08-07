@@ -1,14 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { LOYALTY_ENABLED } from '@/lib/settings/keys'
+import { isOp, canEditMenu, OP_ONLY_PREFIXES, MENU_EDITOR_PREFIX } from '@/lib/staff/access'
 
 const PROTECTED_ROUTES = [
   '/customer/dashboard',
   '/staff/dashboard',
-  '/owner/dashboard',
-  '/owner/editor',
-  '/owner/customers',
-  '/owner/rewards',
+  MENU_EDITOR_PREFIX,
+  ...OP_ONLY_PREFIXES,
 ]
 
 // Everything that only makes sense when the loyalty club is live. While the
@@ -86,12 +85,14 @@ export async function middleware(request: NextRequest) {
   // staff/owner dashboards additionally require a public.staff row
   // (RLS lets each user read only their own row).
   const staffProtected = pathname.startsWith('/staff/dashboard')
-  const ownerProtected = pathname.startsWith('/owner/dashboard') || pathname.startsWith('/owner/editor') || pathname.startsWith('/owner/customers') || pathname.startsWith('/owner/rewards')
+  const editorProtected = pathname.startsWith(MENU_EDITOR_PREFIX)
+  const opProtected = OP_ONLY_PREFIXES.some((p) => pathname.startsWith(p))
+  const ownerProtected = editorProtected || opProtected
 
   if (user && (staffProtected || ownerProtected)) {
     const { data: staffRow } = await supabase
       .from('staff')
-      .select('role')
+      .select('role, badge')
       .eq('auth_user_id', user.id)
       .maybeSingle()
 
@@ -99,13 +100,26 @@ export async function middleware(request: NextRequest) {
     // before they ever signed in — claim_staff_invite() matches the signed-in
     // Google address against pending invites and links the row. Only runs on
     // the miss path, so it costs nothing for established staff.
-    let role = staffRow?.role ?? null
+    let row: { role?: string | null; badge?: string | null } | null = staffRow
     if (!staffRow) {
       const { data: claimed } = await supabase.rpc('claim_staff_invite')
-      role = (claimed as string | null) ?? null
+      if (claimed) {
+        const { data: fresh } = await supabase
+          .from('staff').select('role, badge').eq('auth_user_id', user.id).maybeSingle()
+        row = fresh ?? { role: claimed as string, badge: null }
+      } else {
+        row = null
+      }
     }
 
-    if (!role || (ownerProtected && role !== 'owner')) {
+    // The editor is open to the general manager without OP; the rest of the
+    // owner panel is not.
+    const denied =
+      !row
+      || (editorProtected && !canEditMenu(row))
+      || (opProtected && !isOp(row))
+
+    if (denied) {
       // Authenticated but not authorized — send back to the sign-in page with a
       // flag so it can explain (rather than a silent bounce to home).
       const url = request.nextUrl.clone()

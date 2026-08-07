@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { requireOwner } from '@/lib/owner/guard'
+import { requireMenuEditor } from '@/lib/owner/guard'
 import { MENU_SLUG, loc, type MenuCategory } from '@/lib/menu/types'
 import { ensureUids } from '@/lib/menu/variants'
 import { logAudit } from '@/lib/owner/audit'
@@ -84,7 +84,7 @@ async function loadMenu(service: SupabaseClient) {
 }
 
 export async function GET() {
-  const auth = await requireOwner()
+  const auth = await requireMenuEditor()
   if (!auth.ok) return auth.res
 
   const menu = await loadMenu(auth.service)
@@ -109,7 +109,7 @@ export async function GET() {
 
 // ---- POST: create a variant ------------------------------------------------
 export async function POST(request: NextRequest) {
-  const auth = await requireOwner()
+  const auth = await requireMenuEditor()
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
@@ -152,11 +152,11 @@ export async function POST(request: NextRequest) {
 
 // ---- PATCH: rename / re-scope / activate ----------------------------------
 export async function PATCH(request: NextRequest) {
-  const auth = await requireOwner()
+  const auth = await requireMenuEditor()
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { id?: string; nameHe?: unknown; excludedUids?: unknown; activate?: unknown } | null
+    { id?: string; nameHe?: unknown; excludedUids?: unknown; activate?: unknown; schedule?: unknown } | null
   const id = body?.id
   if (!id) return NextResponse.json({ error: 'חסר מזהה' }, { status: 400 })
 
@@ -232,7 +232,7 @@ export async function PATCH(request: NextRequest) {
 
 // ---- DELETE ---------------------------------------------------------------
 export async function DELETE(request: NextRequest) {
-  const auth = await requireOwner()
+  const auth = await requireMenuEditor()
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as { id?: string } | null

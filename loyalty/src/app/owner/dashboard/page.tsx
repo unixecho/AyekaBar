@@ -1,3 +1,4 @@
+import { isOp } from '@/lib/staff/access'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
@@ -17,10 +18,10 @@ export default async function OwnerDashboardPage() {
   // Middleware already gates this, but verify server-side too (defense in depth).
   const { data: me } = await supabase
     .from('staff')
-    .select('role, email, first_name')
+    .select('role, badge, email, first_name')
     .eq('auth_user_id', user.id)
     .maybeSingle()
-  if (!me || me.role !== 'owner') redirect('/owner?denied=1')
+  if (!me || !isOp(me)) redirect('/owner?denied=1')
 
   // Self-heal: a manually-seeded owner row has no name/email — backfill it from
   // the owner's own Google profile so the roster shows them properly.

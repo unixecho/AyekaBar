@@ -245,7 +245,9 @@ function CategorySection({
       <div className="cat-body">
         <div className="cat-body-inner">
           <div className="cat-pad">
-            {cat.note && <div className="cat-note">{loc(cat.note, lang)}</div>}
+            {/* Test the RESOLVED string, not the object: a note of `{}` or
+                `{he: ''}` is truthy and rendered an empty bordered box. */}
+            {loc(cat.note, lang) && <div className="cat-note">{loc(cat.note, lang)}</div>}
             {cat.items.map((it, i) => (
               <ItemRow key={i} it={it} i={i} lang={lang} badges={badges} />
             ))}
@@ -277,7 +279,7 @@ function ItemRow({
           ))}
           {it.available === false && <span className="badge sold-badge">{MENU_UI.sold[lang]}</span>}
         </div>
-        {it.note && <div className="item-note">{loc(it.note, lang)}</div>}
+        {loc(it.note, lang) && <div className="item-note">{loc(it.note, lang)}</div>}
       </div>
       {price && (
         <div className="price">

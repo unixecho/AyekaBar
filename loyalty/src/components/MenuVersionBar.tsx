@@ -46,6 +46,8 @@ const T = {
   loadErr: 'טעינת הגרסאות נכשלה.',
   hidden: (n: number) => `${n} פריטים מוסתרים`,
   allItems: 'כל הפריטים',
+  defaultNote: 'הגרסה המלאה — כל הפריטים, וזו שאליה חוזרים כשתזמון נגמר.',
+  renameOnly: 'שינוי שם',
 }
 
 export default function MenuVersionBar() {
@@ -177,7 +179,18 @@ export default function MenuVersionBar() {
         </button>
       </div>
 
-      {/* Per-version actions — only meaningful on a non-default version. */}
+      {/* The default can be renamed but not scoped or scheduled — it IS the
+          full menu and the fallback everything else reverts to. */}
+      {active && active.is_default && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.76rem', color: 'var(--text-faint)' }}>{T.defaultNote}</span>
+          <button type="button" onClick={() => setWizard({ mode: 'edit', variant: active })}
+            disabled={busy} className="press" style={{ ...ghost, marginInlineStart: 'auto' }}>
+            {T.renameOnly}
+          </button>
+        </div>
+      )}
+
       {active && !active.is_default && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.76rem', color: 'var(--text-faint)' }}>
@@ -215,6 +228,7 @@ export default function MenuVersionBar() {
             end: (wizard.mode === 'edit' && wizard.variant.schedule_end) || '17:00',
           }}
           variantId={wizard.mode === 'edit' ? wizard.variant.id : null}
+          isDefault={wizard.mode === 'edit' && wizard.variant.is_default}
           onClose={() => setWizard(null)}
           onSaved={async () => { setWizard(null); await load() }}
         />

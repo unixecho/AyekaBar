@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { BADGE_OPTIONS, badgeMeta, PERMISSION_META } from '@/lib/staff/badges'
+import { BADGE_OPTIONS, badgeMeta } from '@/lib/staff/badges'
+import { accessLabel } from '@/lib/staff/access'
 import RolePicker from '@/components/RolePicker'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 
@@ -27,11 +28,12 @@ interface Member {
 const T = {
   title: 'ניהול צוות',
   subtitle: 'הוסף/י אנשי צוות לפי אימייל — גם לפני שנכנסו לראשונה. בכניסה עם Google הם יזוהו אוטומטית ויקבלו גישה לחלון הצוות.',
+  levels: '🔑 הרשאות מלאות = גישה לכל אזור הניהול. תפקיד "בעלים" מקבל זאת אוטומטית. "מנהל/ת כללי/ת" יכול/ה לערוך את התפריט גם בלי הרשאות מלאות. כל השאר — חלון הצוות בלבד (קוד QR).',
   addTitle: 'הוספת איש/אשת צוות',
   emailPh: 'האימייל של איש הצוות (Google)',
   addBtn: 'הוסף',
   adding: 'מוסיף…',
-  ownerGrant: 'הרשאות ניהול',
+  ownerGrant: 'הרשאות מלאות (גישה לכל אזור הניהול)',
   roster: 'הצוות',
   empty: 'עדיין אין אנשי צוות. הוסף/י את הראשון/ה למעלה.',
   you: 'את/ה',
@@ -165,6 +167,11 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       <div>
         <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>{T.title}</h2>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', margin: '4px 0 0', lineHeight: 1.5 }}>{T.subtitle}</p>
+        <p style={{
+          fontSize: '0.76rem', color: 'var(--text-faint)', margin: '8px 0 0', lineHeight: 1.6,
+          padding: '10px 12px', borderRadius: 12,
+          border: '1px solid var(--line)', background: 'var(--bg-elev)',
+        }}>{T.levels}</p>
       </div>
 
       {/* Add form */}
@@ -256,6 +263,10 @@ function MemberRow({
   onRemove: () => void
 }) {
   const meta = badgeMeta(m.badge, m.role)
+  const access = accessLabel(m)
+  // The owner badge already grants everything, so offering a separate
+  // "give admin rights" toggle for that person is meaningless.
+  const opImplied = m.badge === 'owner'
   const pending = !m.auth_user_id
   // The roster always identifies people by their REAL name + email — this is
   // where the owner works out who someone is. The display name is a separate,
@@ -309,19 +320,16 @@ function MemberRow({
             <span>{meta.emoji}</span>{meta.he}
           </span>
 
-          {/* Admin access is its own chip now — a co-owner carries the "בעלים"
-              job title AND this, and a general manager can carry this without
-              being an owner of the business. */}
-          {m.role === 'owner' && (
-            <span style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              background: `${PERMISSION_META.color}18`,
-              border: `1px solid ${PERMISSION_META.color}44`, color: PERMISSION_META.color,
-              borderRadius: 999, padding: '3px 9px', fontSize: '0.7rem', fontWeight: 700,
-            }}>
-              <span>{PERMISSION_META.emoji}</span>{PERMISSION_META.he}
-            </span>
-          )}
+          {/* One chip stating the resolved level. Showing "בעלים" next to a
+              separate "הרשאות" was redundant — the owner badge IS full access. */}
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: `${access.color}18`,
+            border: `1px solid ${access.color}44`, color: access.color,
+            borderRadius: 999, padding: '3px 9px', fontSize: '0.7rem', fontWeight: 700,
+          }}>
+            <span>{access.emoji}</span>{access.he}
+          </span>
         </div>
       </div>
 
@@ -355,9 +363,11 @@ function MemberRow({
 
         {!isSelf && (
           <>
-            <button type="button" onClick={onToggleOwner} disabled={busy} className="press" style={ghostBtn}>
-              {m.role === 'owner' ? T.removeOwner : T.makeOwner}
-            </button>
+            {!opImplied && (
+              <button type="button" onClick={onToggleOwner} disabled={busy} className="press" style={ghostBtn}>
+                {m.role === 'owner' ? T.removeOwner : T.makeOwner}
+              </button>
+            )}
             <button type="button" onClick={onRemove} disabled={busy} className="press"
               style={{ ...ghostBtn, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto' }}>
               {pending ? T.revoke : T.remove}

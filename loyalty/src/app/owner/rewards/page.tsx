@@ -1,3 +1,4 @@
+import { isOp } from '@/lib/staff/access'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -12,10 +13,10 @@ export default async function OwnerRewardsPage() {
 
   const { data: me } = await supabase
     .from('staff')
-    .select('role')
+    .select('role, badge')
     .eq('auth_user_id', user.id)
     .maybeSingle()
-  if (!me || me.role !== 'owner') redirect('/owner?denied=1')
+  if (!isOp(me)) redirect('/owner?denied=1')
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>

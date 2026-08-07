@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { requireOwner } from '@/lib/owner/guard'
+import { requireMenuEditor } from '@/lib/owner/guard'
 import { SETTINGS_TAG, HAPPY_HOUR_KEY } from '@/lib/settings/keys'
 import { MENU_SLUG, loc, type MenuCategory } from '@/lib/menu/types'
 import { HAPPY_HOUR_DEFAULT, type HappyHour, type HappyHourRule } from '@/lib/menu/variants'
@@ -61,7 +61,7 @@ function parse(input: unknown): { ok: true; value: HappyHour } | { ok: false; er
 }
 
 export async function GET() {
-  const auth = await requireOwner()
+  const auth = await requireMenuEditor()
   if (!auth.ok) return auth.res
 
   const { data, error } = await auth.service
@@ -72,7 +72,7 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireOwner()
+  const auth = await requireMenuEditor()
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null)

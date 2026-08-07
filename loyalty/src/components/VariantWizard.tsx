@@ -58,7 +58,8 @@ const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
 const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`)
 
 export default function VariantWizard({
-  categories, initialName, initialExcluded, initialSchedule, variantId, onClose, onSaved,
+  categories, initialName, initialExcluded, initialSchedule, variantId,
+  isDefault = false, onClose, onSaved,
 }: {
   categories: MenuCategory[]
   initialName: string
@@ -66,6 +67,8 @@ export default function VariantWizard({
   initialSchedule: VariantSchedule
   /** null = creating */
   variantId: string | null
+  /** The full menu: renameable, but never scoped or scheduled. */
+  isDefault?: boolean
   onClose: () => void
   onSaved: () => void | Promise<void>
 }) {
@@ -133,16 +136,16 @@ export default function VariantWizard({
   async function save() {
     const trimmed = name.trim()
     if (!trimmed) { setErr(T.nameRequired); setStep(1); return }
-    if (shownCount === 0) { setErr(T.noneLeft); return }
-    if (sched.enabled && sched.start === sched.end) { setErr(T.badWindow); return }
+    if (!isDefault && shownCount === 0) { setErr(T.noneLeft); return }
+    if (!isDefault && sched.enabled && sched.start === sched.end) { setErr(T.badWindow); return }
 
     setSaving(true); setErr(null)
     try {
-      const payload = {
-        nameHe: trimmed,
-        excludedUids: Array.from(excluded),
-        schedule: sched,
-      }
+      // The default only ever takes a name — sending scope or schedule would
+      // be rejected, and rightly so.
+      const payload = isDefault
+        ? { nameHe: trimmed }
+        : { nameHe: trimmed, excludedUids: Array.from(excluded), schedule: sched }
       const res = await fetch('/api/owner/menu-variants', {
         method: variantId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -218,6 +221,7 @@ export default function VariantWizard({
               </div>
 
               {/* Automatic schedule */}
+              {!isDefault && (
               <div className="pick-cat" style={{ padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -288,8 +292,9 @@ export default function VariantWizard({
                   </div>
                 )}
               </div>
+              )}
 
-              {categories.map((cat) => {
+              {!isDefault && categories.map((cat) => {
                 const uids = (cat.items ?? []).map((i) => i.uid).filter((u): u is string => !!u)
                 if (!uids.length) return null
                 const onCount = uids.filter((u) => !excluded.has(u)).length
