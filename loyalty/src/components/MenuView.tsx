@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import {
   LANGS, RTL, MENU_UI, loc, fmtPrice,
   type Lang, type MenuData, type MenuCategory, type MenuItem,
 } from '@/lib/menu/types'
-import { fetchMenuClient, fetchMenuStamp } from '@/lib/menu/client'
+import { fetchMenuClient, fetchMenuStamp, fetchHappyHour } from '@/lib/menu/client'
+import { applyHappyHour, isHappyHourActive, type HappyHour, type DiscountedItem } from '@/lib/menu/variants'
 import LanguageSwitch from '@/components/LanguageSwitch'
 
 const POLL_MS = 30_000
@@ -14,6 +15,10 @@ const POLL_MS = 30_000
 export default function MenuView({ initial }: { initial: MenuData | null }) {
   const [menu, setMenu] = useState<MenuData | null>(initial)
   const [loading, setLoading] = useState(initial === null)
+  const [happyHour, setHappyHour] = useState<HappyHour | null>(null)
+  // Re-evaluate every minute so the discount appears and disappears on time
+  // for a customer sitting with the menu open.
+  const [, setMinuteTick] = useState(0)
   const [lang, setLang] = useState<Lang>('he')
   const [openId, setOpenId] = useState<string | null>(initial?.categories[0]?.id ?? null)
   const chipsRef = useRef<HTMLDivElement>(null)
@@ -64,6 +69,25 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
     document.addEventListener('visibilitychange', onVis)
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
   }, [refresh])
+
+  // Happy hour is read client-side and re-checked every minute, so the window
+  // opens and closes on time instead of whenever a cache expires.
+  useEffect(() => {
+    let alive = true
+    fetchHappyHour().then((hh) => { if (alive) setHappyHour(hh) })
+    const poll = setInterval(() => { fetchHappyHour().then((hh) => { if (alive) setHappyHour(hh) }) }, POLL_MS * 4)
+    const tick = setInterval(() => setMinuteTick((n) => n + 1), 60_000)
+    return () => { alive = false; clearInterval(poll); clearInterval(tick) }
+  }, [])
+
+  const happyActive = isHappyHourActive(happyHour)
+  const categories = useMemo(
+    () => (menu ? applyHappyHour(menu.categories, happyHour) : []),
+    // minuteTick is intentionally not referenced here — the state update alone
+    // re-runs this on each tick, which is what makes the window close on time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [menu, happyHour, happyActive],
+  )
 
   const centerChip = useCallback((id: string | null, instant = false) => {
     const chips = chipsRef.current
@@ -133,10 +157,10 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
           </Link>
         </header>
 
-        {menu && menu.categories.length > 0 && (
+        {menu && categories.length > 0 && (
           <div className="menu-chips-wrap rise" style={{ animationDelay: '160ms' }}>
             <nav className="menu-chips" ref={chipsRef} aria-label="categories">
-              {menu.categories.map((cat) => (
+              {categories.map((cat) => (
                 <button key={cat.id} data-chip={cat.id} type="button"
                   className={`menu-chip${cat.id === openId ? ' active' : ''}`}
                   onClick={() => openCategory(cat.id)}>
@@ -148,13 +172,34 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
         )}
       </div>
 
+      {/* Say why prices are lower than the printed menu, and until when. */}
+      {happyActive && happyHour && (
+        <div
+          className="rise"
+          style={{
+            margin: '10px 14px 0', padding: '10px 14px', borderRadius: 13,
+            display: 'flex', alignItems: 'center', gap: 9,
+            background: 'linear-gradient(135deg, rgba(255,94,58,0.18), rgba(255,138,92,0.08))',
+            border: '1px solid rgba(255,94,58,0.32)',
+          }}
+        >
+          <span aria-hidden style={{ fontSize: '1.05rem' }}>🍹</span>
+          <span style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.9rem' }}>
+            {MENU_UI.happyHour[lang]}
+          </span>
+          <span dir="ltr" style={{ marginInlineStart: 'auto', fontSize: '0.82rem', fontWeight: 600, color: 'var(--neon-soft)' }}>
+            {MENU_UI.happyHourUntil[lang]} {happyHour.end}
+          </span>
+        </div>
+      )}
+
       <main className="menu-main">
         {loading ? (
           <MenuSkeleton />
-        ) : !menu || menu.categories.length === 0 ? (
+        ) : !menu || categories.length === 0 ? (
           <p className="menu-empty">{MENU_UI.unavailable[lang]}</p>
         ) : (
-          menu.categories.map((cat, i) => (
+          categories.map((cat, i) => (
             <CategorySection key={cat.id} cat={cat} lang={lang} open={cat.id === openId}
               badges={menu.badges} delay={Math.min(i, 8) * 45} onToggle={() => openCategory(cat.id)} />
           ))
@@ -202,6 +247,8 @@ function ItemRow({
 }) {
   const blist = it.badges ?? (it.badge ? [it.badge] : [])
   const price = fmtPrice(it.price)
+  const d = it as DiscountedItem
+  const wasPrice = d.discountPercent ? fmtPrice(d.originalPrice) : ''
   return (
     <div className={`item${it.available === false ? ' sold' : ''}`} style={{ ['--i' as string]: i } as CSSProperties}>
       {it.image && <img className="item-thumb" src={it.image} alt="" loading="lazy" />}
@@ -215,7 +262,23 @@ function ItemRow({
         </div>
         {it.note && <div className="item-note">{loc(it.note, lang)}</div>}
       </div>
-      {price && <div className="price">{price}<span className="cur">₪</span></div>}
+      {price && (
+        <div className="price">
+          {wasPrice && (
+            <span
+              title={MENU_UI.wasPrice[lang]}
+              style={{
+                display: 'block', fontSize: '0.72em', fontWeight: 600,
+                color: 'var(--text-faint)', textDecoration: 'line-through',
+                lineHeight: 1.1, marginBottom: 1,
+              }}
+            >{wasPrice}₪</span>
+          )}
+          <span style={wasPrice ? { color: 'var(--neon-soft)' } : undefined}>
+            {price}<span className="cur">₪</span>
+          </span>
+        </div>
+      )}
     </div>
   )
 }

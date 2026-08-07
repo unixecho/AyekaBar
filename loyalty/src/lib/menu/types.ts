@@ -1,6 +1,8 @@
 // Menu domain types + i18n helpers. Mirrors the shape stored in Supabase
 // (public.menus.published -> { categories: [...] }) and the legacy menu-data.js.
 
+import { applyVariant } from './variants'
+
 export type Lang = 'he' | 'en' | 'ar'
 export const LANGS: Lang[] = ['he', 'en', 'ar']
 export const RTL: Record<Lang, boolean> = { he: true, ar: true, en: false }
@@ -8,6 +10,11 @@ export const RTL: Record<Lang, boolean> = { he: true, ar: true, en: false }
 export type Localized = { he?: string; en?: string; ar?: string }
 
 export interface MenuItem extends Localized {
+  /** Stable identity, minted by ensureUids(). Categories always had an `id`;
+   *  items were addressed by array position, which changes on every reorder —
+   *  so nothing could reference an item until this existed. Menu variants and
+   *  happy-hour rules both depend on it. */
+  uid?: string
   price?: number | string | null
   note?: Localized
   badges?: string[]
@@ -29,6 +36,8 @@ export interface MenuData {
   badges: Record<string, Localized>
   categories: MenuCategory[]
   publishedAt: string | null
+  /** Name of the variant on show, e.g. "יום שישי". Null on the default. */
+  variantName?: Localized | null
 }
 
 // This deployment shows one bar. The menu lives in public.menus (by slug); the
@@ -40,15 +49,28 @@ export interface PublicMenuRow {
   badges: MenuData['badges'] | null
   menu: { categories?: MenuData['categories'] } | null
   published_at: string | null
+  /** Active variant (migration 013). Null on a database that hasn't run it. */
+  variant_id?: string | null
+  variant_name?: Localized | null
+  variant_excluded_uids?: string[] | null
 }
+
+/** Columns the public menu reads. Kept in one place so the server and client
+ *  fetchers can never drift apart. */
+export const PUBLIC_MENU_COLS =
+  'name,badges,menu,published_at,variant_id,variant_name,variant_excluded_uids'
 
 export function normalizeMenuRow(row: PublicMenuRow | null): MenuData | null {
   if (!row) return null
   return {
     name: row.name ?? {},
     badges: row.badges ?? {},
-    categories: row.menu?.categories ?? [],
+    // Variant filtering happens here so every reader — server first paint and
+    // client poll alike — sees the same menu. `applyVariant` no-ops when the
+    // list is empty, which is also the pre-migration shape.
+    categories: applyVariant(row.menu?.categories ?? [], row.variant_excluded_uids),
     publishedAt: row.published_at ?? null,
+    variantName: row.variant_name ?? null,
   }
 }
 
@@ -76,4 +98,9 @@ export const MENU_UI = {
     ar: 'القائمة غير متوفرة حالياً. حاول مرة أخرى بعد قليل.',
   },
   menuWord: { he: 'תפריט', en: 'Menu', ar: 'القائمة' },
+  happyHour: { he: 'שעה שמחה', en: 'Happy hour', ar: 'ساعة سعيدة' },
+  // A cheaper price with no explanation reads as a mistake — say why, and
+  // until when, so nobody argues about it at the bar.
+  happyHourUntil: { he: 'עד', en: 'until', ar: 'حتى' },
+  wasPrice: { he: 'מחיר רגיל', en: 'Regular price', ar: 'السعر العادي' },
 } as const

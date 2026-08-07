@@ -26,6 +26,9 @@ export const LOYALTY_VISIBLE_DEFAULT = true
  *  handle or a moved Google review link doesn't need a code deploy. */
 export const PORTAL_LINKS = 'portal_links'
 
+/** Happy hour config blob (migration 013). Shape lives in lib/menu/variants. */
+export const HAPPY_HOUR_KEY = 'happy_hour'
+
 export type PortalLinkKey = 'instagram' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {

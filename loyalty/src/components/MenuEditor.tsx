@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { MENU_SLUG, loc, type MenuCategory, type MenuItem, type Localized } from '@/lib/menu/types'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
+import MenuVersionBar from '@/components/MenuVersionBar'
+import HappyHourCard from '@/components/HappyHourCard'
 
 const T = {
   title: 'עורך התפריט',
@@ -124,6 +126,11 @@ export default function MenuEditor() {
       <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', margin: 0 }}>{T.publishHint}
         {publishedAt && <> <span style={{ color: 'var(--text-faint)' }}>· {new Date(publishedAt).toLocaleString('he-IL')}</span></>}
       </p>
+
+      {/* Which version customers see, and the happy-hour window. Both sit
+          above the item list because they decide what the item list means. */}
+      <MenuVersionBar />
+      <HappyHourCard categories={cats} />
 
       {cats.length === 0 && <p style={{ color: 'var(--text-faint)', textAlign: 'center', padding: '10px 0' }}>{T.empty}</p>}
 
