@@ -13,7 +13,7 @@ import { getLoyaltyEnabled, getLoyaltyVisible, getPortalLinks } from '@/lib/sett
 export default async function OwnerDashboardPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/owner')
+  if (!user) redirect('/login')
 
   // Middleware already gates this, but verify server-side too (defense in depth).
   const { data: me } = await supabase
@@ -21,7 +21,7 @@ export default async function OwnerDashboardPage() {
     .select('role, badge, email, first_name')
     .eq('auth_user_id', user.id)
     .maybeSingle()
-  if (!me || !isOp(me)) redirect('/owner?denied=1')
+  if (!me || !isOp(me)) redirect('/no-access')
 
   // Self-heal: a manually-seeded owner row has no name/email — backfill it from
   // the owner's own Google profile so the roster shows them properly.

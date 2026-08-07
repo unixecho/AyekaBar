@@ -11,7 +11,7 @@ export default async function StaffDashboardPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) redirect('/staff')
+  if (!user) redirect('/login')
 
   // Being signed in with Google is not being staff. Middleware gates this too
   // (and claims a pending invite on the way in), but check here as well —
@@ -21,7 +21,7 @@ export default async function StaffDashboardPage() {
     .select('role, badge')
     .eq('auth_user_id', user.id)
     .maybeSingle()
-  if (!me) redirect('/staff?denied=1')
+  if (!me) redirect('/no-access')
 
   // The check-in QR only means anything while the club is running. Staff can
   // still sign in when it's off — they just see why the code isn't here,

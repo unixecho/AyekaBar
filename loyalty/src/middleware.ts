@@ -73,15 +73,10 @@ export async function middleware(request: NextRequest) {
   const isProtected = PROTECTED_ROUTES.some((route) => pathname.startsWith(route))
 
   if (isProtected && !user) {
-    // Redirect to appropriate sign-in page based on route
-    const redirectTo = pathname.startsWith('/staff')
-      ? '/staff'
-      : pathname.startsWith('/owner')
-      ? '/owner'
-      : '/customer'
-
+    // One door for everyone — /auth/callback sorts out where they land.
     const url = request.nextUrl.clone()
-    url.pathname = redirectTo
+    url.pathname = '/login'
+    url.search = ''
     return NextResponse.redirect(url)
   }
 
@@ -124,11 +119,13 @@ export async function middleware(request: NextRequest) {
       || (opProtected && !isOp(row))
 
     if (denied) {
-      // Authenticated but not authorized — send back to the sign-in page with a
-      // flag so it can explain (rather than a silent bounce to home).
+      // Authenticated but not authorized. Sending them back to a sign-in page
+      // was the wrong shape — they ARE signed in, and re-offering the button
+      // reads as "try again" when trying again changes nothing. /no-access
+      // explains it and gives them the admin's phone number.
       const url = request.nextUrl.clone()
-      url.pathname = ownerProtected ? '/owner' : '/staff'
-      url.search = '?denied=1'
+      url.pathname = '/no-access'
+      url.search = ''
       return NextResponse.redirect(url)
     }
   }

@@ -95,7 +95,7 @@ export default async function LoyaltyLandingPage() {
 
         {enabled ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Link href="/customer" className="rise press" style={{
+            <Link href="/login" className="rise press" style={{
               display: 'block',
               width: '100%',
               borderRadius: 14,
@@ -112,7 +112,7 @@ export default async function LoyaltyLandingPage() {
               אני לקוח/ה
             </Link>
 
-            <Link href="/staff" className="rise press" style={{
+            <Link href="/login" className="rise press" style={{
               display: 'block',
               width: '100%',
               borderRadius: 14,

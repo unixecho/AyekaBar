@@ -101,10 +101,10 @@ async function getProfile(): Promise<ProfileData | null> {
 export default async function CustomerDashboardPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/customer')
+  if (!user) redirect('/login')
 
   const profile = await getProfile()
-  if (!profile) redirect('/customer')
+  if (!profile) redirect('/login')
 
   const { customer, rewards, recentVisits } = profile
 
