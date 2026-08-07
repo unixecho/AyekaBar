@@ -15,7 +15,11 @@ const PROTECTED_ROUTES = [
 // bounce to /loyalty, which renders the "coming soon" screen. /owner/* is
 // deliberately NOT in here — the owner still manages rewards, customers and
 // the switch itself while the club is dark.
-const LOYALTY_ROUTES = ['/customer', '/staff', '/checkin']
+// NOTE: '/staff' is deliberately absent. Gating it meant STAFF COULD NOT SIGN
+// IN AT ALL while the club was off — the sign-in page itself was redirected to
+// the coming-soon screen, so it looked like their accounts were broken. The
+// staff dashboard shows a "club is off" state instead of the QR code.
+const LOYALTY_ROUTES = ['/customer', '/checkin']
 
 const inSection = (pathname: string, root: string) =>
   pathname === root || pathname.startsWith(`${root}/`)
