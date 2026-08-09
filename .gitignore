@@ -43,3 +43,6 @@ next-env.d.ts
 # OS
 .DS_Store
 Thumbs.db
+
+# Local pre-migration data backup — never commit
+.migration-backup/
