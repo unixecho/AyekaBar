@@ -1,6 +1,45 @@
+# Context / planning docs — kept local, never shipped
 BRAND.md
 CLAUDE.md
 CONTENT.md
 HANDOFF.md
 README.md
+MIGRATION_PLAN.md
+PLAN_MENU_BUILDER.md
+PLAN_SOCIAL_FEED.md
+SIGNOUT_IMPLEMENTATION.md
 .claude/
+
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Testing
+/coverage
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Env files — never commit these
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# OS
+.DS_Store
+Thumbs.db
