@@ -15,13 +15,18 @@ import { visibleReviews, type PortalReview, type PortalReviewsBlock } from '@/li
 // nudged forward each frame instead, which keeps native momentum, native
 // overscroll and native scrollbars, and lets any touch take over instantly.
 //
-// THREE THINGS THAT LOOK LIKE BUGS AND ARE NOT
+// The arrows and the dots underneath drive that same scrollLeft, so all four
+// ways of moving the wall (drift, swipe, arrow, dot) are the one mechanism.
+//
+// FOUR THINGS THAT LOOK LIKE BUGS AND ARE NOT
 // 1. The track is forced to `direction: ltr` even on the Hebrew (RTL) portal.
 //    In an RTL scroller, scrollLeft runs from 0 down to negative, so every
 //    wrap calculation would need a per-direction branch. The card ORDER is
 //    decorative here — it's a marquee, not a reading sequence — so pinning
 //    the track to LTR buys one code path in every browser. Each card still
-//    sets its own `dir` from the language it was written in.
+//    sets its own `dir` from the language it was written in. The arrows are
+//    physical for the same reason: the left one moves the wall left, in every
+//    language, which is what the motion itself shows.
 // 2. The list is rendered twice. That is what makes the loop seamless: once
 //    scrollLeft passes one copy's width we subtract that width, and since the
 //    content at both points is identical the jump is invisible. The second
@@ -29,12 +34,30 @@ import { visibleReviews, type PortalReview, type PortalReviewsBlock } from '@/li
 // 3. Scroll snapping is toggled, not set once. With `scroll-snap-type` on
 //    while we drive scrollLeft from rAF, the browser yanks the scroller back
 //    to the nearest snap point every frame and the whole wall stutters. Snap
-//    is therefore OFF while drifting and ON while the user is in control.
+//    is therefore OFF whenever we are moving it and ON while the user is.
+// 4. An arrow/dot glide is stored as a DISTANCE STILL TO TRAVEL, never as a
+//    target scrollLeft. The seamless wrap rewrites scrollLeft mid-glide; a
+//    remembered target would suddenly be one full loop away, and the wall
+//    would bolt sideways. Relative distance is immune to that.
+// 5. The drift never reads `el.scrollLeft` back to compute its next step —
+//    it keeps its own float in `posRef` and only ever WRITES to the DOM.
+//    `scrollLeft`'s getter reports whole pixels on most setups, and at this
+//    drift's speed a single frame's nudge is well under a pixel (26px/s at
+//    60fps ≈ 0.4px/frame). Read that rounded value back and add the next
+//    nudge to *it*, and every frame's progress gets thrown away before the
+//    next one arrives — the position rounds right back to where it started,
+//    forever. Keeping the running total in JS instead of the DOM is what
+//    lets the fractional part survive from frame to frame; only the value
+//    actually written to `scrollLeft` gets rounded, once, for display.
 
 /** Drift speed. Slow enough to read a quote as it passes. */
 const SPEED_PX_S = 26
 /** How long after the last interaction the drift picks back up. */
 const IDLE_MS = 2500
+/** Glide time for a one-card arrow tap; longer hops get a little more. */
+const GLIDE_BASE_MS = 340
+const GLIDE_PER_CARD_MS = 130
+const GLIDE_MAX_MS = 900
 
 // Every card is attributed the same generic way, regardless of whether the
 // stored review carries a real name — the wall never surfaces a reviewer's
@@ -43,24 +66,34 @@ const IDLE_MS = 2500
 // it for display.
 const I18N: Record<Lang, {
   eyebrow: string; anonymous: string; region: string; onGoogle: string
+  prev: string; next: string; goTo: (n: number) => string
 }> = {
   he: {
     eyebrow: 'מה אומרים עלינו',
     anonymous: 'ביקורת מגוגל',
     region: 'ביקורות לקוחות',
     onGoogle: 'לצפייה בכל הביקורות',
+    prev: 'הביקורת הקודמת',
+    next: 'הביקורת הבאה',
+    goTo: (n) => `מעבר לביקורת ${n}`,
   },
   en: {
     eyebrow: 'What people say',
     anonymous: 'Google review',
     region: 'Customer reviews',
     onGoogle: 'See all reviews',
+    prev: 'Previous review',
+    next: 'Next review',
+    goTo: (n) => `Go to review ${n}`,
   },
   ar: {
     eyebrow: 'ماذا يقولون عنا',
     anonymous: 'مراجعة من جوجل',
     region: 'تقييمات العملاء',
     onGoogle: 'عرض كل التقييمات',
+    prev: 'التقييم السابق',
+    next: 'التقييم التالي',
+    goTo: (n) => `الانتقال إلى التقييم ${n}`,
   },
 }
 
@@ -120,6 +153,31 @@ function Card({ review, lang }: { review: PortalReview; lang: Lang }) {
   )
 }
 
+/** Physical chevrons — see note 1 at the top; deliberately not `.dir-flip`. */
+function Chevron({ back }: { back: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor"
+      strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d={back ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
+    </svg>
+  )
+}
+
+/** Fewest cards to travel from `from` to `to` on a loop of `n` — either way round. */
+function shortestHop(from: number, to: number, n: number): number {
+  const forward = ((to - from) % n + n) % n
+  return forward > n / 2 ? forward - n : forward
+}
+
+/** Keep a position inside [0, period) — pure, so it's cheap to call every
+ *  frame against the accumulator without touching the DOM. See note 5 up top. */
+function wrapValue(x: number, period: number): number {
+  if (period <= 0) return x
+  if (x >= period) return x - period
+  if (x < 0) return x + period
+  return x
+}
+
 export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock; lang: Lang }) {
   const items = visibleReviews(block)
   const t = I18N[lang]
@@ -132,10 +190,21 @@ export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock;
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** Distance from a card to its own copy — the exact loop period. */
   const periodRef = useRef(0)
+  /** Centre of the first card in scroll coordinates — where the dots count from. */
+  const originRef = useRef(0)
+  /** In-flight arrow/dot glide. Relative distance only — see note 4 up top. */
+  const glideRef = useRef<{ dist: number; moved: number; start: number; dur: number } | null>(null)
+  /** Mirrors `reduced` for the callbacks, which must not re-create on it. */
+  const reducedRef = useRef(false)
+  // Our own float copy of the scroll position, accumulated independent of the
+  // DOM. See note 5 up top: `el.scrollLeft` is where every prior version of
+  // this drift silently died.
+  const posRef = useRef(0)
 
   const [inView, setInView] = useState(false)
   const [reduced, setReduced] = useState(false)
   const [snap, setSnap] = useState(false)
+  const [active, setActive] = useState(0)
 
   const count = items.length
 
@@ -152,16 +221,31 @@ export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock;
     const first = track.children[0] as HTMLElement | undefined
     const copy = track.children[count] as HTMLElement | undefined
     periodRef.current = first && copy ? copy.offsetLeft - first.offsetLeft : 0
+    // offsetLeft is layout-only (scrolling never changes it) and both elements
+    // resolve to the same offsetParent, so the difference is the card's offset
+    // inside the track — i.e. its position in scroll coordinates.
+    originRef.current = first ? first.offsetLeft - track.offsetLeft + first.offsetWidth / 2 : 0
   }, [count])
 
-  /** Keep scrollLeft inside the first copy, so the loop never reaches an end. */
+  /** One-off DOM sync for the non-animated paths (reduced motion, manual
+   *  jumps) — the animated path wraps `posRef.current` directly instead. */
   const wrap = useCallback(() => {
     const el = scrollerRef.current
-    const period = periodRef.current
-    if (!el || period <= 0) return
-    if (el.scrollLeft >= period) el.scrollLeft -= period
-    else if (el.scrollLeft < 0.5) el.scrollLeft += period
+    if (!el) return
+    el.scrollLeft = wrapValue(el.scrollLeft, periodRef.current)
   }, [])
+
+  /** Which card is centred right now — the one the dots light up for. */
+  const syncActive = useCallback(() => {
+    const el = scrollerRef.current
+    const period = periodRef.current
+    if (!el || period <= 0 || count === 0) return
+    const stride = period / count
+    const centre = el.scrollLeft + el.clientWidth / 2
+    const i = Math.round((centre - originRef.current) / stride)
+    const wrapped = ((i % count) + count) % count
+    setActive((prev) => (prev === wrapped ? prev : wrapped))
+  }, [count])
 
   /** Any real input wins: stop drifting, hand snapping back to the browser. */
   const yieldToUser = useCallback(() => {
@@ -170,6 +254,41 @@ export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock;
     if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
     snapTimerRef.current = setTimeout(() => setSnap(false), IDLE_MS)
   }, [])
+
+  /** Move the wall by whole cards, from an arrow tap or a dot tap. */
+  const glide = useCallback((cards: number) => {
+    const el = scrollerRef.current
+    const period = periodRef.current
+    if (!el || period <= 0 || !cards) return
+    const stride = period / count
+    const now = performance.now()
+
+    // Snapping must be off while WE drive scrollLeft, for the same reason it is
+    // off during the drift (note 3). A glide lands on an exact card boundary
+    // anyway, so nothing is lost by not re-arming it afterwards.
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+    setSnap(false)
+
+    if (reducedRef.current) {
+      el.scrollLeft += cards * stride
+      wrap()
+      // Keep the accumulator honest — see note 5 up top — so a later toggle
+      // out of reduced motion resumes drift from here, not a stale value.
+      posRef.current = el.scrollLeft
+      syncActive()
+      resumeAtRef.current = now + IDLE_MS
+      return
+    }
+
+    // Rapid taps add up instead of cancelling each other: whatever the previous
+    // glide had left to travel is carried into the new one.
+    const inFlight = glideRef.current
+    const dist = cards * stride + (inFlight ? inFlight.dist - inFlight.moved : 0)
+    const dur = Math.min(GLIDE_MAX_MS, GLIDE_BASE_MS + GLIDE_PER_CARD_MS * Math.abs(dist / stride))
+
+    glideRef.current = { dist, moved: 0, start: now, dur }
+    resumeAtRef.current = now + dur + IDLE_MS
+  }, [count, wrap, syncActive])
 
   useEffect(() => () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current) }, [])
 
@@ -208,41 +327,66 @@ export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock;
   // changes on rotate/resize and has to be re-measured, not measured once.
   useEffect(() => {
     measure()
+    syncActive()
     const track = trackRef.current
     if (!track || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(measure)
+    const ro = new ResizeObserver(() => { measure(); syncActive() })
     ro.observe(track)
     return () => ro.disconnect()
-  }, [measure])
+  }, [measure, syncActive])
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const sync = () => setReduced(mq.matches)
+    const sync = () => { reducedRef.current = mq.matches; setReduced(mq.matches) }
     sync()
     mq.addEventListener('change', sync)
     return () => mq.removeEventListener('change', sync)
   }, [])
 
+  // No rAF under reduced motion: there is no drift to run, and a glide takes
+  // the instant branch above rather than animating.
   useEffect(() => {
     if (!inView || reduced) return
     let raf = 0
     let last = performance.now()
+    posRef.current = scrollerRef.current?.scrollLeft ?? 0
 
     const step = (now: number) => {
       // Cap the delta so a backgrounded tab doesn't return and lurch forward.
       const dt = Math.min(now - last, 50)
       last = now
       const el = scrollerRef.current
-      if (el && !document.hidden && now >= resumeAtRef.current) {
-        el.scrollLeft += (SPEED_PX_S * dt) / 1000
+      if (!el) { raf = requestAnimationFrame(step); return }
+
+      const g = glideRef.current
+      if (g) {
+        const p = Math.min(1, (now - g.start) / g.dur)
+        const eased = 1 - Math.pow(1 - p, 3)
+        const want = g.dist * eased
+        posRef.current += want - g.moved
+        g.moved = want
+        if (p >= 1) glideRef.current = null
+        posRef.current = wrapValue(posRef.current, periodRef.current)
+        el.scrollLeft = posRef.current
+      } else if (!document.hidden && now >= resumeAtRef.current) {
+        // Accumulated in `posRef`, never derived from `el.scrollLeft` — see
+        // note 5 up top. This is the one line that was silently going nowhere.
+        posRef.current += (SPEED_PX_S * dt) / 1000
+        posRef.current = wrapValue(posRef.current, periodRef.current)
+        el.scrollLeft = posRef.current
+      } else {
+        // Not driving right now (mid-interaction or cooling down): track
+        // whatever native scrolling/touch is doing, so the accumulator isn't
+        // stale the instant the drift is allowed to take back over.
+        posRef.current = el.scrollLeft
       }
-      wrap()
+
       raf = requestAnimationFrame(step)
     }
 
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
-  }, [inView, reduced, wrap])
+  }, [inView, reduced])
 
   // Nothing to brag about yet — render nothing rather than an empty heading.
   if (!items.length) return null
@@ -251,6 +395,8 @@ export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock;
     ...items.map((r) => ({ r, key: `a-${r.id}`, ghost: false })),
     ...items.map((r) => ({ r, key: `b-${r.id}`, ghost: true })),
   ]
+  /** One quote can't be paged through — controls would be furniture. */
+  const paged = count > 1
 
   return (
     <section ref={sectionRef} className={`rw${inView ? ' in' : ''}`} aria-label={t.region}>
@@ -269,26 +415,56 @@ export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock;
         </a>
       </header>
 
-      <div
-        ref={scrollerRef}
-        className="rw-scroller"
-        style={{ scrollSnapType: snap ? 'x mandatory' : 'none' }}
-        onPointerDown={yieldToUser}
-        onWheel={yieldToUser}
-        onTouchStart={yieldToUser}
-        onKeyDown={yieldToUser}
-        tabIndex={0}
-        role="group"
-        aria-label={t.region}
-      >
-        <div className="rw-track" ref={trackRef}>
-          {doubled.map(({ r, key, ghost }) => (
-            <div key={key} className="rw-slot" aria-hidden={ghost || undefined}>
-              <Card review={r} lang={lang} />
-            </div>
+      <div className="rw-stage">
+        {paged && (
+          <button type="button" className="rw-arrow rw-arrow-back" aria-label={t.prev} onClick={() => glide(-1)}>
+            <Chevron back />
+          </button>
+        )}
+
+        <div
+          ref={scrollerRef}
+          className="rw-scroller"
+          style={{ scrollSnapType: snap ? 'x mandatory' : 'none' }}
+          onScroll={syncActive}
+          onPointerDown={yieldToUser}
+          onWheel={yieldToUser}
+          onTouchStart={yieldToUser}
+          onKeyDown={yieldToUser}
+          tabIndex={0}
+          role="group"
+          aria-label={t.region}
+        >
+          <div className="rw-track" ref={trackRef}>
+            {doubled.map(({ r, key, ghost }) => (
+              <div key={key} className="rw-slot" aria-hidden={ghost || undefined}>
+                <Card review={r} lang={lang} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {paged && (
+          <button type="button" className="rw-arrow rw-arrow-fwd" aria-label={t.next} onClick={() => glide(1)}>
+            <Chevron back={false} />
+          </button>
+        )}
+      </div>
+
+      {paged && (
+        <div className="rw-dots">
+          {items.map((r, i) => (
+            <button
+              key={r.id}
+              type="button"
+              className={`rw-dot${i === active ? ' is-on' : ''}`}
+              aria-label={t.goTo(i + 1)}
+              aria-current={i === active || undefined}
+              onClick={() => glide(shortestHop(active, i, count))}
+            />
           ))}
         </div>
-      </div>
+      )}
     </section>
   )
 }
