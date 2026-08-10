@@ -23,8 +23,13 @@ export type NavDirection = 'forward' | 'back'
 const COMMIT_TIMEOUT_MS = 700
 
 /** Must stay >= the `.page-enter` animation-duration in globals.css (.32s).
- *  Short by even a little and the suppression below lifts before that
- *  animation has actually finished painting. */
+ *  Short by even a little and the `.menu-page .item` transition-suppression
+ *  below (globals.css) lifts before that animation has actually finished
+ *  painting. Everything else `data-vt` used to gate — `.page-enter` itself
+ *  and each element's own `.rise` — reads this flag exactly ONCE, at mount,
+ *  into template.tsx's local state, so THEIR timing no longer depends on
+ *  this constant; only the menu's still-live, still-toggled transition rule
+ *  does. See template.tsx for why the split exists. */
 const FALLBACK_ANIM_MS = 380
 
 const STACK_KEY = 'ayeka:navStack'
@@ -87,13 +92,15 @@ export function navigateWithTransition(path: string, direction: NavDirection, co
     root.dataset.nav = direction
     commit()
 
-    // `data-vt="running"` is ALSO what suppresses every per-element `.rise` /
-    // inline rise-in entrance animation for the page being navigated TO (see
-    // globals.css) — not just the View Transition path's own snapshot. Skip
-    // that here and the arriving page's own .page-enter slide runs at the
-    // same time as every button's individual stagger reveal, which is the
-    // exact "two animations moving the same content" jitter this exists to
-    // prevent. Reduced motion plays neither, so nothing to suppress there.
+    // `data-vt="running"` is what template.tsx reads, once, the instant the
+    // arriving page mounts, to decide whether to suppress its OWN entrance
+    // motion — this page's .page-enter slide and every button's individual
+    // `.rise` stagger. Skip setting it and both play at the same time as
+    // whatever else is arriving, which is the "two animations moving the same
+    // content" jitter this exists to prevent. It also gates the menu's
+    // per-item transition suppression live (see globals.css), which is why
+    // this still gets cleared on a timer below. Reduced motion plays neither,
+    // so nothing to suppress there.
     if (!reduced) {
       root.dataset.vt = 'running'
       setTimeout(() => { delete root.dataset.vt }, FALLBACK_ANIM_MS)

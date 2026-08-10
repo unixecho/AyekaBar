@@ -72,6 +72,16 @@ export default function PageTransitions() {
     function onPopState() {
       document.documentElement.dataset.nav = 'back'
       recordNavigation(location.pathname + location.search)
+
+      // This navigation was never wrapped in navigateWithTransition, so no
+      // push is actually happening here — but `data-vt` could still read
+      // "running", left over from a moments-ago forward click whose clear
+      // timer hasn't fired yet. template.tsx reads that flag once, the
+      // instant the arriving page mounts, to decide whether to suppress its
+      // own entrance motion. Inheriting a stale "yes, suppress" from an
+      // unrelated earlier navigation would leave THIS page with no arrival
+      // animation at all — nothing else provides one for a popstate nav.
+      delete document.documentElement.dataset.vt
     }
     window.addEventListener('popstate', onPopState)
 

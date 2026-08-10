@@ -128,8 +128,15 @@ html[dir="ltr"] .page-enter                     { animation-name: page-in-from-r
 html[dir="ltr"][data-nav="back"] .page-enter    { animation-name: page-in-from-left }
 
 /* A screenshot is already animating this content; animating it again inside
-   the snapshot reads as a stutter. */
-html[data-vt="running"] .page-enter { animation: none !important; }
+   the snapshot reads as a stutter.
+   `.page-enter--pushed` (applied once at mount by src/app/template.tsx,
+   never toggled afterward) rather than a live `html[data-vt="running"]`
+   selector — see the long comment in template.tsx for why: toggling
+   `animation-name` between `none` and a real value starts a BRAND NEW CSS
+   animation per spec, so a live selector that later stops matching doesn't
+   let the animation "resume", it REPLAYS it from frame zero. That was the
+   "finishes, then does a little refresh and starts again" bug. */
+.page-enter--pushed { animation: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .page-enter { animation: none; }
@@ -147,30 +154,37 @@ html[data-vt="running"] .page-enter { animation: none !important; }
 .rise { animation: rise-in .55s var(--ease) backwards; }
 .pop  { animation: handoff-pop .5s cubic-bezier(.34,1.56,.64,1) backwards; }
 
-/* While a page-level push is in flight (View Transition OR its fallback —
-   both set data-vt="running", see lib/nav/viewTransition.ts), every
-   per-element entrance reveal on the page being navigated TO is suppressed.
-   Two animation systems moving the same content at once — the whole page
-   sliding in as a container, individual buttons/cards cascading inside it on
-   their own stagger — is what read as jitter, not the push itself.
+/* Same reasoning as `.page-enter--pushed` above, one level down: while a
+   page-level push is in flight, every per-element entrance reveal ON THE
+   PAGE BEING NAVIGATED TO is suppressed too — the whole page sliding in as a
+   container, and individual buttons/cards ALSO cascading in on their own
+   stagger inside it, is two animation systems moving the same content at
+   once, which is what read as jitter in the first place.
 
-   Scoped under `.page-enter` specifically so this can never reach a
-   portalled modal (components/ModalPortal.tsx) that happens to open around
-   the same moment — modals live outside `.page-enter` on purpose and keep
-   their own entrance motion untouched.
+   `.page-enter--pushed` again, not a live `data-vt` selector, and for the
+   identical reason: this class is set ONCE at mount and never removed for
+   that page instance's lifetime (see template.tsx), so there is nothing left
+   to toggle later that could replay these from frame zero.
 
-   Never fires on a genuine first load / hard reload: nothing sets data-vt
-   there, so the full staggered reveal plays exactly as designed — this only
-   ever cancels the SECOND copy of the motion, on a click-driven navigation. */
-html[data-vt="running"] .page-enter .rise,
-html[data-vt="running"] .page-enter [style*="rise-in"] {
+   Never applies on a genuine first load / hard reload — nothing sets it
+   there, so the full staggered reveal plays exactly as designed. Only ever
+   cancels the SECOND copy of the motion, on a click-driven navigation. */
+.page-enter--pushed .rise,
+.page-enter--pushed [style*="rise-in"] {
   animation: none !important;
   opacity: 1 !important;
   transform: none !important;
 }
-/* The menu's per-item reveal is a CSS transition (triggered by the first
-   category auto-opening on load), not a @keyframes animation, so it needs
-   its own line — same reasoning, same scope. */
+
+/* The menu's per-item reveal is a CSS TRANSITION (triggered by the first
+   category auto-opening on load), not a @keyframes animation — transitions
+   only start when a watched property's value actually changes, so removing a
+   `transition: none` override later does NOT retrigger anything the way
+   toggling animation-name does. Safe to keep keyed off the live, time-boxed
+   `data-vt` flag: it needs to stop suppressing once the push settles, so that
+   opening OTHER categories later (no navigation in between) still gets its
+   normal per-item cascade — `.page-enter--pushed` is permanent for the page's
+   lifetime and would wrongly kill that for good. */
 html[data-vt="running"] .page-enter .menu-page .item,
 html[data-vt="running"] .page-enter .menu-page .item-name {
   transition: none !important;
