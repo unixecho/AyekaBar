@@ -29,11 +29,18 @@ export const PORTAL_LINKS = 'portal_links'
 /** Happy hour config blob (migration 013). Shape lives in lib/menu/variants. */
 export const HAPPY_HOUR_KEY = 'happy_hour'
 
-export type PortalLinkKey = 'instagram' | 'review' | 'gmaps' | 'waze' | 'amaps'
+/** The portal's review wall (migration 018). Shape + seed live in lib/reviews. */
+export const PORTAL_REVIEWS = 'portal_reviews'
+
+export type PortalLinkKey = 'instagram' | 'facebook' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {
   instagram: 'https://www.instagram.com/ayeka_bar/',
-  review: 'https://www.google.com/search?sca_esv=bf5b70d178609590&si=APenkKm7iecQ4G6P-TsbSMFKIQtv3EFIqRAFw-i8uEbk55Z-_7KuVymh7UmzzptLxAMIed7ULsObX2FBkuw7nT2KAF8MiqFu6xqzwWnw0NKO515Um1Z0Z8-i9F5axbTKJbSaHBIaHv9J&q=%D7%90%D7%99%D7%99%D7%9B%D7%94+Reviews&sa=X#',
+  facebook: 'https://www.facebook.com/p/%D7%90%D7%99%D7%99%D7%9B%D7%94-61568228073670/',
+  // Addressed by CID (the listing's stable id) rather than the old
+  // google.com/search URL, which carried a session-scoped `sca_esv` token that
+  // would eventually rot. CID harvested from the Maps listing on 2026-08-10.
+  review: 'https://maps.google.com/?cid=8772973758950612975',
   gmaps: 'https://maps.app.goo.gl/RkQKuohRE2WnxehDA',
   waze: 'https://waze.com/ul/hsvbbtt1nb',
   amaps: 'https://maps.apple/r/I8JK.APxMAXYhS',

@@ -3,7 +3,10 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 import { PORTAL_LINKS_DEFAULT, type PortalLinkKey } from '@/lib/settings/keys'
+import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
+import type { PortalReviewsBlock } from '@/lib/reviews/types'
 import LanguageSwitch, { useLanguage, type Lang } from '@/components/LanguageSwitch'
+import ReviewWall from '@/components/ReviewWall'
 
 const LINKS = {
   menu: '/menu',
@@ -13,11 +16,12 @@ const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
 
 const I18N: Record<Lang, {
   brand: ReactNode; tagline: string; navigate: string; menu: string; instagram: string
-  review: string; loyalty: string; soon: string; team: string; footer: string
+  facebook: string; review: string; loyalty: string; soon: string; team: string
+  footer: string
 }> = {
-  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', footer: '© אייכה בר' },
-  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', footer: '© Ayeka Bar' },
-  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', footer: '© אייכה בר' },
+  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', facebook: 'פייסבוק', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', footer: '© אייכה בר' },
+  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', facebook: 'Facebook', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', footer: '© Ayeka Bar' },
+  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', facebook: 'فيسبوك', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', footer: '© אייכה בר' },
 }
 
 const ICONS = {
@@ -26,6 +30,8 @@ const ICONS = {
   menu: <><path d="M4 5h16" /><path d="M4 10h16" /><path d="M4 15h10" /><path d="M4 20h7" /></>,
   loyalty: <><rect x="2" y="6" width="20" height="14" rx="3" /><path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" /><circle cx="12" cy="13" r="2" /><path d="M9 17c0-1.7 1.3-3 3-3s3 1.3 3 3" /></>,
   instagram: <><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></>,
+  // Stroked "f" in a rounded square, to sit in the same weight as Instagram's.
+  facebook: <><rect x="3" y="3" width="18" height="18" rx="5" /><path d="M12.4 20.6V9.7c0-1.4.8-2.2 2.2-2.2h1.3" /><path d="M10 12.7h5.3" /></>,
   review: <path d="M12 3l2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L4.3 9.4l6-.9z" />,
   pin: <><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" /><circle cx="12" cy="11" r="2.2" /></>,
 }
@@ -38,11 +44,13 @@ export default function Portal({
   loyaltyEnabled = false,
   loyaltyVisible = true,
   links = PORTAL_LINKS_DEFAULT,
+  reviews = PORTAL_REVIEWS_DEFAULT,
 }: {
   loyaltyEnabled?: boolean
   /** Off = no loyalty entry on the portal at all, teaser included. */
   loyaltyVisible?: boolean
   links?: Record<PortalLinkKey, string>
+  reviews?: PortalReviewsBlock
 }) {
   const [lang, setLang] = useLanguage()
   const [navOpen, setNavOpen] = useState(false)
@@ -52,13 +60,20 @@ export default function Portal({
   const delay = () => `${260 + (d++) * 85}ms`
 
   return (
-    <main style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 'calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px)', position: 'relative' }}>
+    <main style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 'calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px)', position: 'relative' }}>
       <div className="app-bg" aria-hidden />
       <div className="app-scrim" aria-hidden />
 
       <LanguageSwitch lang={lang} onChange={setLang} />
 
-      <div style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 26 }}>
+      {/* The hero still owns exactly one screen, so the portal's first paint is
+          unchanged and the review wall below becomes a deliberate scroll-down
+          reward rather than something competing with the buttons. */}
+      <div style={{
+        width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 26,
+        justifyContent: 'center', position: 'relative',
+        minHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 44px)',
+      }}>
         {/* brand */}
         <div style={{ textAlign: 'center', animation: `rise-in .6s var(--ease) .1s backwards` }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -127,15 +142,41 @@ export default function Portal({
             <Arrow />
           </a>
 
-          {/* Review */}
-          <a href={links.review} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
-            <span style={icWrap}><Ic>{ICONS.review}</Ic></span>
-            <span style={{ flex: 1, textAlign: 'start' }}>{t.review}</span>
+          {/* Facebook — takes the slot the review button used to hold. The
+              review CTA moved under the wall, where the quotes have already
+              made the case for leaving one. */}
+          <a href={links.facebook} target="_blank" rel="noopener noreferrer" className="press" style={{ ...btnStyle(false), animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+            <span style={icWrap}><Ic>{ICONS.facebook}</Ic></span>
+            <span style={{ flex: 1, textAlign: 'start' }}>{t.facebook}</span>
             <Arrow />
           </a>
         </div>
 
-        <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)', margin: 0, animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>{t.footer}</p>
+        {/* Without a cue almost nobody scrolls a link-hub that fits the screen,
+            and the wall is the whole point of scrolling. Chevron only: on a
+            desktop viewport the wall's own heading lands just below this, and
+            labelling both made the same phrase appear twice in a row. */}
+        <div className="rw-cue" aria-hidden style={{ animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
+          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+        </div>
+      </div>
+
+      <ReviewWall block={reviews} lang={lang} />
+
+      <div style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 16, marginTop: 22 }}>
+        {/* Deliberately not btnStyle(true) — that's the Menu button's look, and
+            reusing it here would make the review CTA read as "just another
+            button" right after a wall built to sell the idea of leaving one.
+            Same shape language (padding, radius, icon slot, Arrow), different
+            finish: a warm gold gradient (vs. the hero's plain orange) plus a
+            slow shimmer sweep via the .review-cta class in globals.css. */}
+        <a href={links.review} target="_blank" rel="noopener noreferrer" className="press review-cta" style={reviewCtaStyle}>
+          <span style={{ ...icWrap, color: '#ffcf70' }}><Ic>{ICONS.review}</Ic></span>
+          <span style={{ flex: 1, textAlign: 'start' }}>{t.review}</span>
+          <Arrow />
+        </a>
+
+        <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)', margin: 0 }}>{t.footer}</p>
       </div>
     </main>
   )
@@ -146,6 +187,20 @@ function Arrow() {
 }
 
 const icWrap: CSSProperties = { width: 26, display: 'grid', placeItems: 'center', color: 'var(--neon-soft)', flex: '0 0 auto' }
+
+// Same footprint as btnStyle(true) — padding, radius, layout — so the review
+// CTA still reads as a member of the same button family. Only the finish
+// differs: gold rather than orange, a brighter border, and (via .review-cta
+// in globals.css) a shimmer sweep that repeats every few seconds.
+const reviewCtaStyle: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 12, padding: '15px 16px', borderRadius: 15,
+  border: '1px solid rgba(255,199,84,0.4)',
+  background: 'linear-gradient(135deg, rgba(255,199,84,0.26), rgba(255,94,58,0.14))',
+  boxShadow: '0 0 26px rgba(255,178,64,0.3)',
+  color: 'var(--text)', textDecoration: 'none', fontWeight: 700, fontSize: '1rem',
+  fontFamily: 'inherit', cursor: 'pointer', width: '100%',
+  position: 'relative', overflow: 'hidden',
+}
 
 const soonChip: CSSProperties = {
   flex: '0 0 auto', borderRadius: 999, padding: '3px 10px',

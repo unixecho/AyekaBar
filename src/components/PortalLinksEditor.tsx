@@ -5,6 +5,7 @@ import type { PortalLinkKey } from '@/lib/settings/keys'
 
 const FIELDS: { key: PortalLinkKey; label: string; emoji: string }[] = [
   { key: 'instagram', label: 'אינסטגרם', emoji: '📷' },
+  { key: 'facebook', label: 'פייסבוק', emoji: '👍' },
   { key: 'review', label: 'ביקורת גוגל', emoji: '⭐' },
   { key: 'gmaps', label: 'Google Maps', emoji: '🗺️' },
   { key: 'waze', label: 'Waze', emoji: '🚗' },
@@ -13,7 +14,7 @@ const FIELDS: { key: PortalLinkKey; label: string; emoji: string }[] = [
 
 const T = {
   title: 'קישורי הפורטל',
-  subtitle: 'לאן מובילים כפתורי הניווט, אינסטגרם והביקורת בעמוד הראשי.',
+  subtitle: 'לאן מובילים כפתורי הניווט, הרשתות החברתיות והביקורת בעמוד הראשי.',
   save: 'שמירה',
   saving: 'שומר…',
   saved: 'נשמר',

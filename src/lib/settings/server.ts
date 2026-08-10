@@ -2,8 +2,11 @@ import {
   LOYALTY_ENABLED, LOYALTY_ENABLED_DEFAULT,
   LOYALTY_VISIBLE, LOYALTY_VISIBLE_DEFAULT,
   PORTAL_LINKS, PORTAL_LINKS_DEFAULT, type PortalLinkKey,
+  PORTAL_REVIEWS,
   SETTINGS_TAG,
 } from './keys'
+import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
+import { normalizeReviews, type PortalReviewsBlock } from '@/lib/reviews/types'
 
 // Server-only (like lib/menu/fetch.ts): imported from server components,
 // route handlers and middleware — never from a 'use client' module.
@@ -45,10 +48,20 @@ export function getLoyaltyVisible(): Promise<boolean> {
   return readSetting<boolean>(LOYALTY_VISIBLE, LOYALTY_VISIBLE_DEFAULT)
 }
 
-/** The portal's external link destinations (Instagram, review, navigate). */
+/** The portal's external link destinations (Instagram, Facebook, review, navigate). */
 export async function getPortalLinks(): Promise<Record<PortalLinkKey, string>> {
   const stored = await readSetting<Partial<Record<PortalLinkKey, string>>>(PORTAL_LINKS, {})
   // Merge over the defaults so a partially-saved row (or a key added after
-  // the owner last saved) never leaves a button pointing nowhere.
+  // the owner last saved) never leaves a button pointing nowhere. This is what
+  // makes adding a link key — `facebook`, say — safe before its migration runs.
   return { ...PORTAL_LINKS_DEFAULT, ...stored }
+}
+
+/** The owner-curated quotes behind the portal's review wall. */
+export async function getPortalReviews(): Promise<PortalReviewsBlock> {
+  const stored = await readSetting<unknown>(PORTAL_REVIEWS, null)
+  // Sanitize rather than trust: the row is owner-written but hand-editable in
+  // the SQL editor, and an empty/broken blob falls back to the seeded quotes
+  // instead of leaving a titled section with nothing under it.
+  return normalizeReviews(stored, PORTAL_REVIEWS_DEFAULT)
 }

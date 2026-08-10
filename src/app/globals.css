@@ -654,3 +654,222 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   .menu-page .cat-body-inner { opacity: 1 !important; transition: none !important; }
   .menu-page .menu-lang-menu { transition: opacity .12s linear; }
 }
+
+/* ============================================================
+   Review wall — the portal's scrolling "wall of love"
+   Driven by components/ReviewWall.tsx.
+
+   The track is a real overflow scroller whose scrollLeft is nudged from rAF,
+   not a transform marquee, so a touch can grab it. It is pinned to
+   `direction: ltr` on purpose even on the RTL portal — see the component's
+   header comment. Cards set their own `dir` from the language they were
+   written in, which is why an English review reads correctly inside Hebrew.
+   ============================================================ */
+.rw {
+  /* Full-bleed by cancelling the portal's 20px inline padding, so cards slide
+     out of the VIEWPORT rather than out of a 380px column.
+     Deliberately not `width: 100vw`: <html> carries `scrollbar-gutter: stable`,
+     so on desktop 100vw is wider than the space actually available and the
+     whole page picks up a horizontal scrollbar. */
+  width: calc(100% + 40px);
+  margin-inline: -20px;
+  margin-top: 34px;
+  padding-bottom: 4px;
+}
+
+/* Scroll cue, pinned to the bottom of the first screen. */
+.rw-cue {
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.rw-cue svg { animation: cue-bob 2.2s var(--ease) infinite; }
+@keyframes cue-bob {
+  0%, 100% { transform: translateY(0); opacity: .55 }
+  50%      { transform: translateY(4px); opacity: 1 }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-cue svg { animation: none; opacity: .7; }
+}
+
+.rw-head { text-align: center; margin-bottom: 16px; }
+.rw-eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+.rw-score { display: flex; align-items: center; justify-content: center; gap: 9px; }
+.rw-rating {
+  font-size: 2.1rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+  /* Latin digits keep their own direction inside a Hebrew/Arabic page. */
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-shadow: 0 0 22px rgba(255,94,58,0.45);
+}
+.rw-stars { display: inline-flex; gap: 1px; color: var(--neon); }
+.rw-count {
+  display: inline-block;
+  margin-top: 7px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-strong);
+  padding-bottom: 1px;
+}
+
+.rw-scroller {
+  /* Pinned LTR even on the RTL portal: in an RTL scroller scrollLeft runs from
+     0 down to negative, which would need a per-direction branch in every wrap
+     calculation. Card order here is decorative, so one code path wins. Each
+     card sets its own `dir` from the language it was written in. */
+  direction: ltr;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  outline: none;
+  /* Cards dissolve at the edges instead of being cut off — most of what makes
+     this read as premium rather than as a cropped list. */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent);
+          mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent);
+}
+.rw-scroller::-webkit-scrollbar { display: none; }
+.rw-scroller:focus-visible { outline: 2px solid var(--neon-2); outline-offset: 3px; border-radius: 20px; }
+
+.rw-track { display: flex; align-items: stretch; gap: 12px; padding: 6px 16px; width: max-content; }
+.rw-slot { scroll-snap-align: center; display: flex; }
+
+.rw-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(78vw, 320px);
+  margin: 0;
+  padding: 22px 20px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0) 42%),
+    var(--bg-elev);
+  box-shadow: 0 14px 34px rgba(0,0,0,0.36);
+  overflow: hidden;
+  /* Staggered reveal, driven by .rw.in — see the nth-child rules below. */
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity .55s var(--ease), transform .55s var(--ease);
+}
+.rw.in .rw-card { opacity: 1; transform: none; }
+.rw-slot:nth-child(1) .rw-card { transition-delay: 0ms; }
+.rw-slot:nth-child(2) .rw-card { transition-delay: 70ms; }
+.rw-slot:nth-child(3) .rw-card { transition-delay: 140ms; }
+.rw-slot:nth-child(4) .rw-card { transition-delay: 210ms; }
+.rw-slot:nth-child(n+5) .rw-card { transition-delay: 280ms; }
+
+/* The oversized quote glyph the whole design hangs off. Sits behind the text
+   at the card's start edge, so it flips side with the card's own direction. */
+.rw-mark {
+  position: absolute;
+  inset-inline-start: 12px;
+  /* The glyph's ink sits well below the top of its em box, so pulling this any
+     further up clips the mark against the card's overflow:hidden and it reads
+     as an orange smudge instead of a quotation mark. */
+  top: -4px;
+  font-size: 7rem;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--neon);
+  opacity: 0.15;
+  pointer-events: none;
+  user-select: none;
+}
+
+.rw-text {
+  position: relative;
+  margin: 0;
+  font-size: 1.14rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--text);
+  min-height: 4.9em;
+  /* Bound the tallest card: every card stretches to match it, and one long
+     review would otherwise set a huge height for all sixteen. */
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rw-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+.rw-avatar {
+  flex: 0 0 auto;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  box-shadow: 0 0 16px rgba(255,94,58,0.35);
+}
+.rw-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rw-name {
+  font-size: 0.9rem; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rw-meta { display: flex; align-items: center; gap: 7px; }
+.rw-when { font-size: 0.75rem; color: var(--text-faint); }
+
+@media (min-width: 720px) {
+  .rw-card { width: 340px; }
+  .rw-track { gap: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The drift is disabled in JS as well — this only covers the reveal, which
+     collapses to "already there" rather than to a shorter animation. */
+  .rw-card { opacity: 1 !important; transform: none !important; transition: none !important; }
+}
+
+/* ============================================================
+   Review CTA — gold-toned button under the wall, deliberately not the
+   hero-orange finish used elsewhere (see the comment in Portal.tsx). The
+   diagonal light band is the same shimmer trick as .sk (skeleton loading)
+   above, slowed down and gated to mostly-idle so it reads as a periodic
+   glint rather than a loading state.
+   ============================================================ */
+.review-cta::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.32) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: review-cta-shimmer 4.2s var(--ease) infinite;
+  pointer-events: none;
+}
+@keyframes review-cta-shimmer {
+  0%, 58%  { transform: translateX(-130%); }
+  82%      { transform: translateX(130%); }
+  100%     { transform: translateX(130%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .review-cta::after { animation: none; display: none; }
+}
