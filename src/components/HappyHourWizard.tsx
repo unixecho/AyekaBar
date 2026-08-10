@@ -169,9 +169,13 @@ export default function HappyHourWizard({
             <h2 className="hh-h2">{T.step1}</h2>
             <p className="hh-hint">{T.step1Hint}</p>
 
-            <HourGrid label={T.from} value={start} onChange={setStart} />
-            <div style={{ height: 18 }} />
-            <HourGrid label={T.to} value={end} onChange={setEnd} />
+            {/* Side by side once there's room: "from" and "to" are one
+                decision, and reading them as a pair beats scrolling between
+                two stacked pickers. */}
+            <div className="time-pair">
+              <HourGrid label={T.from} value={start} onChange={setStart} />
+              <HourGrid label={T.to} value={end} onChange={setEnd} />
+            </div>
 
             {overnight && <p className="hh-note">⌛ {T.overnight}</p>}
           </section>

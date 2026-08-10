@@ -46,6 +46,25 @@ html, body {
 
 [dir="rtl"] .dir-flip { transform: scaleX(-1); }
 
+/* ---- App-wide page transition (src/app/template.tsx) ----
+   OPACITY ONLY, and that restriction is load-bearing. This element wraps every
+   page, so a `transform` on it (the obvious way to add a slide) would make it
+   the containing block for every `position: fixed` descendant — and this app's
+   owner panel is built out of fixed bottom sheets. They would anchor to the
+   page instead of the viewport, and on a long page like the editor the scrim
+   would scroll away with the content instead of staying pinned. Measured, not
+   theorised: a fixed probe inside a transformed wrapper landed at (2, 10)
+   rather than (0, 0).
+   `filter` and `will-change` create the same trap. Opacity does not.
+
+   The travel comes from the page contents instead, which animate themselves in
+   with `.rise` — so the page still reads as arriving, not just appearing. */
+.page-enter { animation: page-in .3s var(--ease) both; }
+@keyframes page-in { from { opacity: 0 } to { opacity: 1 } }
+@media (prefers-reduced-motion: reduce) {
+  .page-enter { animation: none; }
+}
+
 .press { transition: transform .12s var(--ease), filter .12s ease; }
 .press:active { transform: scale(.96); filter: brightness(1.18); }
 
@@ -229,46 +248,65 @@ html[dir="ltr"] .menu-back svg { transform: scaleX(-1); }
 }
 
 /* ============================================================
-   iOS clock wheel (TempMenuSheet) — a column scrolling under a fixed
-   highlight band. Snapping is the browser's, so the momentum feels native.
+   iOS clock picker (TimeWheel) — columns scrolling under ONE fixed
+   selection rail. Snapping is the browser's, so momentum feels native.
+
+   The whole thing sits on its own opaque surface. That isn't decoration:
+   the columns are masked to fade at top and bottom, and a mask fades to
+   WHATEVER IS BEHIND — over the Happy Hour photo backdrop the numbers were
+   dissolving into the bar. The surface gives them something to dissolve into.
    ============================================================ */
-.wheel-row {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
+.tw {
+  position: relative; border-radius: 16px; overflow: hidden;
+  background: var(--bg-elev); border: 1px solid var(--line);
+  padding: 4px 10px;
+  /* Hugs its two columns instead of stretching: a full-width card left the
+     selection rail running far past the digits, which read as a stray bar. */
+  width: fit-content; margin-inline: auto;
 }
-.wheel-colon {
-  font-size: 1.5rem; font-weight: 700; color: var(--text-dim);
-  padding-bottom: 2px;
+/* One rail across BOTH columns, the way iOS draws it — a per-column band
+   reads as two chips stapled around the digits. Sits UNDER the numbers
+   (z-index 0 vs 1); on top it tinted them and looked like a highlighter. */
+.tw-band {
+  position: absolute; inset-inline: 4px; top: 50%; transform: translateY(-50%);
+  border-radius: 11px; background: rgba(255,255,255,0.06);
+  box-shadow: inset 0 0 0 1px rgba(255,94,58,0.26);
+  pointer-events: none; z-index: 0;
 }
-.wheel { position: relative; flex: 0 0 auto; width: 96px; }
-.wheel-band {
-  position: absolute; inset-inline: 0; top: 50%; transform: translateY(-50%);
-  border-radius: 12px; background: rgba(255,94,58,0.12);
-  box-shadow: inset 0 0 0 1px rgba(255,94,58,0.3);
-  pointer-events: none; z-index: 1;
+.tw-row {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center; gap: 2px;
 }
+.tw-colon {
+  font-size: 1.35rem; font-weight: 700; color: var(--text-dim);
+  padding-bottom: 2px; width: 14px; text-align: center;
+}
+.tw[data-disabled="true"] { opacity: 0.45; pointer-events: none; }
+
+.wheel { position: relative; flex: 0 0 auto; width: 68px; }
 .wheel-scroll {
   height: 100%; overflow-y: auto; scroll-snap-type: y mandatory;
   scrollbar-width: none; -webkit-overflow-scrolling: touch; outline: none;
   /* Grabbable: on a mouse the wheel is dragged, not flicked. Selection is off
      so a drag across the numbers doesn't highlight them like text. */
   cursor: grab; user-select: none; -webkit-user-select: none;
-  /* Fade the ends so the column reads as a cylinder rather than a cut-off list. */
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
-  mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
+  /* Ends fade so the column reads as a cylinder. Not all the way to zero —
+     the neighbouring values stay legible, which is what makes it scannable. */
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,.22), #000 34%, #000 66%, rgba(0,0,0,.22));
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,.22), #000 34%, #000 66%, rgba(0,0,0,.22));
 }
 .wheel-scroll::-webkit-scrollbar { display: none; }
 .wheel-scroll:active { cursor: grabbing; }
-.wheel-scroll:focus-visible { box-shadow: 0 0 0 2px var(--neon-soft); border-radius: 12px; }
+.wheel-scroll:focus-visible { box-shadow: inset 0 0 0 2px var(--neon-soft); border-radius: 11px; }
 .wheel-opt {
   display: grid; place-items: center; scroll-snap-align: center; cursor: pointer;
-  font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums;
-  color: var(--text-faint); user-select: none;
+  font-size: 1.3rem; font-weight: 500; font-variant-numeric: tabular-nums;
+  color: var(--text-faint); user-select: none; letter-spacing: 0.01em;
   transition: color .18s var(--ease), transform .18s var(--ease);
 }
 .wheel-opt[data-on="true"] {
-  color: var(--text); font-weight: 800; transform: scale(1.06);
+  color: var(--text); font-weight: 700; transform: scale(1.04);
 }
-.wheel[data-disabled="true"] { opacity: 0.45; pointer-events: none; }
 
 /* The reassurance line: when exactly the menu comes back. */
 .temp-preview {
@@ -334,21 +372,13 @@ html[dir="ltr"] .menu-back svg { transform: scaleX(-1); }
   max-width: 720px; margin: 0 auto; width: 100%;
 }
 
-/* Hours wrap into a grid — a 24-wide scroll strip reads as broken on desktop. */
-.hh-hours {
-  display: grid; gap: 7px;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-}
-.hh-hour {
-  padding: 12px 0; border-radius: 12px; cursor: pointer;
-  border: 1px solid var(--line-strong); background: var(--bg-elev);
-  color: var(--text-dim); font: inherit; font-weight: 700; font-size: 0.92rem;
-  font-variant-numeric: tabular-nums;
-  transition: border-color .2s var(--ease), background .2s var(--ease), color .2s var(--ease);
-}
-.hh-hour[data-on="true"] {
-  border-color: var(--neon); background: rgba(255,94,58,0.16);
-  color: var(--text); box-shadow: var(--glow);
+/* A from/to pair of time pickers: stacked on a phone, side by side on anything
+   wider. "From" and "to" are one decision — reading them together beats
+   scrolling between two full-height pickers. Used by Happy Hour and by the
+   automatic version schedule. */
+.time-pair { display: grid; gap: 16px; }
+@media (min-width: 560px) {
+  .time-pair { grid-template-columns: 1fr 1fr; gap: 18px; }
 }
 
 .hh-percent-card {

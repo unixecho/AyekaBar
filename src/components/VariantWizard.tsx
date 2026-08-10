@@ -326,16 +326,18 @@ export default function VariantWizard({
                       </p>
                     </div>
 
-                    <div>
-                      <label style={labelStyle}>{T.schedFrom}</label>
-                      <TimeWheel value={sched.start}
-                        onChange={(v) => setSched((s) => ({ ...s, start: v }))} />
-                    </div>
+                    <div className="time-pair">
+                      <div>
+                        <label style={labelStyle}>{T.schedFrom}</label>
+                        <TimeWheel value={sched.start}
+                          onChange={(v) => setSched((s) => ({ ...s, start: v }))} />
+                      </div>
 
-                    <div>
-                      <label style={labelStyle}>{T.schedTo}</label>
-                      <TimeWheel value={sched.end}
-                        onChange={(v) => setSched((s) => ({ ...s, end: v }))} />
+                      <div>
+                        <label style={labelStyle}>{T.schedTo}</label>
+                        <TimeWheel value={sched.end}
+                          onChange={(v) => setSched((s) => ({ ...s, end: v }))} />
+                      </div>
                     </div>
 
                     {sched.end <= sched.start && (

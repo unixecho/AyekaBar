@@ -134,7 +134,8 @@ export default function WheelPicker({
       className="wheel" data-disabled={disabled ? 'true' : undefined}
       style={{ height: VISIBLE * WHEEL_ITEM_H }}
     >
-      <div aria-hidden className="wheel-band" style={{ height: WHEEL_ITEM_H }} />
+      {/* No selection band here on purpose — TimeWheel draws ONE across both
+          columns, which is how a real picker looks. */}
       <div
         ref={ref} onScroll={handleScroll} onKeyDown={handleKey}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove}

@@ -1,6 +1,6 @@
 'use client'
 
-import WheelPicker from '@/components/WheelPicker'
+import WheelPicker, { WHEEL_ITEM_H } from '@/components/WheelPicker'
 
 // An hour:minute pair of clock wheels, speaking "HH:MM" in and out — the one
 // time control for the whole owner panel. Menu timers, the automatic version
@@ -41,18 +41,21 @@ export default function TimeWheel({
   minutes.sort((a, b) => a - b)
 
   return (
-    <div className="wheel-row" dir="ltr">
-      <WheelPicker
-        values={HOURS} value={h} disabled={disabled}
-        onChange={(nh) => onChange(fmtHhmm(nh, m))}
-        ariaLabel={hourLabel} format={pad}
-      />
-      <span aria-hidden className="wheel-colon">:</span>
-      <WheelPicker
-        values={minutes} value={m} disabled={disabled}
-        onChange={(nm) => onChange(fmtHhmm(h, nm))}
-        ariaLabel={minuteLabel} format={pad}
-      />
+    <div className="tw" data-disabled={disabled ? 'true' : undefined}>
+      <div aria-hidden className="tw-band" style={{ height: WHEEL_ITEM_H }} />
+      <div className="tw-row" dir="ltr">
+        <WheelPicker
+          values={HOURS} value={h} disabled={disabled}
+          onChange={(nh) => onChange(fmtHhmm(nh, m))}
+          ariaLabel={hourLabel} format={pad}
+        />
+        <span aria-hidden className="tw-colon">:</span>
+        <WheelPicker
+          values={minutes} value={m} disabled={disabled}
+          onChange={(nm) => onChange(fmtHhmm(h, nm))}
+          ariaLabel={minuteLabel} format={pad}
+        />
+      </div>
     </div>
   )
 }
