@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { BADGE_OPTIONS, badgeMeta } from '@/lib/staff/badges'
+import ModalPortal from '@/components/ModalPortal'
 
 // iOS-style picker. A native <select> renders as the OS dropdown — grey,
 // left-aligned, ignores the app's type and dark palette, and looks nothing
@@ -87,104 +88,106 @@ function Sheet({ value, customInitial, onClose, onPick }: {
   const trimmed = custom.trim()
 
   return (
-    <div
-      role="dialog" aria-modal="true" aria-label={T.title}
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-        animation: 'fade-in .22s var(--ease)',
-      }}
-    >
+    <ModalPortal>
       <div
-        ref={sheetRef} onClick={(e) => e.stopPropagation()}
+        role="dialog" aria-modal="true" aria-label={T.title}
+        onClick={onClose}
         style={{
-          width: '100%', maxWidth: 460,
-          background: 'var(--bg-elev-2)',
-          borderTopLeftRadius: 22, borderTopRightRadius: 22,
-          border: '1px solid var(--line-strong)', borderBottom: 'none',
-          padding: `14px 16px calc(env(safe-area-inset-bottom) + 16px)`,
-          maxHeight: '85dvh', overflowY: 'auto',
-          animation: 'sheet-up .34s var(--ease)',
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          animation: 'fade-in .22s var(--ease)',
         }}
       >
-        {/* grabber */}
-        <div aria-hidden style={{
-          width: 38, height: 4, borderRadius: 999, background: 'var(--line-strong)',
-          margin: '0 auto 14px',
-        }} />
+        <div
+          ref={sheetRef} onClick={(e) => e.stopPropagation()}
+          style={{
+            width: '100%', maxWidth: 460,
+            background: 'var(--bg-elev-2)',
+            borderTopLeftRadius: 22, borderTopRightRadius: 22,
+            border: '1px solid var(--line-strong)', borderBottom: 'none',
+            padding: `14px 16px calc(env(safe-area-inset-bottom) + 16px)`,
+            maxHeight: '85dvh', overflowY: 'auto',
+            animation: 'sheet-up .34s var(--ease)',
+          }}
+        >
+          {/* grabber */}
+          <div aria-hidden style={{
+            width: 38, height: 4, borderRadius: 999, background: 'var(--line-strong)',
+            margin: '0 auto 14px',
+          }} />
 
-        <h3 style={{ margin: 0, fontSize: '1.02rem', fontWeight: 700, color: 'var(--text)' }}>{T.title}</h3>
-        <p style={{ margin: '3px 0 14px', fontSize: '0.8rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          {T.subtitle}
-        </p>
+          <h3 style={{ margin: 0, fontSize: '1.02rem', fontWeight: 700, color: 'var(--text)' }}>{T.title}</h3>
+          <p style={{ margin: '3px 0 14px', fontSize: '0.8rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            {T.subtitle}
+          </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {BADGE_OPTIONS.map((b) => {
-            const active = value === b.key
-            return (
-              <button
-                key={b.key} type="button" onClick={() => onPick(b.key)} className="press"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 11, width: '100%',
-                  padding: '13px 14px', borderRadius: 14,
-                  border: `1px solid ${active ? `${b.color}66` : 'var(--line)'}`,
-                  background: active ? `${b.color}18` : 'var(--bg-elev)',
-                  color: 'var(--text)', font: 'inherit', fontSize: '0.95rem',
-                  fontWeight: 600, cursor: 'pointer', textAlign: 'start',
-                }}
-              >
-                <span aria-hidden style={{ fontSize: '1.1rem' }}>{b.emoji}</span>
-                <span style={{ flex: 1 }}>{b.he}</span>
-                {active && (
-                  <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={b.color}
-                    strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 12.5l5 5L20 6.5" />
-                  </svg>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Custom label — for anything the presets don't cover. */}
-        <div style={{ marginTop: 16 }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 6 }}>
-            {T.custom}
-          </label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              value={custom} onChange={(e) => setCustom(e.target.value)}
-              placeholder={T.customPh} maxLength={24}
-              onKeyDown={(e) => { if (e.key === 'Enter' && trimmed) onPick(trimmed) }}
-              style={{
-                flex: 1, minWidth: 0, padding: '12px 13px', borderRadius: 12,
-                border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
-                color: 'var(--text)', fontSize: '0.92rem', fontFamily: 'inherit', outline: 'none',
-              }}
-            />
-            <button
-              type="button" disabled={!trimmed} onClick={() => onPick(trimmed)} className="press"
-              style={{
-                flex: '0 0 auto', padding: '0 18px', borderRadius: 12, border: 'none',
-                background: trimmed
-                  ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))'
-                  : 'var(--bg-elev)',
-                color: trimmed ? '#fff' : 'var(--text-faint)',
-                fontSize: '0.9rem', fontWeight: 700, fontFamily: 'inherit',
-                cursor: trimmed ? 'pointer' : 'default',
-                boxShadow: trimmed ? 'var(--glow)' : 'none',
-              }}
-            >{T.save}</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {BADGE_OPTIONS.map((b) => {
+              const active = value === b.key
+              return (
+                <button
+                  key={b.key} type="button" onClick={() => onPick(b.key)} className="press"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 11, width: '100%',
+                    padding: '13px 14px', borderRadius: 14,
+                    border: `1px solid ${active ? `${b.color}66` : 'var(--line)'}`,
+                    background: active ? `${b.color}18` : 'var(--bg-elev)',
+                    color: 'var(--text)', font: 'inherit', fontSize: '0.95rem',
+                    fontWeight: 600, cursor: 'pointer', textAlign: 'start',
+                  }}
+                >
+                  <span aria-hidden style={{ fontSize: '1.1rem' }}>{b.emoji}</span>
+                  <span style={{ flex: 1 }}>{b.he}</span>
+                  {active && (
+                    <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={b.color}
+                      strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 12.5l5 5L20 6.5" />
+                    </svg>
+                  )}
+                </button>
+              )
+            })}
           </div>
-        </div>
 
-        <button type="button" onClick={onClose} className="press" style={cancelStyle}>
-          {T.cancel}
-        </button>
+          {/* Custom label — for anything the presets don't cover. */}
+          <div style={{ marginTop: 16 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 6 }}>
+              {T.custom}
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={custom} onChange={(e) => setCustom(e.target.value)}
+                placeholder={T.customPh} maxLength={24}
+                onKeyDown={(e) => { if (e.key === 'Enter' && trimmed) onPick(trimmed) }}
+                style={{
+                  flex: 1, minWidth: 0, padding: '12px 13px', borderRadius: 12,
+                  border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
+                  color: 'var(--text)', fontSize: '0.92rem', fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+              <button
+                type="button" disabled={!trimmed} onClick={() => onPick(trimmed)} className="press"
+                style={{
+                  flex: '0 0 auto', padding: '0 18px', borderRadius: 12, border: 'none',
+                  background: trimmed
+                    ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))'
+                    : 'var(--bg-elev)',
+                  color: trimmed ? '#fff' : 'var(--text-faint)',
+                  fontSize: '0.9rem', fontWeight: 700, fontFamily: 'inherit',
+                  cursor: trimmed ? 'pointer' : 'default',
+                  boxShadow: trimmed ? 'var(--glow)' : 'none',
+                }}
+              >{T.save}</button>
+            </div>
+          </div>
+
+          <button type="button" onClick={onClose} className="press" style={cancelStyle}>
+            {T.cancel}
+          </button>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 

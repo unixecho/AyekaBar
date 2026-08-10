@@ -5,6 +5,7 @@ import { loc, type MenuCategory } from '@/lib/menu/types'
 import TempMenuSheet, { type TempSetting } from '@/components/TempMenuSheet'
 import Switch from '@/components/Switch'
 import TimeWheel from '@/components/TimeWheel'
+import ModalPortal from '@/components/ModalPortal'
 
 // Create / edit a menu version. Two steps:
 //   1. Name it ("יום שישי")
@@ -185,256 +186,258 @@ export default function VariantWizard({
   }
 
   return (
-    <div
-      role="dialog" aria-modal="true" aria-label={variantId ? T.editTitle : T.createTitle}
-      onClick={() => !saving && onClose()}
-      className="sheet-scrim"
-    >
-      <div onClick={(e) => e.stopPropagation()} className="sheet-panel">
-        <div aria-hidden className="sheet-grabber" />
+    <ModalPortal>
+      <div
+        role="dialog" aria-modal="true" aria-label={variantId ? T.editTitle : T.createTitle}
+        onClick={() => !saving && onClose()}
+        className="sheet-scrim"
+      >
+        <div onClick={(e) => e.stopPropagation()} className="sheet-panel">
+          <div aria-hidden className="sheet-grabber" />
 
-        {step === 1 ? (
-          <div style={{ animation: 'fade-in .25s var(--ease)' }}>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{T.step1}</h3>
-            <p style={{ margin: '4px 0 14px', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              {T.step1Hint}
-            </p>
-            <input
-              autoFocus value={name} maxLength={40}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) setStep(2) }}
-              placeholder={T.namePh}
-              style={{
-                width: '100%', padding: '13px 14px', borderRadius: 13,
-                border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
-                color: 'var(--text)', fontSize: '1rem', fontFamily: 'inherit', outline: 'none',
-              }}
-            />
-            {err && <p style={errStyle}>{err}</p>}
-            <button type="button" disabled={!name.trim()} onClick={() => { setErr(null); setStep(2) }}
-              className="press" style={{ ...primary, marginTop: 14, opacity: name.trim() ? 1 : 0.5 }}>
-              {T.next}
-            </button>
-            <button type="button" onClick={onClose} className="press" style={cancel}>{T.cancel}</button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, animation: 'fade-in .25s var(--ease)' }}>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{T.step2}</h3>
-            <p style={{ margin: '4px 0 4px', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              {T.step2Hint}
-            </p>
-            <p style={{ margin: '0 0 12px', fontSize: '0.82rem', fontWeight: 700, color: 'var(--neon-soft)' }}>
-              {T.summary(shownCount, allUids.length)}
-            </p>
+          {step === 1 ? (
+            <div style={{ animation: 'fade-in .25s var(--ease)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{T.step1}</h3>
+              <p style={{ margin: '4px 0 14px', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                {T.step1Hint}
+              </p>
+              <input
+                autoFocus value={name} maxLength={40}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) setStep(2) }}
+                placeholder={T.namePh}
+                style={{
+                  width: '100%', padding: '13px 14px', borderRadius: 13,
+                  border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
+                  color: 'var(--text)', fontSize: '1rem', fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+              {err && <p style={errStyle}>{err}</p>}
+              <button type="button" disabled={!name.trim()} onClick={() => { setErr(null); setStep(2) }}
+                className="press" style={{ ...primary, marginTop: 14, opacity: name.trim() ? 1 : 0.5 }}>
+                {T.next}
+              </button>
+              <button type="button" onClick={onClose} className="press" style={cancel}>{T.cancel}</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, animation: 'fade-in .25s var(--ease)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{T.step2}</h3>
+              <p style={{ margin: '4px 0 4px', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                {T.step2Hint}
+              </p>
+              <p style={{ margin: '0 0 12px', fontSize: '0.82rem', fontWeight: 700, color: 'var(--neon-soft)' }}>
+                {T.summary(shownCount, allUids.length)}
+              </p>
 
-            <div className="sheet-scroll">
-              {/* Rename in place — no need to recreate a version to fix a typo. */}
-              <div className="pick-cat" style={{ padding: 12 }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-dim)', marginBottom: 6 }}>
-                  {T.rename}
-                </label>
-                <input
-                  value={name} maxLength={40} onChange={(e) => setName(e.target.value)}
-                  placeholder={T.namePh}
-                  style={{
-                    width: '100%', padding: '11px 12px', borderRadius: 11,
-                    border: '1px solid var(--line-strong)', background: 'var(--bg-elev-2)',
-                    color: 'var(--text)', fontSize: '0.94rem', fontFamily: 'inherit', outline: 'none',
-                  }}
-                />
-              </div>
-
-              {/* Temporary activation — the "no cook tonight" path. Offered
-                  only on creation, because a version that already exists is
-                  timed from its chip, where the countdown lives. */}
-              {offerTemp && (
-              <div className="pick-cat" style={{ padding: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)' }}>{T.tempTitle}</div>
-                    <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
-                      {temp ? T.tempHint : T.tempOff}
-                    </p>
-                  </div>
-                  <button type="button" role="switch" aria-checked={!!temp} aria-label={T.tempTitle}
-                    onClick={() => (temp ? setTemp(null) : setTempOpen(true))}
-                    className="press" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
-                    <Switch on={!!temp} />
-                  </button>
+              <div className="sheet-scroll">
+                {/* Rename in place — no need to recreate a version to fix a typo. */}
+                <div className="pick-cat" style={{ padding: 12 }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-dim)', marginBottom: 6 }}>
+                    {T.rename}
+                  </label>
+                  <input
+                    value={name} maxLength={40} onChange={(e) => setName(e.target.value)}
+                    placeholder={T.namePh}
+                    style={{
+                      width: '100%', padding: '11px 12px', borderRadius: 11,
+                      border: '1px solid var(--line-strong)', background: 'var(--bg-elev-2)',
+                      color: 'var(--text)', fontSize: '0.94rem', fontFamily: 'inherit', outline: 'none',
+                    }}
+                  />
                 </div>
 
-                {temp && (
-                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span className="temp-badge">
-                      ⏳ {T.tempSet} {new Intl.DateTimeFormat('he-IL', {
-                        timeZone: 'Asia/Jerusalem', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
-                      }).format(new Date(temp.until))}
-                      {temp.deleteOnExpiry ? ` · ${T.tempDeletes}` : ''}
-                    </span>
-                    <button type="button" onClick={() => setTempOpen(true)} className="press"
-                      style={{ ...ghostBtn, marginInlineStart: 'auto' }}>{T.tempChange}</button>
-                  </div>
-                )}
-              </div>
-              )}
-
-              {isDefault && (
-                <p style={{
-                  margin: 0, padding: '10px 12px', borderRadius: 11,
-                  background: 'rgba(255,255,255,0.03)', border: '1px solid var(--line)',
-                  color: 'var(--text-faint)', fontSize: '0.78rem', lineHeight: 1.5,
-                }}>{T.defaultScope}</p>
-              )}
-
-              {/* Automatic schedule */}
-              {!isDefault && (
-              <div className="pick-cat" style={{ padding: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)' }}>{T.schedTitle}</div>
-                    <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
-                      {sched.enabled ? T.schedHint : T.schedManual}
-                    </p>
-                  </div>
-                  <button type="button" role="switch" aria-checked={sched.enabled}
-                    onClick={() => setSched((s) => ({ ...s, enabled: !s.enabled }))}
-                    className="press" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
-                    aria-label={T.schedTitle}>
-                    <Switch on={sched.enabled} />
-                  </button>
-                </div>
-
-                {sched.enabled && (
-                  <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div>
-                      <label style={labelStyle}>{T.schedDays}</label>
-                      <div className="hh-percent-grid">
-                        {DAY_LABELS.map((d, i) => {
-                          const on = sched.days.includes(i)
-                          return (
-                            <button key={i} type="button" className="press hh-percent-btn"
-                              data-on={on ? 'true' : undefined}
-                              onClick={() => setSched((s) => ({
-                                ...s,
-                                days: on ? s.days.filter((x) => x !== i) : [...s.days, i].sort(),
-                              }))}>{d}</button>
-                          )
-                        })}
-                      </div>
-                      <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: 'var(--text-faint)' }}>
-                        {T.schedDaysHint}
+                {/* Temporary activation — the "no cook tonight" path. Offered
+                    only on creation, because a version that already exists is
+                    timed from its chip, where the countdown lives. */}
+                {offerTemp && (
+                <div className="pick-cat" style={{ padding: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)' }}>{T.tempTitle}</div>
+                      <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                        {temp ? T.tempHint : T.tempOff}
                       </p>
                     </div>
-
-                    <div className="time-pair">
-                      <div>
-                        <label style={labelStyle}>{T.schedFrom}</label>
-                        <TimeWheel value={sched.start}
-                          onChange={(v) => setSched((s) => ({ ...s, start: v }))} />
-                      </div>
-
-                      <div>
-                        <label style={labelStyle}>{T.schedTo}</label>
-                        <TimeWheel value={sched.end}
-                          onChange={(v) => setSched((s) => ({ ...s, end: v }))} />
-                      </div>
-                    </div>
-
-                    {sched.end <= sched.start && (
-                      <p style={{
-                        margin: 0, padding: '10px 12px', borderRadius: 11,
-                        background: 'rgba(255,94,58,0.10)', border: '1px solid rgba(255,94,58,0.28)',
-                        color: 'var(--neon-soft)', fontSize: '0.78rem', fontWeight: 600,
-                      }}>⌛ {T.schedOvernight}</p>
-                    )}
+                    <button type="button" role="switch" aria-checked={!!temp} aria-label={T.tempTitle}
+                      onClick={() => (temp ? setTemp(null) : setTempOpen(true))}
+                      className="press" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
+                      <Switch on={!!temp} />
+                    </button>
                   </div>
+
+                  {temp && (
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span className="temp-badge">
+                        ⏳ {T.tempSet} {new Intl.DateTimeFormat('he-IL', {
+                          timeZone: 'Asia/Jerusalem', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+                        }).format(new Date(temp.until))}
+                        {temp.deleteOnExpiry ? ` · ${T.tempDeletes}` : ''}
+                      </span>
+                      <button type="button" onClick={() => setTempOpen(true)} className="press"
+                        style={{ ...ghostBtn, marginInlineStart: 'auto' }}>{T.tempChange}</button>
+                    </div>
+                  )}
+                </div>
                 )}
-              </div>
-              )}
 
-              {categories.map((cat) => {
-                const uids = (cat.items ?? []).map((i) => i.uid).filter((u): u is string => !!u)
-                if (!uids.length) return null
-                const onCount = uids.filter((u) => !excluded.has(u)).length
-                const all = onCount === uids.length
-                const none = onCount === 0
-                const isOpen = open.has(cat.id)
+                {isDefault && (
+                  <p style={{
+                    margin: 0, padding: '10px 12px', borderRadius: 11,
+                    background: 'rgba(255,255,255,0.03)', border: '1px solid var(--line)',
+                    color: 'var(--text-faint)', fontSize: '0.78rem', lineHeight: 1.5,
+                  }}>{T.defaultScope}</p>
+                )}
 
-                return (
-                  <div key={cat.id} className="pick-cat" data-off={none ? 'true' : undefined}>
-                    <div className="pick-cat-head">
-                      {/* Chevron opens the category; the toggle flips it all.
-                          Two separate targets so neither is a mystery tap. */}
-                      <button type="button" onClick={() => toggleOpen(cat.id)}
-                        className="pick-expand press" aria-expanded={isOpen}
-                        aria-label={T.expand} title={T.expand}>
-                        <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor"
-                          strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
-                          style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .25s var(--ease)' }}>
-                          <path d="M6 9l6 6 6-6" />
-                        </svg>
-                      </button>
-
-                      <span className="pick-cat-icon" aria-hidden>{cat.icon ?? '🍽️'}</span>
-                      <span className="pick-cat-name">{loc(cat.title, 'he')}</span>
-                      <span className="pick-count" dir="ltr">{onCount}/{uids.length}</span>
-
-                      <button type="button" onClick={() => toggleCategory(cat)}
-                        role="switch" aria-checked={!none} className="press"
-                        aria-label={loc(cat.title, 'he')} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
-                        <Switch on={all} partial={!all && !none} />
-                      </button>
+                {/* Automatic schedule */}
+                {!isDefault && (
+                <div className="pick-cat" style={{ padding: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)' }}>{T.schedTitle}</div>
+                      <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                        {sched.enabled ? T.schedHint : T.schedManual}
+                      </p>
                     </div>
-
-                    {isOpen && (
-                      <div className="pick-items">
-                        {(cat.items ?? []).map((item) => {
-                          if (!item.uid) return null
-                          const on = !excluded.has(item.uid)
-                          return (
-                            <button key={item.uid} type="button" onClick={() => toggleItem(item.uid!)}
-                              className="pick-item" data-off={on ? undefined : 'true'}
-                              role="switch" aria-checked={on}>
-                              <span className="pick-item-name">{loc(item, 'he')}</span>
-                              <Switch on={on} small />
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
+                    <button type="button" role="switch" aria-checked={sched.enabled}
+                      onClick={() => setSched((s) => ({ ...s, enabled: !s.enabled }))}
+                      className="press" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
+                      aria-label={T.schedTitle}>
+                      <Switch on={sched.enabled} />
+                    </button>
                   </div>
-                )
-              })}
-            </div>
 
-            {err && <p style={errStyle}>{err}</p>}
+                  {sched.enabled && (
+                    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      <div>
+                        <label style={labelStyle}>{T.schedDays}</label>
+                        <div className="hh-percent-grid">
+                          {DAY_LABELS.map((d, i) => {
+                            const on = sched.days.includes(i)
+                            return (
+                              <button key={i} type="button" className="press hh-percent-btn"
+                                data-on={on ? 'true' : undefined}
+                                onClick={() => setSched((s) => ({
+                                  ...s,
+                                  days: on ? s.days.filter((x) => x !== i) : [...s.days, i].sort(),
+                                }))}>{d}</button>
+                            )
+                          })}
+                        </div>
+                        <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: 'var(--text-faint)' }}>
+                          {T.schedDaysHint}
+                        </p>
+                      </div>
 
-            <div style={{ flex: '0 0 auto', paddingTop: 12 }}>
-              <button type="button" onClick={save} disabled={saving} className="press"
-                style={{ ...primary, opacity: saving ? 0.6 : 1 }}>
-                {saving ? T.saving : T.save}
-              </button>
-              <button type="button" onClick={() => (variantId ? onClose() : setStep(1))}
-                disabled={saving} className="press" style={cancel}>
-                {variantId ? T.cancel : T.back}
-              </button>
+                      <div className="time-pair">
+                        <div>
+                          <label style={labelStyle}>{T.schedFrom}</label>
+                          <TimeWheel value={sched.start}
+                            onChange={(v) => setSched((s) => ({ ...s, start: v }))} />
+                        </div>
+
+                        <div>
+                          <label style={labelStyle}>{T.schedTo}</label>
+                          <TimeWheel value={sched.end}
+                            onChange={(v) => setSched((s) => ({ ...s, end: v }))} />
+                        </div>
+                      </div>
+
+                      {sched.end <= sched.start && (
+                        <p style={{
+                          margin: 0, padding: '10px 12px', borderRadius: 11,
+                          background: 'rgba(255,94,58,0.10)', border: '1px solid rgba(255,94,58,0.28)',
+                          color: 'var(--neon-soft)', fontSize: '0.78rem', fontWeight: 600,
+                        }}>⌛ {T.schedOvernight}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                )}
+
+                {categories.map((cat) => {
+                  const uids = (cat.items ?? []).map((i) => i.uid).filter((u): u is string => !!u)
+                  if (!uids.length) return null
+                  const onCount = uids.filter((u) => !excluded.has(u)).length
+                  const all = onCount === uids.length
+                  const none = onCount === 0
+                  const isOpen = open.has(cat.id)
+
+                  return (
+                    <div key={cat.id} className="pick-cat" data-off={none ? 'true' : undefined}>
+                      <div className="pick-cat-head">
+                        {/* Chevron opens the category; the toggle flips it all.
+                            Two separate targets so neither is a mystery tap. */}
+                        <button type="button" onClick={() => toggleOpen(cat.id)}
+                          className="pick-expand press" aria-expanded={isOpen}
+                          aria-label={T.expand} title={T.expand}>
+                          <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor"
+                            strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
+                            style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .25s var(--ease)' }}>
+                            <path d="M6 9l6 6 6-6" />
+                          </svg>
+                        </button>
+
+                        <span className="pick-cat-icon" aria-hidden>{cat.icon ?? '🍽️'}</span>
+                        <span className="pick-cat-name">{loc(cat.title, 'he')}</span>
+                        <span className="pick-count" dir="ltr">{onCount}/{uids.length}</span>
+
+                        <button type="button" onClick={() => toggleCategory(cat)}
+                          role="switch" aria-checked={!none} className="press"
+                          aria-label={loc(cat.title, 'he')} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
+                          <Switch on={all} partial={!all && !none} />
+                        </button>
+                      </div>
+
+                      {isOpen && (
+                        <div className="pick-items">
+                          {(cat.items ?? []).map((item) => {
+                            if (!item.uid) return null
+                            const on = !excluded.has(item.uid)
+                            return (
+                              <button key={item.uid} type="button" onClick={() => toggleItem(item.uid!)}
+                                className="pick-item" data-off={on ? undefined : 'true'}
+                                role="switch" aria-checked={on}>
+                                <span className="pick-item-name">{loc(item, 'he')}</span>
+                                <Switch on={on} small />
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {err && <p style={errStyle}>{err}</p>}
+
+              <div style={{ flex: '0 0 auto', paddingTop: 12 }}>
+                <button type="button" onClick={save} disabled={saving} className="press"
+                  style={{ ...primary, opacity: saving ? 0.6 : 1 }}>
+                  {saving ? T.saving : T.save}
+                </button>
+                <button type="button" onClick={() => (variantId ? onClose() : setStep(1))}
+                  disabled={saving} className="press" style={cancel}>
+                  {variantId ? T.cancel : T.back}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {tempOpen && (
+          <TempMenuSheet
+            variantName={name.trim() || T.namePh}
+            initial={temp}
+            confirmLabel={T.save}
+            allowClear={!!temp}
+            onCancel={() => setTempOpen(false)}
+            onClear={() => { setTemp(null); setTempOpen(false) }}
+            onConfirm={(value) => { setTemp(value); setTempOpen(false) }}
+          />
         )}
       </div>
-
-      {tempOpen && (
-        <TempMenuSheet
-          variantName={name.trim() || T.namePh}
-          initial={temp}
-          confirmLabel={T.save}
-          allowClear={!!temp}
-          onCancel={() => setTempOpen(false)}
-          onClear={() => { setTemp(null); setTempOpen(false) }}
-          onConfirm={(value) => { setTemp(value); setTempOpen(false) }}
-        />
-      )}
-    </div>
+    </ModalPortal>
   )
 }
 

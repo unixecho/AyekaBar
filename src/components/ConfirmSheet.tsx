@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, type CSSProperties } from 'react'
+import ModalPortal from '@/components/ModalPortal'
 
 // iOS-style destructive confirmation, replacing window.confirm().
 //
@@ -46,58 +47,60 @@ export default function ConfirmSheet({
   if (!request) return null
 
   return (
-    <div
-      role="dialog" aria-modal="true" aria-label={request.title}
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 200,
-        background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-        animation: 'fade-in .22s var(--ease)',
-      }}
-    >
+    <ModalPortal>
       <div
-        onClick={(e) => e.stopPropagation()}
+        role="dialog" aria-modal="true" aria-label={request.title}
+        onClick={onClose}
         style={{
-          width: '100%', maxWidth: 460,
-          padding: `0 10px calc(env(safe-area-inset-bottom) + 10px)`,
-          animation: 'sheet-up .34s var(--ease)',
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          animation: 'fade-in .22s var(--ease)',
         }}
       >
-        <div style={{
-          background: 'var(--bg-elev-2)', border: '1px solid var(--line-strong)',
-          borderRadius: 18, overflow: 'hidden', marginBottom: 8,
-        }}>
-          <div style={{ padding: '18px 18px 14px', textAlign: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
-              {request.title}
-            </h3>
-            {request.body && (
-              <p style={{ margin: '6px 0 0', fontSize: '0.84rem', color: 'var(--text-dim)', lineHeight: 1.55 }}>
-                {request.body}
-              </p>
-            )}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: '100%', maxWidth: 460,
+            padding: `0 10px calc(env(safe-area-inset-bottom) + 10px)`,
+            animation: 'sheet-up .34s var(--ease)',
+          }}
+        >
+          <div style={{
+            background: 'var(--bg-elev-2)', border: '1px solid var(--line-strong)',
+            borderRadius: 18, overflow: 'hidden', marginBottom: 8,
+          }}>
+            <div style={{ padding: '18px 18px 14px', textAlign: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
+                {request.title}
+              </h3>
+              {request.body && (
+                <p style={{ margin: '6px 0 0', fontSize: '0.84rem', color: 'var(--text-dim)', lineHeight: 1.55 }}>
+                  {request.body}
+                </p>
+              )}
+            </div>
+
+            <button
+              ref={confirmRef} type="button" className="press"
+              onClick={() => { request.onConfirm(); onClose() }}
+              style={{
+                width: '100%', padding: '15px 0', border: 'none',
+                borderTop: '1px solid var(--line-strong)', background: 'transparent',
+                color: '#ff6b6b', fontSize: '1rem', fontWeight: 700,
+                fontFamily: 'inherit', cursor: 'pointer',
+              }}
+            >
+              {request.confirmLabel}
+            </button>
           </div>
 
-          <button
-            ref={confirmRef} type="button" className="press"
-            onClick={() => { request.onConfirm(); onClose() }}
-            style={{
-              width: '100%', padding: '15px 0', border: 'none',
-              borderTop: '1px solid var(--line-strong)', background: 'transparent',
-              color: '#ff6b6b', fontSize: '1rem', fontWeight: 700,
-              fontFamily: 'inherit', cursor: 'pointer',
-            }}
-          >
-            {request.confirmLabel}
+          <button type="button" onClick={onClose} className="press" style={cancelStyle}>
+            {CANCEL}
           </button>
         </div>
-
-        <button type="button" onClick={onClose} className="press" style={cancelStyle}>
-          {CANCEL}
-        </button>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 

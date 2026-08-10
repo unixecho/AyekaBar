@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { barTimeMinutes, nextBarTimeInstant } from '@/lib/menu/variants'
 import TimeWheel, { fmtHhmm } from '@/components/TimeWheel'
 import Switch from '@/components/Switch'
+import ModalPortal from '@/components/ModalPortal'
 
 // "The cook isn't in tonight — put the short menu up until 4am."
 //
@@ -127,87 +128,89 @@ export default function TempMenuSheet({
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={T.title}
-      onClick={() => !busy && onCancel()} className="sheet-scrim">
-      <div onClick={(e) => e.stopPropagation()} className="sheet-panel">
-        <div aria-hidden className="sheet-grabber" />
+    <ModalPortal>
+      <div role="dialog" aria-modal="true" aria-label={T.title}
+        onClick={() => !busy && onCancel()} className="sheet-scrim">
+        <div onClick={(e) => e.stopPropagation()} className="sheet-panel">
+          <div aria-hidden className="sheet-grabber" />
 
-        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{T.title}</h3>
-        <p style={{ margin: '4px 0 14px', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: 1.55 }}>
-          {T.hintFor(variantName)}
-        </p>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{T.title}</h3>
+          <p style={{ margin: '4px 0 14px', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: 1.55 }}>
+            {T.hintFor(variantName)}
+          </p>
 
-        <div className="sheet-scroll">
-          <div className="pick-cat" style={{ padding: 12 }}>
-            <label style={labelStyle}>{T.quick}</label>
-            <div className="hh-percent-grid">
-              {QUICK_HOURS.map((h) => (
-                <button key={h} type="button" className="press hh-percent-btn"
-                  data-on={quick === h ? 'true' : undefined}
-                  aria-pressed={quick === h}
-                  onClick={() => pickQuick(h)}>{T.hours(h)}</button>
-              ))}
-            </div>
-          </div>
-
-          <div className="pick-cat" style={{ padding: 12 }}>
-            <label style={labelStyle}>{T.untilLabel}</label>
-            <TimeWheel
-              value={time} minuteStep={MINUTE_STEP}
-              hourLabel={T.hour} minuteLabel={T.minute}
-              // Touching a wheel means the owner is choosing the time directly,
-              // so the shortcut that set it is no longer what's on screen.
-              onChange={(next) => { setTime(next); setQuick(null) }}
-            />
-
-            <div className="temp-preview">
-              <span className="temp-preview-label">{T.revertsAt}</span>
-              <strong className="temp-preview-time" dir="ltr">
-                {pad(hh)}:{pad(mm)}
-              </strong>
-              <span className="temp-preview-when">
-                {crossesMidnight ? T.tomorrow : T.today}
-                {minutesAway >= 1 && ` · ${T.inTime(awayH, awayM)}`}
-              </span>
-            </div>
-          </div>
-
-          <div className="pick-cat" style={{ padding: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)' }}>{T.delTitle}</div>
-                <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
-                  {del ? T.delHint : T.keepHint}
-                </p>
+          <div className="sheet-scroll">
+            <div className="pick-cat" style={{ padding: 12 }}>
+              <label style={labelStyle}>{T.quick}</label>
+              <div className="hh-percent-grid">
+                {QUICK_HOURS.map((h) => (
+                  <button key={h} type="button" className="press hh-percent-btn"
+                    data-on={quick === h ? 'true' : undefined}
+                    aria-pressed={quick === h}
+                    onClick={() => pickQuick(h)}>{T.hours(h)}</button>
+                ))}
               </div>
-              <button type="button" role="switch" aria-checked={del} aria-label={T.delTitle}
-                onClick={() => setDel((d) => !d)} className="press"
-                style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
-                <Switch on={del} />
-              </button>
+            </div>
+
+            <div className="pick-cat" style={{ padding: 12 }}>
+              <label style={labelStyle}>{T.untilLabel}</label>
+              <TimeWheel
+                value={time} minuteStep={MINUTE_STEP}
+                hourLabel={T.hour} minuteLabel={T.minute}
+                // Touching a wheel means the owner is choosing the time directly,
+                // so the shortcut that set it is no longer what's on screen.
+                onChange={(next) => { setTime(next); setQuick(null) }}
+              />
+
+              <div className="temp-preview">
+                <span className="temp-preview-label">{T.revertsAt}</span>
+                <strong className="temp-preview-time" dir="ltr">
+                  {pad(hh)}:{pad(mm)}
+                </strong>
+                <span className="temp-preview-when">
+                  {crossesMidnight ? T.tomorrow : T.today}
+                  {minutesAway >= 1 && ` · ${T.inTime(awayH, awayM)}`}
+                </span>
+              </div>
+            </div>
+
+            <div className="pick-cat" style={{ padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)' }}>{T.delTitle}</div>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                    {del ? T.delHint : T.keepHint}
+                  </p>
+                </div>
+                <button type="button" role="switch" aria-checked={del} aria-label={T.delTitle}
+                  onClick={() => setDel((d) => !d)} className="press"
+                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
+                  <Switch on={del} />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {minutesAway < 1 && <p style={errStyle}>{T.past}</p>}
+          {minutesAway < 1 && <p style={errStyle}>{T.past}</p>}
 
-        <div style={{ flex: '0 0 auto', paddingTop: 12 }}>
-          <button type="button" onClick={confirm} disabled={busy || minutesAway < 1}
-            className="press" style={{ ...primary, opacity: busy || minutesAway < 1 ? 0.6 : 1 }}>
-            {confirmLabel ?? (initial ? T.saveTimer : T.confirm)}
-          </button>
-          {allowClear && onClear && (
-            <button type="button" onClick={() => onClear()} disabled={busy} className="press"
-              style={{ ...cancel, color: 'var(--neon-soft)' }}>
-              {T.clear}
+          <div style={{ flex: '0 0 auto', paddingTop: 12 }}>
+            <button type="button" onClick={confirm} disabled={busy || minutesAway < 1}
+              className="press" style={{ ...primary, opacity: busy || minutesAway < 1 ? 0.6 : 1 }}>
+              {confirmLabel ?? (initial ? T.saveTimer : T.confirm)}
             </button>
-          )}
-          <button type="button" onClick={onCancel} disabled={busy} className="press" style={cancel}>
-            {T.cancel}
-          </button>
+            {allowClear && onClear && (
+              <button type="button" onClick={() => onClear()} disabled={busy} className="press"
+                style={{ ...cancel, color: 'var(--neon-soft)' }}>
+                {T.clear}
+              </button>
+            )}
+            <button type="button" onClick={onCancel} disabled={busy} className="press" style={cancel}>
+              {T.cancel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 

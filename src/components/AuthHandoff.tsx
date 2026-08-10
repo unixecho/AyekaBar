@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, type CSSProperties } from 'react'
+import ModalPortal from '@/components/ModalPortal'
 
 const EASE = 'cubic-bezier(0.22,1,0.36,1)'
 const SPRING = 'cubic-bezier(.34,1.56,.64,1)'
@@ -50,73 +51,75 @@ export function AuthHandoff({
   if (!shown) return null
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={t.aria} style={{
-      position: 'fixed', inset: 0, zIndex: 100,
-      background: 'radial-gradient(ellipse 80% 40% at 85% -5%, rgba(255,94,58,0.14), transparent 60%), var(--bg)',
-      color: 'var(--text)', display: 'flex', flexDirection: 'column',
-      padding: 'calc(env(safe-area-inset-top) + 14px) 20px calc(env(safe-area-inset-bottom) + 28px)',
-      opacity: closing ? 0 : 1, transition: `opacity ${EXIT_MS}ms ease`,
-      animation: 'handoff-in .3s ease backwards', overflowY: 'auto',
-    }}>
-      <button aria-label={t.back} className="press dir-flip" onClick={onClose} style={{
-        alignSelf: 'flex-start', width: 36, height: 36, borderRadius: 999, border: 0, cursor: 'pointer',
-        background: 'var(--bg-elev-2)', color: 'var(--text-dim)', fontSize: 20, lineHeight: 1,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        animation: `rise-in .45s ${EASE} .05s backwards`,
-      }}>‹</button>
+    <ModalPortal>
+      <div role="dialog" aria-modal="true" aria-label={t.aria} style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'radial-gradient(ellipse 80% 40% at 85% -5%, rgba(255,94,58,0.14), transparent 60%), var(--bg)',
+        color: 'var(--text)', display: 'flex', flexDirection: 'column',
+        padding: 'calc(env(safe-area-inset-top) + 14px) 20px calc(env(safe-area-inset-bottom) + 28px)',
+        opacity: closing ? 0 : 1, transition: `opacity ${EXIT_MS}ms ease`,
+        animation: 'handoff-in .3s ease backwards', overflowY: 'auto',
+      }}>
+        <button aria-label={t.back} className="press dir-flip" onClick={onClose} style={{
+          alignSelf: 'flex-start', width: 36, height: 36, borderRadius: 999, border: 0, cursor: 'pointer',
+          background: 'var(--bg-elev-2)', color: 'var(--text-dim)', fontSize: 20, lineHeight: 1,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          animation: `rise-in .45s ${EASE} .05s backwards`,
+        }}>‹</button>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 300 }}>
-        <div dir="ltr" style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 28 }}>
-          <Tile delay={0.1}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/assets/logo.svg" alt="" width={34} height={34} style={{ display: 'block' }} />
-          </Tile>
-          <div style={{ display: 'flex', gap: 7 }} aria-hidden>
-            {[0, 1, 2].map(i => (
-              <span key={i} style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--neon)', animation: `handoff-dot 1.5s ease-in-out ${i * 0.22}s infinite` }} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 300 }}>
+          <div dir="ltr" style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 28 }}>
+            <Tile delay={0.1}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/assets/logo.svg" alt="" width={34} height={34} style={{ display: 'block' }} />
+            </Tile>
+            <div style={{ display: 'flex', gap: 7 }} aria-hidden>
+              {[0, 1, 2].map(i => (
+                <span key={i} style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--neon)', animation: `handoff-dot 1.5s ease-in-out ${i * 0.22}s infinite` }} />
+              ))}
+            </div>
+            <Tile delay={0.22} style={{ background: '#fff', border: '1px solid rgba(255,255,255,0.9)' }}>
+              <GoogleG size={26} />
+            </Tile>
+          </div>
+
+          <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, animation: `rise-in .5s ${EASE} .18s backwards` }}>{t.title}</h1>
+          <p style={{ fontSize: 14.5, fontWeight: 500, color: 'var(--text-dim)', lineHeight: 1.45, margin: '10px 0 0', maxWidth: 300, animation: `rise-in .5s ${EASE} .26s backwards` }}>{t.subtitle}</p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 26, width: '100%', maxWidth: 360 }}>
+            {t.rows.map(([icon, title, blurb], i) => (
+              <div key={title} style={{
+                display: 'flex', alignItems: 'center', gap: 13, textAlign: 'start',
+                background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14, padding: '12px 14px',
+                animation: `rise-in .5s ${EASE} ${0.34 + i * 0.09}s backwards`,
+              }}>
+                <span style={{ fontSize: 20 }} aria-hidden>{icon}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{title}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-dim)', marginTop: 1, lineHeight: 1.4 }}>{blurb}</div>
+                </div>
+              </div>
             ))}
           </div>
-          <Tile delay={0.22} style={{ background: '#fff', border: '1px solid rgba(255,255,255,0.9)' }}>
-            <GoogleG size={26} />
-          </Tile>
         </div>
 
-        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, animation: `rise-in .5s ${EASE} .18s backwards` }}>{t.title}</h1>
-        <p style={{ fontSize: 14.5, fontWeight: 500, color: 'var(--text-dim)', lineHeight: 1.45, margin: '10px 0 0', maxWidth: 300, animation: `rise-in .5s ${EASE} .26s backwards` }}>{t.subtitle}</p>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 26, width: '100%', maxWidth: 360 }}>
-          {t.rows.map(([icon, title, blurb], i) => (
-            <div key={title} style={{
-              display: 'flex', alignItems: 'center', gap: 13, textAlign: 'start',
-              background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14, padding: '12px 14px',
-              animation: `rise-in .5s ${EASE} ${0.34 + i * 0.09}s backwards`,
-            }}>
-              <span style={{ fontSize: 20 }} aria-hidden>{icon}</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{title}</div>
-                <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-dim)', marginTop: 1, lineHeight: 1.4 }}>{blurb}</div>
-              </div>
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: `rise-in .5s ${EASE} .55s backwards` }}>
+          {error && <div style={{ fontSize: 13, fontWeight: 500, color: '#ff6b6b', textAlign: 'center' }}>{error}</div>}
+          <button onClick={onContinue} disabled={busy} className="press" style={{
+            width: '100%', borderRadius: 12, padding: 15, fontSize: 15, fontWeight: 700, border: 0,
+            fontFamily: 'inherit', background: '#fff', color: '#1a1c1e', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: busy ? 0.7 : 1,
+          }}>
+            {busy ? (
+              <><span aria-hidden style={{ width: 16, height: 16, borderRadius: 999, border: '2.5px solid rgba(26,28,30,0.25)', borderTopColor: '#1a1c1e', animation: 'ah-spin .7s linear infinite' }} />{t.connecting}</>
+            ) : (
+              <><GoogleG size={18} />{t.cta}</>
+            )}
+          </button>
+          <button onClick={onClose} disabled={busy} className="press" style={{ padding: 8, fontSize: 14, fontWeight: 600, color: 'var(--text-dim)', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'inherit' }}>{t.notNow}</button>
         </div>
       </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: `rise-in .5s ${EASE} .55s backwards` }}>
-        {error && <div style={{ fontSize: 13, fontWeight: 500, color: '#ff6b6b', textAlign: 'center' }}>{error}</div>}
-        <button onClick={onContinue} disabled={busy} className="press" style={{
-          width: '100%', borderRadius: 12, padding: 15, fontSize: 15, fontWeight: 700, border: 0,
-          fontFamily: 'inherit', background: '#fff', color: '#1a1c1e', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: busy ? 0.7 : 1,
-        }}>
-          {busy ? (
-            <><span aria-hidden style={{ width: 16, height: 16, borderRadius: 999, border: '2.5px solid rgba(26,28,30,0.25)', borderTopColor: '#1a1c1e', animation: 'ah-spin .7s linear infinite' }} />{t.connecting}</>
-          ) : (
-            <><GoogleG size={18} />{t.cta}</>
-          )}
-        </button>
-        <button onClick={onClose} disabled={busy} className="press" style={{ padding: 8, fontSize: 14, fontWeight: 600, color: 'var(--text-dim)', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'inherit' }}>{t.notNow}</button>
-      </div>
-    </div>
+    </ModalPortal>
   )
 }
 

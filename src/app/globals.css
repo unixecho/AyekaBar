@@ -46,23 +46,87 @@ html, body {
 
 [dir="rtl"] .dir-flip { transform: scaleX(-1); }
 
-/* ---- App-wide page transition (src/app/template.tsx) ----
-   OPACITY ONLY, and that restriction is load-bearing. This element wraps every
-   page, so a `transform` on it (the obvious way to add a slide) would make it
-   the containing block for every `position: fixed` descendant — and this app's
-   owner panel is built out of fixed bottom sheets. They would anchor to the
-   page instead of the viewport, and on a long page like the editor the scrim
-   would scroll away with the content instead of staying pinned. Measured, not
-   theorised: a fixed probe inside a transformed wrapper landed at (2, 10)
-   rather than (0, 0).
-   `filter` and `will-change` create the same trap. Opacity does not.
+/* ============================================================
+   iOS push — app-wide page transitions
+   Driven by components/PageTransitions.tsx + lib/nav/viewTransition.ts.
 
-   The travel comes from the page contents instead, which animate themselves in
-   with `.rise` — so the page still reads as arriving, not just appearing. */
-.page-enter { animation: page-in .3s var(--ease) both; }
-@keyframes page-in { from { opacity: 0 } to { opacity: 1 } }
+   The real work happens on ::view-transition pseudo-elements: the browser
+   screenshots the outgoing page and animates BOTH pages in an overlay tree of
+   its own. Nothing in the live DOM is transformed, which is what keeps the
+   fixed-position sheets anchored to the viewport — and it is the only way to
+   have the page you're leaving still on screen, sliding out under the one
+   arriving. That parallax is the difference between a push and a fade.
+
+   Transforms don't follow writing direction, so forward/back are spelled out
+   per `dir`. This app is Hebrew-first: forward pushes in from the LEFT in RTL
+   and from the RIGHT in LTR, matching iOS in each.
+   ============================================================ */
+::view-transition-old(root), ::view-transition-new(root) {
+  animation-duration: .42s;
+  animation-timing-function: var(--ease);
+  animation-fill-mode: both;
+  /* The spec default is plus-lighter, right for a cross-fade and wrong here:
+     two sliding pages must be opaque, not add together. */
+  mix-blend-mode: normal;
+}
+/* The arriving page rides over the departing one, as on iOS — and on the way
+   back it is the departing page that's on top, sliding off to reveal it. */
+::view-transition-new(root) { z-index: 2 }
+::view-transition-old(root) { z-index: 1 }
+html[data-nav="back"]::view-transition-new(root) { z-index: 1 }
+html[data-nav="back"]::view-transition-old(root) { z-index: 2 }
+
+@keyframes vt-in-from-right { from { transform: translateX(100%) } to { transform: none } }
+@keyframes vt-in-from-left  { from { transform: translateX(-100%) } to { transform: none } }
+@keyframes vt-out-to-right  { from { transform: none } to { transform: translateX(100%) } }
+@keyframes vt-out-to-left   { from { transform: none } to { transform: translateX(-100%) } }
+/* The covered page doesn't leave — it eases back a quarter screen and dims,
+   just far enough to read as "still there, underneath". */
+@keyframes vt-park-left    { from { transform: none; opacity: 1 } to { transform: translateX(-25%); opacity: .55 } }
+@keyframes vt-park-right   { from { transform: none; opacity: 1 } to { transform: translateX(25%); opacity: .55 } }
+@keyframes vt-unpark-left  { from { transform: translateX(-25%); opacity: .55 } to { transform: none; opacity: 1 } }
+@keyframes vt-unpark-right { from { transform: translateX(25%); opacity: .55 } to { transform: none; opacity: 1 } }
+
+/* --- LTR --- */
+html[dir="ltr"][data-nav="forward"]::view-transition-new(root) { animation-name: vt-in-from-right }
+html[dir="ltr"][data-nav="forward"]::view-transition-old(root) { animation-name: vt-park-left }
+html[dir="ltr"][data-nav="back"]::view-transition-new(root)    { animation-name: vt-unpark-left }
+html[dir="ltr"][data-nav="back"]::view-transition-old(root)    { animation-name: vt-out-to-right }
+
+/* --- RTL (the default here) --- */
+html[dir="rtl"][data-nav="forward"]::view-transition-new(root) { animation-name: vt-in-from-left }
+html[dir="rtl"][data-nav="forward"]::view-transition-old(root) { animation-name: vt-park-right }
+html[dir="rtl"][data-nav="back"]::view-transition-new(root)    { animation-name: vt-unpark-right }
+html[dir="rtl"][data-nav="back"]::view-transition-old(root)    { animation-name: vt-out-to-left }
+
+/* ---- Fallback entrance (src/app/template.tsx) ----
+   For browsers without View Transitions, and for browser back/forward, which
+   navigates before script gets a say. Only the arriving page exists there, so
+   this is a short slide rather than a push: a full-width slide with nothing
+   behind it shows bare background and reads as broken.
+
+   The transform here is safe ONLY because every modal is portalled to <body>
+   (components/ModalPortal.tsx). Fixed page chrome that stays inside — the
+   editor's save bar, the language switch — travels with its page, which is
+   what should happen. */
+/* Named after the edge the page comes FROM, so the four rules below can be
+   checked by reading them. Forward enters from the leading edge — left in RTL,
+   right in LTR — and back enters from the opposite one. */
+@keyframes page-in-from-left  { from { opacity: 0; transform: translateX(-3%) } to { opacity: 1; transform: none } }
+@keyframes page-in-from-right { from { opacity: 0; transform: translateX(3%) } to { opacity: 1; transform: none } }
+
+.page-enter { animation: page-in-from-left .32s var(--ease) both; }   /* rtl + forward */
+html[dir="rtl"][data-nav="back"] .page-enter    { animation-name: page-in-from-right }
+html[dir="ltr"] .page-enter                     { animation-name: page-in-from-right }
+html[dir="ltr"][data-nav="back"] .page-enter    { animation-name: page-in-from-left }
+
+/* A screenshot is already animating this content; animating it again inside
+   the snapshot reads as a stutter. */
+html[data-vt="running"] .page-enter { animation: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   .page-enter { animation: none; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
 }
 
 .press { transition: transform .12s var(--ease), filter .12s ease; }
