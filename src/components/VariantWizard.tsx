@@ -85,7 +85,9 @@ export default function VariantWizard({
    *  than offering one that can only fail on save. */
   timersReady?: boolean
   onClose: () => void
-  onSaved: () => void | Promise<void>
+  /** Receives the saved row's id — creating returns a NEW id, editing returns
+   *  the same one — so the caller can keep it selected after the reload. */
+  onSaved: (id: string) => void | Promise<void>
 }) {
   // Editing jumps straight to the content step, but the name stays editable
   // there — renaming shouldn't mean recreating the version.
@@ -176,8 +178,9 @@ export default function VariantWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(variantId ? { id: variantId, ...payload } : payload),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
-      await onSaved()
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'שמירה נכשלה')
+      await onSaved((json.variant?.id as string | undefined) ?? variantId ?? '')
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'שמירה נכשלה')
     } finally {
