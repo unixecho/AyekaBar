@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { loc, type MenuCategory } from '@/lib/menu/types'
 import { type HappyHour, type HappyHourRule } from '@/lib/menu/variants'
 import Switch from '@/components/Switch'
+import TimeWheel from '@/components/TimeWheel'
 
 // Full-screen, two-stage onboarding — deliberately NOT a sheet. Setting up a
 // discount deserves the whole screen.
@@ -39,7 +40,6 @@ const T = {
   selected: (n: number) => `${n} פריטים בהנחה`,
 }
 
-const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`)
 const PERCENTS = [10, 15, 20, 25, 30, 50]
 
 export default function HappyHourWizard({
@@ -298,8 +298,10 @@ export default function HappyHourWizard({
   )
 }
 
-/** A wrapping grid, not a scroll strip. 24 hours in a horizontal scroller
- *  works on a phone and looks broken on a monitor. */
+/** Was a 24-button grid, which could only ever say "on the hour" and looked
+ *  nothing like the menu timer's picker. Same clock wheel now, so every time in
+ *  the owner panel is set the same way — and Happy Hour can finally start at
+ *  17:30. */
 function HourGrid({ label, value, onChange }: {
   label: string; value: string; onChange: (v: string) => void
 }) {
@@ -308,12 +310,7 @@ function HourGrid({ label, value, onChange }: {
       <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-dim)', marginBottom: 8 }}>
         {label}
       </label>
-      <div className="hh-hours" dir="ltr">
-        {HOURS.map((h) => (
-          <button key={h} type="button" onClick={() => onChange(h)} className="press hh-hour"
-            data-on={h === value ? 'true' : undefined}>{h}</button>
-        ))}
-      </div>
+      <TimeWheel value={value} onChange={onChange} />
     </div>
   )
 }

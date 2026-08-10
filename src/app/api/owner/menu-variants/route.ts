@@ -8,7 +8,64 @@ import { logAudit } from '@/lib/owner/audit'
 // Owner-only CRUD for named menu variants ("רגיל" / "יום שישי") plus the
 // switch for which one the public menu shows.
 
-const COLS = 'id, name, excluded_uids, is_default, sort_order, schedule_enabled, schedule_days, schedule_start, schedule_end, active_until, expire_action'
+const COLS_BASE = 'id, name, excluded_uids, is_default, sort_order, schedule_enabled, schedule_days, schedule_start, schedule_end'
+const COLS = `${COLS_BASE}, active_until, expire_action`
+
+/** supabase-js derives the row type from the select STRING literal, so a
+ *  column set chosen at runtime types as a parse error. The shape is known
+ *  here even when the string isn't. */
+interface VariantRow {
+  id: string
+  name: Record<string, string>
+  excluded_uids: string[]
+  is_default: boolean
+  sort_order: number | null
+  schedule_enabled: boolean | null
+  schedule_days: number[] | null
+  schedule_start: string | null
+  schedule_end: string | null
+  active_until?: string | null
+  expire_action?: 'revert' | 'delete' | null
+}
+
+/**
+ * Read the versions, tolerating a database that hasn't had migration 017
+ * applied yet.
+ *
+ * Selecting a column the table doesn't have fails the WHOLE query, which took
+ * the entire version bar down — the owner lost the ability to switch or edit
+ * menus at all because a timer feature wasn't installed. Losing the timers is
+ * acceptable; losing the menu editor is not. `timersReady` tells the UI which
+ * world it's in so it can hide affordances that would only error.
+ */
+async function selectVariants(service: SupabaseClient, menuId: string) {
+  const query = (cols: string) => service
+    .from('menu_variants')
+    .select(cols)
+    .eq('menu_id', menuId)
+    .order('is_default', { ascending: false })
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true })
+
+  const full = await query(COLS)
+  if (!full.error) {
+    return { rows: (full.data ?? []) as unknown as VariantRow[], timersReady: true, error: null }
+  }
+
+  const legacy = await query(COLS_BASE)
+  if (legacy.error) return { rows: [] as VariantRow[], timersReady: false, error: legacy.error }
+  return { rows: (legacy.data ?? []) as unknown as VariantRow[], timersReady: false, error: null }
+}
+
+/** Shown when the owner reaches for a timer on a database that can't store one. */
+const NEEDS_017 = 'התכונה דורשת הרצת מיגרציה 017 במסד הנתונים'
+
+/** Cheap capability probe, run BEFORE a write rather than retrying after one:
+ *  a failed insert that we retry with fewer columns risks writing twice. */
+async function timersAvailable(service: SupabaseClient): Promise<boolean> {
+  const { error } = await service.from('menu_variants').select('active_until').limit(1)
+  return !error
+}
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
 
@@ -169,20 +226,15 @@ export async function GET() {
   const menu = await loadMenu(auth.service)
   if (!menu) return NextResponse.json({ error: 'התפריט לא נמצא' }, { status: 404 })
 
-  const { data, error } = await auth.service
-    .from('menu_variants')
-    .select(COLS)
-    .eq('menu_id', menu.id)
-    .order('is_default', { ascending: false })
-    .order('sort_order', { ascending: true, nullsFirst: false })
-    .order('created_at', { ascending: true })
+  const { rows, timersReady, error } = await selectVariants(auth.service, menu.id)
 
   if (error) return NextResponse.json({ error: 'טעינת הגרסאות נכשלה' }, { status: 500 })
 
   return NextResponse.json({
-    variants: data ?? [],
+    variants: rows,
     activeVariantId: menu.activeVariantId,
     categories: menu.categories,
+    timersReady,
   })
 }
 
@@ -215,8 +267,10 @@ export async function POST(request: NextRequest) {
   // find and tap it would be a second step for something that is, by
   // definition, needed right now.
   const goLive = temp.value.active_until !== null
+  const timers = await timersAvailable(auth.service)
+  if (goLive && !timers) return NextResponse.json({ error: NEEDS_017 }, { status: 400 })
 
-  const { data, error } = await auth.service
+  const created = await auth.service
     .from('menu_variants')
     .insert({
       menu_id: menu.id,
@@ -224,15 +278,16 @@ export async function POST(request: NextRequest) {
       excluded_uids: excluded,
       is_default: false,
       ...sched.value,
-      ...temp.value,
+      ...(timers ? temp.value : {}),
     })
-    .select(COLS)
+    .select(timers ? COLS : COLS_BASE)
     .single()
 
-  if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
+  const data = created.data as unknown as VariantRow | null
+  if (created.error || !data) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
   if (goLive) {
-    await activateVariant(auth.service, menu.id, data.id as string)
+    await activateVariant(auth.service, menu.id, data.id)
   }
 
   await logAudit(auth.service, auth.userId, 'variant.create',
@@ -278,7 +333,15 @@ export async function PATCH(request: NextRequest) {
     if (row.is_default) return NextResponse.json({ variant: row })
 
     const { error } = await auth.service.rpc('set_default_variant', { p_variant_id: id })
-    if (error) return NextResponse.json({ error: 'שינוי התפריט הראשי נכשל' }, { status: 500 })
+    // The function ships with migration 017 alongside the timer columns, so a
+    // database missing one is missing both. Say which, rather than "failed".
+    if (error) {
+      const missing = !(await timersAvailable(auth.service))
+      return NextResponse.json(
+        { error: missing ? NEEDS_017 : 'שינוי התפריט הראשי נכשל' },
+        { status: missing ? 400 : 500 },
+      )
+    }
 
     await logAudit(auth.service, auth.userId, 'variant.default',
       `הגדיר/ה את התפריט הראשי: ${rowName}`, { variantId: id, name: rowName })
@@ -297,9 +360,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'אי אפשר להגביל בזמן את התפריט הראשי' }, { status: 400 })
     }
 
-    const { error: tempError } = await auth.service
-      .from('menu_variants').update(temp.value).eq('id', id)
-    if (tempError) return NextResponse.json({ error: 'ההחלפה נכשלה' }, { status: 500 })
+    const timers = await timersAvailable(auth.service)
+    if (temp.value.active_until && !timers) {
+      return NextResponse.json({ error: NEEDS_017 }, { status: 400 })
+    }
+
+    // Skipped entirely without the columns — a plain switch still works, which
+    // is the part the owner actually needs mid-service.
+    if (timers) {
+      const { error: tempError } = await auth.service
+        .from('menu_variants').update(temp.value).eq('id', id)
+      if (tempError) return NextResponse.json({ error: 'ההחלפה נכשלה' }, { status: 500 })
+    }
 
     const { error } = await activateVariant(auth.service, menu.id, id)
     if (error) return NextResponse.json({ error: 'ההחלפה נכשלה' }, { status: 500 })
@@ -358,10 +430,12 @@ export async function PATCH(request: NextRequest) {
     Object.assign(patch, s.value)
   }
 
-  const { data, error } = await auth.service
-    .from('menu_variants').update(patch).eq('id', id).select(COLS).single()
+  const updated = await auth.service
+    .from('menu_variants').update(patch).eq('id', id)
+    .select(await timersAvailable(auth.service) ? COLS : COLS_BASE).single()
 
-  if (error) return NextResponse.json({ error: 'עדכון נכשל' }, { status: 500 })
+  const data = updated.data as unknown as VariantRow | null
+  if (updated.error) return NextResponse.json({ error: 'עדכון נכשל' }, { status: 500 })
 
   const newName = (patch.name as { he?: string } | undefined)?.he ?? rowName
   await logAudit(auth.service, auth.userId, 'variant.update',

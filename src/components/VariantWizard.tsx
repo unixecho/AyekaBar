@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { loc, type MenuCategory } from '@/lib/menu/types'
 import TempMenuSheet, { type TempSetting } from '@/components/TempMenuSheet'
 import Switch from '@/components/Switch'
+import TimeWheel from '@/components/TimeWheel'
 
 // Create / edit a menu version. Two steps:
 //   1. Name it ("יום שישי")
@@ -64,11 +65,10 @@ export interface VariantSchedule {
 }
 
 const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
-const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`)
 
 export default function VariantWizard({
   categories, initialName, initialExcluded, initialSchedule, variantId,
-  isDefault = false, onClose, onSaved,
+  isDefault = false, timersReady = true, onClose, onSaved,
 }: {
   categories: MenuCategory[]
   initialName: string
@@ -80,6 +80,9 @@ export default function VariantWizard({
    *  never scheduled or put on a timer — there'd be nothing left to fall
    *  back TO. */
   isDefault?: boolean
+  /** False on a database without migration 017 — hides the timer card rather
+   *  than offering one that can only fail on save. */
+  timersReady?: boolean
   onClose: () => void
   onSaved: () => void | Promise<void>
 }) {
@@ -105,7 +108,7 @@ export default function VariantWizard({
   // on the version row, next to the chip that shows the countdown.
   const [temp, setTemp] = useState<TempSetting | null>(null)
   const [tempOpen, setTempOpen] = useState(false)
-  const offerTemp = !isDefault && !variantId
+  const offerTemp = !isDefault && !variantId && timersReady
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !saving) onClose() }
@@ -325,24 +328,14 @@ export default function VariantWizard({
 
                     <div>
                       <label style={labelStyle}>{T.schedFrom}</label>
-                      <div className="hh-hours" dir="ltr">
-                        {HOURS.map((h) => (
-                          <button key={h} type="button" className="press hh-hour"
-                            data-on={h === sched.start ? 'true' : undefined}
-                            onClick={() => setSched((s) => ({ ...s, start: h }))}>{h}</button>
-                        ))}
-                      </div>
+                      <TimeWheel value={sched.start}
+                        onChange={(v) => setSched((s) => ({ ...s, start: v }))} />
                     </div>
 
                     <div>
                       <label style={labelStyle}>{T.schedTo}</label>
-                      <div className="hh-hours" dir="ltr">
-                        {HOURS.map((h) => (
-                          <button key={h} type="button" className="press hh-hour"
-                            data-on={h === sched.end ? 'true' : undefined}
-                            onClick={() => setSched((s) => ({ ...s, end: h }))}>{h}</button>
-                        ))}
-                      </div>
+                      <TimeWheel value={sched.end}
+                        onChange={(v) => setSched((s) => ({ ...s, end: v }))} />
                     </div>
 
                     {sched.end <= sched.start && (

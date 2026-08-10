@@ -249,11 +249,15 @@ html[dir="ltr"] .menu-back svg { transform: scaleX(-1); }
 .wheel-scroll {
   height: 100%; overflow-y: auto; scroll-snap-type: y mandatory;
   scrollbar-width: none; -webkit-overflow-scrolling: touch; outline: none;
+  /* Grabbable: on a mouse the wheel is dragged, not flicked. Selection is off
+     so a drag across the numbers doesn't highlight them like text. */
+  cursor: grab; user-select: none; -webkit-user-select: none;
   /* Fade the ends so the column reads as a cylinder rather than a cut-off list. */
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
   mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
 }
 .wheel-scroll::-webkit-scrollbar { display: none; }
+.wheel-scroll:active { cursor: grabbing; }
 .wheel-scroll:focus-visible { box-shadow: 0 0 0 2px var(--neon-soft); border-radius: 12px; }
 .wheel-opt {
   display: grid; place-items: center; scroll-snap-align: center; cursor: pointer;

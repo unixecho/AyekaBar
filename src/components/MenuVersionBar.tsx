@@ -80,6 +80,7 @@ const T = {
   timerEdit: 'שינוי הטיימר',
   willDelete: 'תימחק בסיום',
   expired: 'הטיימר הסתיים',
+  needsMigration: 'תפריט זמני והחלפת תפריט ראשי דורשים הרצת מיגרציה 017 במסד הנתונים.',
 }
 
 export default function MenuVersionBar() {
@@ -91,6 +92,10 @@ export default function MenuVersionBar() {
   const [wizard, setWizard] = useState<{ mode: 'create' } | { mode: 'edit'; variant: Variant } | null>(null)
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
   const [timerFor, setTimerFor] = useState<Variant | null>(null)
+  // False when the database predates migration 017. The version bar still
+  // works; only the timer and main-menu switches are withheld, because
+  // offering a control that can only fail is worse than not offering it.
+  const [timersReady, setTimersReady] = useState(true)
   // Drives the countdown. A minute is the right grain — the badge reads in
   // whole minutes, so anything faster would just re-render for nothing.
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -103,6 +108,7 @@ export default function MenuVersionBar() {
       setVariants(j.variants)
       setActiveId(j.activeVariantId)
       setCategories(j.categories ?? [])
+      setTimersReady(j.timersReady !== false)
       setErr(null)
     } catch {
       setVariants([])
@@ -286,10 +292,12 @@ export default function MenuVersionBar() {
               {active.expire_action === 'delete' ? ` · ${T.willDelete}` : ''}
             </span>
           )}
-          <button type="button" onClick={() => setTimerFor(active)} disabled={busy}
-            className="press" style={ghost}>
-            {active.active_until ? T.timerEdit : T.timerStart}
-          </button>
+          {timersReady && (
+            <button type="button" onClick={() => setTimerFor(active)} disabled={busy}
+              className="press" style={ghost}>
+              {active.active_until ? T.timerEdit : T.timerStart}
+            </button>
+          )}
           <button type="button" onClick={() => setWizard({ mode: 'edit', variant: active })}
             disabled={busy} className="press" style={ghost}>
             {T.edit}
@@ -301,9 +309,17 @@ export default function MenuVersionBar() {
         </div>
       )}
 
+      {!timersReady && (
+        <p style={{
+          margin: 0, padding: '9px 11px', borderRadius: 11,
+          background: 'rgba(255,94,58,0.08)', border: '1px solid rgba(255,94,58,0.22)',
+          color: 'var(--text-dim)', fontSize: '0.75rem', lineHeight: 1.5,
+        }}>{T.needsMigration}</p>
+      )}
+
       {/* Which version is MAIN is a different question from which is on show
           right now, so it gets its own row rather than another chip state. */}
-      {active && (
+      {active && timersReady && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, paddingTop: 10,
           borderTop: '1px solid var(--line)',
@@ -341,6 +357,7 @@ export default function MenuVersionBar() {
           }}
           variantId={wizard.mode === 'edit' ? wizard.variant.id : null}
           isDefault={wizard.mode === 'edit' && wizard.variant.is_default}
+          timersReady={timersReady}
           onClose={() => setWizard(null)}
           onSaved={async () => { setWizard(null); await load() }}
         />

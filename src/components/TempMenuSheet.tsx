@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { barTimeMinutes, nextBarTimeInstant } from '@/lib/menu/variants'
-import WheelPicker from '@/components/WheelPicker'
+import TimeWheel, { fmtHhmm } from '@/components/TimeWheel'
 import Switch from '@/components/Switch'
 
 // "The cook isn't in tonight — put the short menu up until 4am."
@@ -49,8 +49,7 @@ const T = {
 }
 
 const QUICK_HOURS = [2, 4, 6, 8]
-const HOURS = Array.from({ length: 24 }, (_, h) => h)
-const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+const MINUTE_STEP = 5
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -71,8 +70,13 @@ export default function TempMenuSheet({
   const seed = initial ? new Date(initial.until) : null
   const seedBar = seed ? barClockOf(seed) : null
 
-  const [hh, setHh] = useState(seedBar ? seedBar.h : 4)
-  const [mm, setMm] = useState(seedBar ? nearestStep(seedBar.m) : 0)
+  const [time, setTime] = useState(
+    seedBar ? fmtHhmm(seedBar.h, nearestStep(seedBar.m)) : '04:00',
+  )
+  // Which shortcut produced the current time, so it can show as chosen. Held
+  // rather than derived: "now + 4h" drifts every minute, so a derived match
+  // would un-highlight the chip a few minutes after it was tapped.
+  const [quick, setQuick] = useState<number | null>(null)
   const [del, setDel] = useState(initial?.deleteOnExpiry ?? false)
   const [busy, setBusy] = useState(false)
   // Keeps "בעוד 3 שעות" honest while the sheet sits open.
@@ -91,6 +95,8 @@ export default function TempMenuSheet({
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
   }, [onCancel, busy])
 
+  const [hh, mm] = time.split(':').map(Number)
+
   const target = useMemo(
     () => nextBarTimeInstant(hh, mm),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,10 +111,9 @@ export default function TempMenuSheet({
   const crossesMidnight = hh * 60 + mm <= barTimeMinutes()
 
   function pickQuick(hours: number) {
-    const t = new Date(Date.now() + hours * 3_600_000)
-    const bar = barClockOf(t)
-    setHh(bar.h)
-    setMm(nearestStep(bar.m))
+    const bar = barClockOf(new Date(Date.now() + hours * 3_600_000))
+    setTime(fmtHhmm(bar.h, nearestStep(bar.m)))
+    setQuick(hours)
   }
 
   async function confirm() {
@@ -138,6 +143,8 @@ export default function TempMenuSheet({
             <div className="hh-percent-grid">
               {QUICK_HOURS.map((h) => (
                 <button key={h} type="button" className="press hh-percent-btn"
+                  data-on={quick === h ? 'true' : undefined}
+                  aria-pressed={quick === h}
                   onClick={() => pickQuick(h)}>{T.hours(h)}</button>
               ))}
             </div>
@@ -145,13 +152,13 @@ export default function TempMenuSheet({
 
           <div className="pick-cat" style={{ padding: 12 }}>
             <label style={labelStyle}>{T.untilLabel}</label>
-            <div className="wheel-row" dir="ltr">
-              <WheelPicker values={HOURS} value={hh} onChange={setHh}
-                ariaLabel={T.hour} format={pad} />
-              <span aria-hidden className="wheel-colon">:</span>
-              <WheelPicker values={MINUTES} value={mm} onChange={setMm}
-                ariaLabel={T.minute} format={pad} />
-            </div>
+            <TimeWheel
+              value={time} minuteStep={MINUTE_STEP}
+              hourLabel={T.hour} minuteLabel={T.minute}
+              // Touching a wheel means the owner is choosing the time directly,
+              // so the shortcut that set it is no longer what's on screen.
+              onChange={(next) => { setTime(next); setQuick(null) }}
+            />
 
             <div className="temp-preview">
               <span className="temp-preview-label">{T.revertsAt}</span>
@@ -212,7 +219,7 @@ function barClockOf(d: Date): { h: number; m: number } {
 
 /** Wheel minutes go in fives; a shortcut landing on 4:37 snaps to 4:35. */
 function nearestStep(m: number): number {
-  return MINUTES.reduce((best, v) => (Math.abs(v - m) < Math.abs(best - m) ? v : best), MINUTES[0])
+  return Math.min(55, Math.round(m / MINUTE_STEP) * MINUTE_STEP)
 }
 
 const labelStyle: CSSProperties = {

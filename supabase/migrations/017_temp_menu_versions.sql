@@ -187,3 +187,30 @@ grant select on public.public_menu_variants to anon, authenticated;
 
 comment on view public.public_menu_variants is
   'Every menu version plus its schedule and temporary deadline, so the public menu can resolve which one applies now. Display fields only.';
+
+-- ---- 6. did it work? -----------------------------------------------------
+-- The Supabase SQL editor runs this whole file as ONE transaction: if any
+-- statement above fails, everything rolls back and NOTHING is applied — the
+-- columns silently don't appear. This last SELECT is the receipt. Four rows,
+-- all ok = true, means the migration is really in place. Anything less (or an
+-- error banner instead of a result grid) means it rolled back — read the error,
+-- fix it, and run the file again. It is safe to re-run.
+
+select 'menu_variants.active_until'  as thing,
+       exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = 'menu_variants'
+                 and column_name = 'active_until') as ok
+union all
+select 'menu_variants.expire_action',
+       exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = 'menu_variants'
+                 and column_name = 'expire_action')
+union all
+select 'public_menu_variants.active_until',
+       exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = 'public_menu_variants'
+                 and column_name = 'active_until')
+union all
+select 'set_default_variant()',
+       exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+               where n.nspname = 'public' and p.proname = 'set_default_variant');
