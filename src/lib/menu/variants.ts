@@ -74,6 +74,21 @@ export interface MenuVariant {
   scheduleEnd: string | null
   /** The manually-chosen version, used when no schedule is open. */
   isActive: boolean
+  /**
+   * ISO instant this version stops being live — the "the cook is out tonight,
+   * put the short menu up until 4am" case. Null means it stays until someone
+   * changes it. Nothing has to run when it passes: resolveVariant() just stops
+   * choosing it, so the menu is already correct at 04:00:00 whether or not any
+   * cleanup job ever fires.
+   */
+  activeUntil?: string | null
+}
+
+/** Has this version's temporary reign run out? False when it never had one. */
+export function isTempExpired(v: MenuVariant, now: Date = new Date()): boolean {
+  if (!v.activeUntil) return false
+  const t = Date.parse(v.activeUntil)
+  return Number.isFinite(t) && now.getTime() >= t
 }
 
 /** Weekday at the bar, not on the visitor's device. */
@@ -102,8 +117,9 @@ export function isScheduleOpen(v: MenuVariant, now?: Date): boolean {
  *   1. A scheduled version whose window is open wins — that's the whole point
  *      of scheduling: Friday takes over by itself.
  *   2. Otherwise the manually-selected version, UNLESS it is itself scheduled
- *      and currently closed. That's what makes the menu "revert back to normal
- *      when the timing expired" without anyone touching it.
+ *      and currently closed, or its temporary deadline has passed. That's what
+ *      makes the menu "revert back to normal when the timing expired" without
+ *      anyone touching it — including at 4am, with the owner asleep.
  *   3. Otherwise the default.
  */
 export function resolveVariant(
@@ -118,9 +134,11 @@ export function resolveVariant(
   if (open.length) return open[0]
 
   const active = variants.find((v) => v.isActive)
-  if (active && !active.scheduleEnabled) return active
+  if (active && !active.scheduleEnabled && !isTempExpired(active, now ?? new Date())) {
+    return active
+  }
 
-  return variants.find((v) => v.isDefault) ?? active ?? null
+  return variants.find((v) => v.isDefault) ?? null
 }
 
 /**
@@ -179,6 +197,42 @@ export function barTimeMinutes(now: Date = new Date()): number {
 export function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
   return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0)
+}
+
+/**
+ * The next moment the clock AT THE BAR reads hh:mm — "put the short menu up
+ * until 4am" resolved into a real instant. Always in the future: asking for a
+ * time that has already passed today means tomorrow.
+ *
+ * Found by stepping toward the answer and re-reading the bar clock rather than
+ * by adding a UTC offset, because the offset is exactly what's untrustworthy:
+ * Israel moves its clocks at 2am, so on two nights a year plain arithmetic
+ * would set a 4am deadline that lands at 3am or 5am. Re-reading converges on
+ * the right instant either way.
+ */
+export function nextBarTimeInstant(hh: number, mm: number, from: Date = new Date()): Date {
+  const target = hh * 60 + mm
+
+  let delta = target - barTimeMinutes(from)
+  if (delta <= 0) delta += 1440
+  let guess = new Date(from.getTime() + delta * 60_000)
+
+  for (let i = 0; i < 3; i++) {
+    let diff = target - barTimeMinutes(guess)
+    if (diff === 0) break
+    // Correct by the SHORT way round, so a DST hop nudges the guess by an hour
+    // instead of throwing it a whole day.
+    if (diff > 720) diff -= 1440
+    if (diff < -720) diff += 1440
+    guess = new Date(guess.getTime() + diff * 60_000)
+  }
+
+  // A correction can only ever pull the guess backwards by an hour or so; if
+  // that lands it in the past, the answer is the following day.
+  if (guess.getTime() <= from.getTime()) {
+    guess = new Date(guess.getTime() + 1440 * 60_000)
+  }
+  return guess
 }
 
 /** Is the window open right now? Handles "11:00 until closing at 02:00", which

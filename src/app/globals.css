@@ -229,6 +229,76 @@ html[dir="ltr"] .menu-back svg { transform: scaleX(-1); }
 }
 
 /* ============================================================
+   iOS clock wheel (TempMenuSheet) — a column scrolling under a fixed
+   highlight band. Snapping is the browser's, so the momentum feels native.
+   ============================================================ */
+.wheel-row {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.wheel-colon {
+  font-size: 1.5rem; font-weight: 700; color: var(--text-dim);
+  padding-bottom: 2px;
+}
+.wheel { position: relative; flex: 0 0 auto; width: 96px; }
+.wheel-band {
+  position: absolute; inset-inline: 0; top: 50%; transform: translateY(-50%);
+  border-radius: 12px; background: rgba(255,94,58,0.12);
+  box-shadow: inset 0 0 0 1px rgba(255,94,58,0.3);
+  pointer-events: none; z-index: 1;
+}
+.wheel-scroll {
+  height: 100%; overflow-y: auto; scroll-snap-type: y mandatory;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch; outline: none;
+  /* Fade the ends so the column reads as a cylinder rather than a cut-off list. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
+}
+.wheel-scroll::-webkit-scrollbar { display: none; }
+.wheel-scroll:focus-visible { box-shadow: 0 0 0 2px var(--neon-soft); border-radius: 12px; }
+.wheel-opt {
+  display: grid; place-items: center; scroll-snap-align: center; cursor: pointer;
+  font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--text-faint); user-select: none;
+  transition: color .18s var(--ease), transform .18s var(--ease);
+}
+.wheel-opt[data-on="true"] {
+  color: var(--text); font-weight: 800; transform: scale(1.06);
+}
+.wheel[data-disabled="true"] { opacity: 0.45; pointer-events: none; }
+
+/* The reassurance line: when exactly the menu comes back. */
+.temp-preview {
+  margin-top: 12px; padding: 11px 13px; border-radius: 12px;
+  background: rgba(255,94,58,0.10); border: 1px solid rgba(255,94,58,0.28);
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.temp-preview-label { font-size: 0.78rem; color: var(--text-dim); }
+.temp-preview-time {
+  font-size: 1.05rem; font-weight: 800; color: var(--neon-soft);
+  font-variant-numeric: tabular-nums;
+}
+.temp-preview-when { font-size: 0.78rem; color: var(--text-dim); }
+
+/* A version running on a timer, in the editor's version row. */
+.temp-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; font-weight: 700; color: var(--neon-soft);
+  border: 1px solid rgba(255,94,58,0.3); background: rgba(255,94,58,0.10);
+  border-radius: 999px; padding: 2px 9px; font-variant-numeric: tabular-nums;
+}
+.main-badge {
+  display: inline-flex; align-items: center;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.02em;
+  color: var(--text-dim); border: 1px solid var(--line-strong);
+  border-radius: 999px; padding: 1px 7px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-scroll { scroll-behavior: auto; }
+  .wheel-opt { transition: none; }
+}
+
+/* ============================================================
    Happy Hour full-screen wizard
    ============================================================ */
 .hh-screen {

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import {
-  MENU_SLUG, PUBLIC_MENU_COLS, PUBLIC_VARIANT_COLS,
+  MENU_SLUG, PUBLIC_MENU_COLS, PUBLIC_VARIANT_COLS, PUBLIC_VARIANT_COLS_LEGACY,
   normalizeMenuRow, normalizeVariantRow,
   type MenuData, type PublicMenuRow, type PublicVariantRow,
 } from './types'
@@ -33,12 +33,27 @@ export async function fetchMenuClient(): Promise<MenuData | null> {
   }
   if (!menu) return null
 
-  const { data: rows } = await supabase
+  // Typed by hand: supabase-js derives a row type from the select STRING, so
+  // the full and legacy column sets come back as two different shapes that
+  // won't share a variable.
+  let rows: PublicVariantRow[] | null = null
+
+  const full = await supabase
     .from('public_menu_variants')
     .select(PUBLIC_VARIANT_COLS)
     .eq('slug', MENU_SLUG)
+  rows = (full.data as PublicVariantRow[] | null) ?? null
 
-  if (rows) menu.variants = (rows as PublicVariantRow[]).map(normalizeVariantRow)
+  // Pre-017 fallback — see the same note in types.ts.
+  if (!rows) {
+    const legacy = await supabase
+      .from('public_menu_variants')
+      .select(PUBLIC_VARIANT_COLS_LEGACY)
+      .eq('slug', MENU_SLUG)
+    rows = (legacy.data as PublicVariantRow[] | null) ?? null
+  }
+
+  if (rows) menu.variants = rows.map(normalizeVariantRow)
 
   return menu
 }

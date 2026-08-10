@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { loc, type MenuCategory } from '@/lib/menu/types'
+import TempMenuSheet, { type TempSetting } from '@/components/TempMenuSheet'
+import Switch from '@/components/Switch'
 
 // Create / edit a menu version. Two steps:
 //   1. Name it ("יום שישי")
@@ -44,6 +46,13 @@ const T = {
   schedTo: 'עד שעה',
   schedOvernight: 'החלון ימשיך אחרי חצות',
   schedManual: 'ללא תזמון — הגרסה מוצגת רק כשבוחרים אותה ידנית.',
+  tempTitle: 'להפעיל עכשיו, לזמן מוגבל',
+  tempHint: 'הגרסה תעלה לאוויר ברגע השמירה ותרד לבד בשעה שתבחר/י.',
+  tempOff: 'הגרסה תישמר בלבד. אפשר להפעיל אותה מתי שרוצים.',
+  tempSet: 'עד',
+  tempDeletes: 'ותימחק בסיום',
+  tempChange: 'שינוי',
+  defaultScope: 'זהו התפריט הראשי — מה שמסומן כאן הוא מה שמוצג כברירת מחדל.',
 }
 
 export interface VariantSchedule {
@@ -67,7 +76,9 @@ export default function VariantWizard({
   initialSchedule: VariantSchedule
   /** null = creating */
   variantId: string | null
-  /** The full menu: renameable, but never scoped or scheduled. */
+  /** The fallback everything reverts to: it can be scoped and renamed, but
+   *  never scheduled or put on a timer — there'd be nothing left to fall
+   *  back TO. */
   isDefault?: boolean
   onClose: () => void
   onSaved: () => void | Promise<void>
@@ -90,6 +101,11 @@ export default function VariantWizard({
   })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  // Only offered while CREATING. Retiming a version that already exists belongs
+  // on the version row, next to the chip that shows the countdown.
+  const [temp, setTemp] = useState<TempSetting | null>(null)
+  const [tempOpen, setTempOpen] = useState(false)
+  const offerTemp = !isDefault && !variantId
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !saving) onClose() }
@@ -136,16 +152,21 @@ export default function VariantWizard({
   async function save() {
     const trimmed = name.trim()
     if (!trimmed) { setErr(T.nameRequired); setStep(1); return }
-    if (!isDefault && shownCount === 0) { setErr(T.noneLeft); return }
+    // Applies to the main version too, now that it can hide items — an empty
+    // menu is never what anyone meant.
+    if (shownCount === 0) { setErr(T.noneLeft); return }
     if (!isDefault && sched.enabled && sched.start === sched.end) { setErr(T.badWindow); return }
 
     setSaving(true); setErr(null)
     try {
-      // The default only ever takes a name — sending scope or schedule would
-      // be rejected, and rightly so.
+      // The main version takes a name and a scope, but never a schedule or a
+      // timer — sending either would be rejected, and rightly so.
       const payload = isDefault
-        ? { nameHe: trimmed }
-        : { nameHe: trimmed, excludedUids: Array.from(excluded), schedule: sched }
+        ? { nameHe: trimmed, excludedUids: Array.from(excluded) }
+        : {
+          nameHe: trimmed, excludedUids: Array.from(excluded), schedule: sched,
+          ...(offerTemp && temp ? { temp } : {}),
+        }
       const res = await fetch('/api/owner/menu-variants', {
         method: variantId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -219,6 +240,48 @@ export default function VariantWizard({
                   }}
                 />
               </div>
+
+              {/* Temporary activation — the "no cook tonight" path. Offered
+                  only on creation, because a version that already exists is
+                  timed from its chip, where the countdown lives. */}
+              {offerTemp && (
+              <div className="pick-cat" style={{ padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)' }}>{T.tempTitle}</div>
+                    <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                      {temp ? T.tempHint : T.tempOff}
+                    </p>
+                  </div>
+                  <button type="button" role="switch" aria-checked={!!temp} aria-label={T.tempTitle}
+                    onClick={() => (temp ? setTemp(null) : setTempOpen(true))}
+                    className="press" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
+                    <Switch on={!!temp} />
+                  </button>
+                </div>
+
+                {temp && (
+                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span className="temp-badge">
+                      ⏳ {T.tempSet} {new Intl.DateTimeFormat('he-IL', {
+                        timeZone: 'Asia/Jerusalem', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+                      }).format(new Date(temp.until))}
+                      {temp.deleteOnExpiry ? ` · ${T.tempDeletes}` : ''}
+                    </span>
+                    <button type="button" onClick={() => setTempOpen(true)} className="press"
+                      style={{ ...ghostBtn, marginInlineStart: 'auto' }}>{T.tempChange}</button>
+                  </div>
+                )}
+              </div>
+              )}
+
+              {isDefault && (
+                <p style={{
+                  margin: 0, padding: '10px 12px', borderRadius: 11,
+                  background: 'rgba(255,255,255,0.03)', border: '1px solid var(--line)',
+                  color: 'var(--text-faint)', fontSize: '0.78rem', lineHeight: 1.5,
+                }}>{T.defaultScope}</p>
+              )}
 
               {/* Automatic schedule */}
               {!isDefault && (
@@ -294,7 +357,7 @@ export default function VariantWizard({
               </div>
               )}
 
-              {!isDefault && categories.map((cat) => {
+              {categories.map((cat) => {
                 const uids = (cat.items ?? []).map((i) => i.uid).filter((u): u is string => !!u)
                 if (!uids.length) return null
                 const onCount = uids.filter((u) => !excluded.has(u)).length
@@ -364,34 +427,19 @@ export default function VariantWizard({
           </div>
         )}
       </div>
-    </div>
-  )
-}
 
-export function Switch({ on, partial = false, small = false }: {
-  on: boolean; partial?: boolean; small?: boolean
-}) {
-  const w = small ? 40 : 46
-  const h = small ? 24 : 28
-  const knob = h - 6
-  const travel = w - knob - 8
-  return (
-    <span aria-hidden style={{
-      flex: '0 0 auto', width: w, height: h, borderRadius: 999, direction: 'ltr',
-      display: 'inline-flex', alignItems: 'center', padding: 3, boxSizing: 'border-box',
-      border: `1px solid ${on || partial ? 'transparent' : 'var(--line-strong)'}`,
-      background: on
-        ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))'
-        : partial ? 'rgba(255,94,58,0.40)' : 'var(--bg-elev-2)',
-      transition: 'background .25s var(--ease)',
-    }}>
-      <span style={{
-        width: knob, height: knob, borderRadius: 999, background: '#fff',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
-        transform: `translateX(${on ? travel : partial ? travel / 2 : 0}px)`,
-        transition: 'transform .26s var(--ease)',
-      }} />
-    </span>
+      {tempOpen && (
+        <TempMenuSheet
+          variantName={name.trim() || T.namePh}
+          initial={temp}
+          confirmLabel={T.save}
+          allowClear={!!temp}
+          onCancel={() => setTempOpen(false)}
+          onClear={() => { setTemp(null); setTempOpen(false) }}
+          onConfirm={(value) => { setTemp(value); setTempOpen(false) }}
+        />
+      )}
+    </div>
   )
 }
 
@@ -400,6 +448,11 @@ const labelStyle: CSSProperties = {
   color: 'var(--text-dim)', marginBottom: 7,
 }
 const errStyle: CSSProperties = { color: '#ff6b6b', fontSize: '0.82rem', margin: '10px 0 0' }
+const ghostBtn: CSSProperties = {
+  padding: '6px 11px', borderRadius: 10, border: '1px solid var(--line-strong)',
+  background: 'transparent', color: 'var(--text-dim)', fontSize: '0.78rem',
+  fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+}
 const primary: CSSProperties = {
   width: '100%', padding: '14px 0', borderRadius: 14, border: 'none',
   background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',

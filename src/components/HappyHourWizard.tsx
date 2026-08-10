@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { loc, type MenuCategory } from '@/lib/menu/types'
 import { type HappyHour, type HappyHourRule } from '@/lib/menu/variants'
-import { Switch } from '@/components/VariantWizard'
+import Switch from '@/components/Switch'
 
 // Full-screen, two-stage onboarding — deliberately NOT a sheet. Setting up a
 // discount deserves the whole screen.

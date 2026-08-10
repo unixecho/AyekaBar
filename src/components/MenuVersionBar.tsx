@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { loc, type MenuCategory } from '@/lib/menu/types'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import VariantWizard from '@/components/VariantWizard'
+import Switch from '@/components/Switch'
+import TempMenuSheet, { type TempSetting } from '@/components/TempMenuSheet'
 
 // The version row that sits above the editor: one chip per menu version, plus
 // an iOS "+" that starts the create-a-version flow.
@@ -23,6 +25,8 @@ interface Variant {
   schedule_days: number[] | null
   schedule_start: string | null
   schedule_end: string | null
+  active_until: string | null
+  expire_action: 'revert' | 'delete' | null
 }
 
 const DAY_SHORT = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']
@@ -35,6 +39,22 @@ function scheduleLabel(v: Variant): string | null {
   return `${days} · ${v.schedule_start}–${v.schedule_end}`
 }
 
+const clockAt = new Intl.DateTimeFormat('he-IL', {
+  timeZone: 'Asia/Jerusalem', weekday: 'short',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+})
+
+/** "עוד 3:41 · עד ש׳, 04:00" — the countdown answers "is this still on?" at a
+ *  glance, the wall time answers "until when?" without doing the sum. */
+function tempLabel(v: Variant, nowMs: number): string | null {
+  if (!v.active_until) return null
+  const left = Date.parse(v.active_until) - nowMs
+  if (!Number.isFinite(left) || left <= 0) return null
+  const mins = Math.floor(left / 60_000)
+  const countdown = `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`
+  return `עוד ${countdown} · עד ${clockAt.format(new Date(v.active_until))}`
+}
+
 const T = {
   label: 'גרסת התפריט',
   hint: 'הגרסה המסומנת היא זו שהלקוחות רואים.',
@@ -42,12 +62,24 @@ const T = {
   edit: 'עריכת פריטים',
   del: 'מחיקת גרסה',
   delTitle: 'למחוק את הגרסה?',
-  delBody: 'התפריט יחזור להציג את הגרסה הרגילה. הפריטים עצמם לא יימחקו.',
+  delBody: 'התפריט יחזור להציג את התפריט הראשי. הפריטים עצמם לא יימחקו.',
   loadErr: 'טעינת הגרסאות נכשלה.',
   hidden: (n: number) => `${n} פריטים מוסתרים`,
   allItems: 'כל הפריטים',
-  defaultNote: 'הגרסה המלאה — כל הפריטים, וזו שאליה חוזרים כשתזמון נגמר.',
-  renameOnly: 'שינוי שם',
+  defaultNote: 'זהו התפריט הראשי — זה שאליו חוזרים כשתזמון או טיימר נגמרים.',
+  renameOnly: 'עריכת התפריט הראשי',
+  main: 'ראשי',
+  makeMain: 'תפריט ראשי',
+  makeMainHint: 'הגרסה הזו תהיה זו שאליה התפריט חוזר תמיד.',
+  makeMainOn: 'זהו התפריט הראשי כרגע.',
+  makeMainTitle: 'להחליף את התפריט הראשי?',
+  makeMainBody: (from: string, to: string) =>
+    `“${to}” יהפוך לתפריט הראשי — זה שאליו התפריט חוזר כשטיימר או תזמון נגמרים. “${from}” יישאר ברשימה כגרסה רגילה, ואפשר יהיה להחזיר אותו בכל רגע.`,
+  makeMainConfirm: 'החלפה',
+  timerStart: 'הפעלה זמנית',
+  timerEdit: 'שינוי הטיימר',
+  willDelete: 'תימחק בסיום',
+  expired: 'הטיימר הסתיים',
 }
 
 export default function MenuVersionBar() {
@@ -58,6 +90,10 @@ export default function MenuVersionBar() {
   const [err, setErr] = useState<string | null>(null)
   const [wizard, setWizard] = useState<{ mode: 'create' } | { mode: 'edit'; variant: Variant } | null>(null)
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
+  const [timerFor, setTimerFor] = useState<Variant | null>(null)
+  // Drives the countdown. A minute is the right grain — the badge reads in
+  // whole minutes, so anything faster would just re-render for nothing.
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const load = useCallback(async () => {
     try {
@@ -76,24 +112,67 @@ export default function MenuVersionBar() {
 
   useEffect(() => { load() }, [load])
 
-  async function activate(id: string) {
-    if (id === activeId) return
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // A finished timer changes what customers see whether or not this tab is
+  // open, so once the countdown hits zero the editor refetches rather than
+  // sitting there showing a version that is no longer live.
+  useEffect(() => {
+    const live = variants?.find((v) => v.id === activeId)
+    if (!live?.active_until) return
+    if (Date.parse(live.active_until) > nowMs) return
+    load()
+  }, [nowMs, variants, activeId, load])
+
+  async function activate(id: string, temp?: TempSetting) {
+    if (id === activeId && !temp) return
     const prev = activeId
     setActiveId(id) // optimistic — the switch should feel instant
     setBusy(true)
     try {
       const res = await fetch('/api/owner/menu-variants', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, activate: true }),
+        body: JSON.stringify({ id, activate: true, ...(temp ? { temp } : {}) }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
       setErr(null)
+      // A timer changes fields the row is rendering (the deadline, the badge),
+      // so re-read rather than guessing what the server stored.
+      if (temp) await load()
     } catch (e) {
       setActiveId(prev)
       setErr(e instanceof Error ? e.message : 'ההחלפה נכשלה')
     } finally {
       setBusy(false)
     }
+  }
+
+  function askMakeMain(v: Variant) {
+    const current = variants?.find((x) => x.is_default)
+    setConfirmReq({
+      title: T.makeMainTitle,
+      body: T.makeMainBody(loc(current?.name ?? {}, 'he') || '—', loc(v.name, 'he') || '—'),
+      confirmLabel: T.makeMainConfirm,
+      onConfirm: async () => {
+        setBusy(true)
+        try {
+          const res = await fetch('/api/owner/menu-variants', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: v.id, makeDefault: true }),
+          })
+          if (!res.ok) throw new Error((await res.json()).error)
+          await load()
+          setErr(null)
+        } catch (e) {
+          setErr(e instanceof Error ? e.message : 'שינוי התפריט הראשי נכשל')
+        } finally {
+          setBusy(false)
+        }
+      },
+    })
   }
 
   function askDelete(v: Variant) {
@@ -158,6 +237,8 @@ export default function MenuVersionBar() {
                   </svg>
                 )}
                 {loc(v.name, 'he') || '—'}
+                {v.is_default && <span className="main-badge">{T.main}</span>}
+                {v.active_until && Date.parse(v.active_until) > nowMs && <span aria-hidden>⏳</span>}
               </button>
             )
           })}
@@ -179,8 +260,8 @@ export default function MenuVersionBar() {
         </button>
       </div>
 
-      {/* The default can be renamed but not scoped or scheduled — it IS the
-          full menu and the fallback everything else reverts to. */}
+      {/* The main version can be renamed and scoped, but never scheduled or
+          timed — it's the thing every schedule and timer falls back TO. */}
       {active && active.is_default && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.76rem', color: 'var(--text-faint)' }}>{T.defaultNote}</span>
@@ -197,12 +278,18 @@ export default function MenuVersionBar() {
             {active.excluded_uids.length ? T.hidden(active.excluded_uids.length) : T.allItems}
           </span>
           {scheduleLabel(active) && (
-            <span style={{
-              fontSize: '0.72rem', fontWeight: 700, color: 'var(--neon-soft)',
-              border: '1px solid rgba(255,94,58,0.3)', background: 'rgba(255,94,58,0.10)',
-              borderRadius: 999, padding: '2px 9px',
-            }}>⏱ {scheduleLabel(active)}</span>
+            <span className="temp-badge">⏱ {scheduleLabel(active)}</span>
           )}
+          {tempLabel(active, nowMs) && (
+            <span className="temp-badge">
+              ⏳ {tempLabel(active, nowMs)}
+              {active.expire_action === 'delete' ? ` · ${T.willDelete}` : ''}
+            </span>
+          )}
+          <button type="button" onClick={() => setTimerFor(active)} disabled={busy}
+            className="press" style={ghost}>
+            {active.active_until ? T.timerEdit : T.timerStart}
+          </button>
           <button type="button" onClick={() => setWizard({ mode: 'edit', variant: active })}
             disabled={busy} className="press" style={ghost}>
             {T.edit}
@@ -210,6 +297,31 @@ export default function MenuVersionBar() {
           <button type="button" onClick={() => askDelete(active)} disabled={busy} className="press"
             style={{ ...ghost, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto' }}>
             {T.del}
+          </button>
+        </div>
+      )}
+
+      {/* Which version is MAIN is a different question from which is on show
+          right now, so it gets its own row rather than another chip state. */}
+      {active && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, paddingTop: 10,
+          borderTop: '1px solid var(--line)',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text)' }}>{T.makeMain}</div>
+            <p style={{ margin: '2px 0 0', fontSize: '0.74rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+              {active.is_default ? T.makeMainOn : T.makeMainHint}
+            </p>
+          </div>
+          <button type="button" role="switch" aria-checked={active.is_default}
+            aria-label={T.makeMain} disabled={busy || active.is_default}
+            onClick={() => askMakeMain(active)} className="press"
+            style={{
+              border: 'none', background: 'none', padding: 0,
+              cursor: active.is_default ? 'default' : 'pointer',
+            }}>
+            <Switch on={active.is_default} />
           </button>
         </div>
       )}
@@ -231,6 +343,43 @@ export default function MenuVersionBar() {
           isDefault={wizard.mode === 'edit' && wizard.variant.is_default}
           onClose={() => setWizard(null)}
           onSaved={async () => { setWizard(null); await load() }}
+        />
+      )}
+
+      {timerFor && (
+        <TempMenuSheet
+          variantName={loc(timerFor.name, 'he') || '—'}
+          initial={timerFor.active_until
+            ? { until: timerFor.active_until, deleteOnExpiry: timerFor.expire_action === 'delete' }
+            : null}
+          allowClear={!!timerFor.active_until}
+          onCancel={() => setTimerFor(null)}
+          onConfirm={async (value) => {
+            const v = timerFor
+            setTimerFor(null)
+            await activate(v.id, value)
+          }}
+          // Dropping the timer keeps the version on show — it just stops being
+          // temporary. Anything else would make "cancel the timer" a way to
+          // accidentally change the menu.
+          onClear={async () => {
+            const v = timerFor
+            setTimerFor(null)
+            setBusy(true)
+            try {
+              const res = await fetch('/api/owner/menu-variants', {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: v.id, activate: true }),
+              })
+              if (!res.ok) throw new Error((await res.json()).error)
+              await load()
+              setErr(null)
+            } catch (e) {
+              setErr(e instanceof Error ? e.message : 'ביטול התזמון נכשל')
+            } finally {
+              setBusy(false)
+            }
+          }}
         />
       )}
 

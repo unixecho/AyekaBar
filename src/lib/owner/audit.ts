@@ -10,6 +10,7 @@ export type AuditAction =
   | 'variant.update'
   | 'variant.delete'
   | 'variant.activate'
+  | 'variant.default'
   | 'happy_hour.update'
 
 /** Resolve who is acting, from the staff roster, falling back to the auth

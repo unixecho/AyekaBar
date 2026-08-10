@@ -91,10 +91,19 @@ export interface PublicVariantRow {
   schedule_start: string | null
   schedule_end: string | null
   is_active: boolean | null
+  /** Temporary deadline (migration 017). Absent until it runs. */
+  active_until?: string | null
 }
 
-export const PUBLIC_VARIANT_COLS =
+const VARIANT_COLS_BASE =
   'id,name,excluded_uids,is_default,sort_order,schedule_enabled,schedule_days,schedule_start,schedule_end,is_active'
+
+export const PUBLIC_VARIANT_COLS = `${VARIANT_COLS_BASE},active_until`
+/** Migration 017 adds active_until to the view. Selecting a column the view
+ *  doesn't have yet errors the WHOLE query — which would drop every version and
+ *  silently un-filter the menu, not just lose the timer. So there's a rung to
+ *  fall back to, same as public_menus has. */
+export const PUBLIC_VARIANT_COLS_LEGACY = VARIANT_COLS_BASE
 
 export function normalizeVariantRow(r: PublicVariantRow): MenuVariant {
   return {
@@ -108,6 +117,7 @@ export function normalizeVariantRow(r: PublicVariantRow): MenuVariant {
     scheduleStart: r.schedule_start,
     scheduleEnd: r.schedule_end,
     isActive: !!r.is_active,
+    activeUntil: r.active_until ?? null,
   }
 }
 
