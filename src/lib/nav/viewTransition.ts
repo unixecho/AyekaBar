@@ -22,6 +22,11 @@ export type NavDirection = 'forward' | 'back'
  *  component must not be able to freeze the app indefinitely. */
 const COMMIT_TIMEOUT_MS = 700
 
+/** Must stay >= the `.page-enter` animation-duration in globals.css (.32s).
+ *  Short by even a little and the suppression below lifts before that
+ *  animation has actually finished painting. */
+const FALLBACK_ANIM_MS = 380
+
 const STACK_KEY = 'ayeka:navStack'
 
 let settle: (() => void) | null = null
@@ -74,11 +79,25 @@ export function navigateWithTransition(path: string, direction: NavDirection, co
   recordNavigation(path)
 
   const doc = document as DocWithVT
-  if (!doc.startViewTransition || prefersReducedMotion()) {
+  const reduced = prefersReducedMotion()
+
+  if (!doc.startViewTransition || reduced) {
     // Unsupported (or unwanted): the CSS entrance in template.tsx still runs,
     // so the page arrives with motion, just without the outgoing half.
     root.dataset.nav = direction
     commit()
+
+    // `data-vt="running"` is ALSO what suppresses every per-element `.rise` /
+    // inline rise-in entrance animation for the page being navigated TO (see
+    // globals.css) — not just the View Transition path's own snapshot. Skip
+    // that here and the arriving page's own .page-enter slide runs at the
+    // same time as every button's individual stagger reveal, which is the
+    // exact "two animations moving the same content" jitter this exists to
+    // prevent. Reduced motion plays neither, so nothing to suppress there.
+    if (!reduced) {
+      root.dataset.vt = 'running'
+      setTimeout(() => { delete root.dataset.vt }, FALLBACK_ANIM_MS)
+    }
     return
   }
 

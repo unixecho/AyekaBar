@@ -32,6 +32,13 @@ html, body {
   font-family: 'Rubik', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+/* Reserve the scrollbar's width on every page, whether or not that page is
+   tall enough to need one. Without this, navigating between a short page and
+   a tall one changes the viewport's available width the instant the
+   scrollbar appears/disappears — during a View Transition slide that shows
+   up as the whole page snapping sideways a few pixels mid-animation. Chromium
+   only; other engines ignore the property harmlessly. */
+html { scrollbar-gutter: stable; }
 
 /* ---- Auth handoff interstitial ---- */
 @keyframes handoff-in { from{opacity:0} to{opacity:1} }
@@ -139,6 +146,35 @@ html[data-vt="running"] .page-enter { animation: none !important; }
    with an inline animationDelay for staggering — see components for usage. */
 .rise { animation: rise-in .55s var(--ease) backwards; }
 .pop  { animation: handoff-pop .5s cubic-bezier(.34,1.56,.64,1) backwards; }
+
+/* While a page-level push is in flight (View Transition OR its fallback —
+   both set data-vt="running", see lib/nav/viewTransition.ts), every
+   per-element entrance reveal on the page being navigated TO is suppressed.
+   Two animation systems moving the same content at once — the whole page
+   sliding in as a container, individual buttons/cards cascading inside it on
+   their own stagger — is what read as jitter, not the push itself.
+
+   Scoped under `.page-enter` specifically so this can never reach a
+   portalled modal (components/ModalPortal.tsx) that happens to open around
+   the same moment — modals live outside `.page-enter` on purpose and keep
+   their own entrance motion untouched.
+
+   Never fires on a genuine first load / hard reload: nothing sets data-vt
+   there, so the full staggered reveal plays exactly as designed — this only
+   ever cancels the SECOND copy of the motion, on a click-driven navigation. */
+html[data-vt="running"] .page-enter .rise,
+html[data-vt="running"] .page-enter [style*="rise-in"] {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+/* The menu's per-item reveal is a CSS transition (triggered by the first
+   category auto-opening on load), not a @keyframes animation, so it needs
+   its own line — same reasoning, same scope. */
+html[data-vt="running"] .page-enter .menu-page .item,
+html[data-vt="running"] .page-enter .menu-page .item-name {
+  transition: none !important;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .press, .rise, .pop, [style*="handoff"], [style*="rise-in"] { animation: none !important; transition: none !important; }
@@ -535,10 +571,50 @@ html[dir="ltr"] .menu-back svg { transform: scaleX(-1); }
 .menu-page .cat-pad { padding: 0 14px 14px; }
 .menu-page .cat-note { margin: 0 4px 12px; padding: 8px 12px; font-size: 0.88rem; color: var(--neon-soft); background: rgba(255,94,58,0.07); border-radius: 10px; border: 1px solid rgba(255,94,58,0.16); }
 
-.menu-page .item { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; margin: 8px 0; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 14px; opacity: 0; transform: translateY(10px); transition: opacity .45s ease, transform .45s var(--ease), border-color .25s var(--ease), background .25s var(--ease); transition-delay: calc(var(--i) * 35ms); }
+/* NOTE on the transition list below: entrance (opacity/transform) carries the
+   per-item stagger delay INLINE, on those two entries only. Putting it on a
+   separate `transition-delay` property — the previous shape of this rule —
+   applies that one value to EVERY listed transition-property when the list is
+   longer than the delay list (delays cycle to match), so hover's border-color/
+   background inherited the same staggered delay as the entrance reveal: item
+   #10 in a category waited ~350ms before its hover highlight even started.
+   Folding the delay into just the two entries that need it is what makes the
+   other three respond immediately. */
+.menu-page .item {
+  display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; margin: 8px 0;
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: 14px;
+  opacity: 0; transform: translateY(10px);
+  transition:
+    opacity .45s ease calc(var(--i) * 35ms),
+    transform .45s var(--ease) calc(var(--i) * 35ms),
+    border-color .16s var(--ease),
+    background .16s var(--ease),
+    box-shadow .16s var(--ease);
+}
 .menu-page .cat.open .item { opacity: 1; transform: none; }
 .menu-page .item:hover { border-color: var(--line-strong); background: var(--bg-elev-2); }
 .menu-page .item.sold { opacity: 0.5; }
+
+/* Desktop-only mouse feedback: a warmer, more visible highlight than the
+   touch-safe default above, plus a slight lift. Gated on (hover: hover) AND
+   (pointer: fine) so a phone never gets it — touch fires a phantom :hover
+   after every tap that then sticks until the next tap elsewhere, which on a
+   touchscreen reads as a menu item randomly stuck "selected". The desktop
+   mouse doesn't have that failure mode, so it's safe to make richer there. */
+@media (hover: hover) and (pointer: fine) {
+  .menu-page .item:hover {
+    border-color: rgba(255,94,58,0.4);
+    box-shadow: 0 0 0 1px rgba(255,94,58,0.14), 0 8px 22px rgba(0,0,0,0.28);
+  }
+  /* `.cat.open .item { transform: none }` is (0,4,0) — one class heavier than
+     plain `.item:hover` (0,3,0) — and would silently win over a lift added
+     there. `.cat.open .item:hover` matches at (0,5,0) instead. */
+  .menu-page .cat.open .item:hover { transform: translateY(-2px); }
+
+  .menu-page .cat-head { transition: background-color .16s var(--ease); }
+  .menu-page .cat-head:hover { background-color: rgba(255,255,255,0.035); }
+  .menu-page .cat-head:hover .ic { box-shadow: inset 0 0 0 1px rgba(255,94,58,0.32); }
+}
 .menu-page .item-thumb { width: 52px; height: 52px; flex: 0 0 auto; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); }
 .menu-page .item-main { flex: 1; min-width: 0; }
 .menu-page .item-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
