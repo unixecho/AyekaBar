@@ -1,0 +1,265 @@
+/* ============================================================
+   Shift scheduling — layout and print.
+
+   Kept OUT of globals.css on purpose. Everything else in this module is
+   self-contained (lib/shifts + components/shifts), and this is the last file
+   that would have tied it to the host app: lifting the module into another
+   venue's project should be a directory copy, not a stylesheet archaeology
+   exercise. It is imported once, by the schedule layout.
+
+   It defines no colours of its own — every value comes from the app's existing
+   tokens (--neon, --bg-elev, --line, --ease), so the module inherits the
+   Ayeka palette here and whatever palette it is dropped into next.
+   ============================================================ */
+
+/* ---- week grid --------------------------------------------------------
+   One column on a phone (you scroll the week), seven on a tablet or desktop.
+   Grid follows writing direction on its own, so Sunday sits on the right in
+   Hebrew and on the left in English without a single [dir] rule. */
+.sh-week {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 900px) {
+  .sh-week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: start; }
+}
+
+.sh-day {
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.sh-day[data-closed="true"] { opacity: 0.55; }
+.sh-day[data-today="true"] {
+  border-color: rgba(255, 94, 58, 0.45);
+  box-shadow: 0 0 0 1px rgba(255, 94, 58, 0.18);
+}
+
+.sh-dayhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.sh-dayname { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.sh-daydate { font-size: 0.74rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+/* ---- shift card ---- */
+.sh-card {
+  border: 1px solid var(--line);
+  background: var(--bg-elev-2);
+  border-radius: 13px;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: start;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  width: 100%;
+  transition: border-color .2s var(--ease), background .2s var(--ease);
+}
+.sh-card:hover { border-color: var(--line-strong); }
+.sh-card[data-severity="error"] { border-color: rgba(255, 107, 107, 0.55); }
+.sh-card[data-severity="warn"]  { border-color: rgba(251, 191, 36, 0.45); }
+
+.sh-cardhead { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sh-time {
+  font-size: 0.82rem; font-weight: 700; direction: ltr;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.sh-preset {
+  font-size: 0.7rem; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- person chips ---- */
+.sh-people { display: flex; flex-wrap: wrap; gap: 4px; }
+.sh-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px 3px 4px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 600; line-height: 1.5;
+  border: 1px solid var(--line-strong); background: var(--bg-elev);
+  color: var(--text-dim); max-width: 100%;
+}
+.sh-chip[data-swap="true"] { border-style: dashed; }
+.sh-dot {
+  flex: 0 0 auto; width: 17px; height: 17px; border-radius: 999px;
+  display: grid; place-items: center;
+  font-size: 0.62rem; font-weight: 800; color: #0a0a0f;
+}
+.sh-chipname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- empty slot ---- */
+.sh-slot {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px; border-radius: 11px; width: 100%;
+  border: 1px dashed var(--line-strong); background: transparent;
+  color: var(--text-faint); font: inherit; font-size: 0.75rem; font-weight: 600;
+  cursor: pointer; transition: color .2s var(--ease), border-color .2s var(--ease);
+}
+.sh-slot:hover { color: var(--text-dim); border-color: var(--text-faint); }
+
+/* ---- generic surfaces ---- */
+.sh-panel {
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 18px;
+  padding: 14px;
+}
+.sh-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 2px; border-bottom: 1px solid var(--line);
+}
+.sh-row:last-child { border-bottom: none; }
+.sh-label { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.sh-sub { font-size: 0.76rem; color: var(--text-dim); line-height: 1.5; margin-top: 2px; }
+
+/* ---- segmented control (iOS) ---- */
+.sh-seg {
+  display: inline-flex; padding: 3px; gap: 2px; border-radius: 12px;
+  background: var(--bg-elev-2); border: 1px solid var(--line);
+  width: 100%; position: relative;
+}
+.sh-seg-opt {
+  flex: 1 1 0; min-width: 0; padding: 8px 6px; border-radius: 9px; border: none;
+  background: transparent; color: var(--text-dim); font: inherit;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  transition: color .2s var(--ease), background .24s var(--ease);
+}
+.sh-seg-opt[aria-selected="true"] {
+  color: var(--text);
+  background: linear-gradient(135deg, rgba(255, 94, 58, 0.22), rgba(255, 138, 92, 0.12));
+  box-shadow: inset 0 0 0 1px rgba(255, 94, 58, 0.32);
+}
+.sh-seg-opt:disabled { opacity: 0.4; cursor: default; }
+
+/* On a phone, five tabs do not fit. Truncating them was the first attempt and
+   the wrong one: the ellipsis ate the warning COUNT, which is the one thing on
+   that row you need to see without opening anything. Scroll instead. */
+@media (max-width: 560px) {
+  .sh-seg { overflow-x: auto; scrollbar-width: none; }
+  .sh-seg::-webkit-scrollbar { display: none; }
+  .sh-seg-opt { flex: 0 0 auto; text-overflow: clip; }
+}
+
+/* ---- slider ----
+   Forced to LTR in both writing directions. A numeric scale that ran
+   right-to-left in Hebrew would put the maximum where the eye expects the
+   minimum, and it would fight the filled-track gradient below, which has to
+   pick a physical direction. The min/max captions are pinned the same way. */
+.sh-slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 26px; background: transparent; cursor: pointer;
+  direction: ltr;
+}
+.sh-slider::-webkit-slider-runnable-track {
+  height: 5px; border-radius: 999px; border: 1px solid var(--line-strong);
+  background: linear-gradient(to right, var(--neon) var(--fill, 0%), var(--bg-elev-2) var(--fill, 0%));
+}
+.sh-slider::-moz-range-track {
+  height: 5px; border-radius: 999px; border: 1px solid var(--line-strong);
+  background: linear-gradient(to right, var(--neon) var(--fill, 0%), var(--bg-elev-2) var(--fill, 0%));
+}
+.sh-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -9px;
+  border-radius: 999px; background: #fff; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  border: none; transition: transform .12s var(--ease);
+}
+.sh-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 999px; background: #fff; border: none; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5); }
+.sh-slider:active::-webkit-slider-thumb { transform: scale(1.12); }
+
+/* ---- warnings ---- */
+.sh-warn {
+  display: flex; gap: 9px; padding: 11px 12px; border-radius: 13px;
+  border: 1px solid var(--line); background: var(--bg-elev-2);
+  align-items: flex-start; text-align: start; width: 100%;
+  font: inherit; color: var(--text); cursor: pointer;
+}
+.sh-warn[data-severity="error"] { border-color: rgba(255, 107, 107, 0.4); background: rgba(255, 107, 107, 0.07); }
+.sh-warn[data-severity="warn"]  { border-color: rgba(251, 191, 36, 0.34); background: rgba(251, 191, 36, 0.06); }
+.sh-warn-icon { flex: 0 0 auto; font-size: 0.95rem; line-height: 1.4; }
+.sh-warn-text { font-size: 0.82rem; line-height: 1.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sh-card, .sh-seg-opt, .sh-slot, .sh-slider::-webkit-slider-thumb { transition: none; }
+}
+
+/* ============================================================
+   PRINT — the sheet that gets taped up behind the bar.
+
+   Printed from `/owner/schedule/print`, which renders the published week and
+   nothing else. The rules here do the work the screen design cannot: a dark
+   nightlife palette costs a fortune in toner and reads as a grey smear on
+   paper, so the sheet inverts to ink-on-white, drops every interactive
+   affordance, and forces the seven-column grid regardless of viewport — a
+   printed week that stacks into one long column is not a week anyone can read
+   at a glance.
+   ============================================================ */
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+
+  html, body { background: #fff !important; color: #000 !important; }
+
+  /* Anything not part of the sheet. Marked in the markup rather than guessed
+     at by tag, so adding a control later cannot silently print. */
+  .sh-noprint { display: none !important; }
+
+  .sh-print {
+    color: #000;
+    font-size: 10pt;
+  }
+  .sh-print .sh-week {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3mm;
+  }
+  .sh-print .sh-day {
+    border: 0.4mm solid #000;
+    background: #fff;
+    border-radius: 2mm;
+    padding: 2mm;
+    /* A day must not be split across two sheets — half a Friday is worse than
+       no Friday. */
+    break-inside: avoid;
+    page-break-inside: avoid;
+    opacity: 1 !important;
+  }
+  .sh-print .sh-dayhead { border-bottom: 0.3mm solid #000; }
+  .sh-print .sh-dayname, .sh-print .sh-daydate, .sh-print .sh-time { color: #000; }
+  .sh-print .sh-card {
+    border: 0.25mm solid #666;
+    background: #fff;
+    border-radius: 1.5mm;
+    padding: 1.5mm 2mm;
+    break-inside: avoid;
+  }
+  .sh-print .sh-chip {
+    border: 0.25mm solid #999;
+    background: #fff;
+    color: #000;
+    font-size: 8.5pt;
+  }
+  /* Colour survives as a printed dot only if the browser is told to keep it;
+     without this the identity colours flatten to white and every chip looks
+     the same. */
+  .sh-print .sh-dot {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color: #000;
+  }
+  .sh-print .sh-preset {
+    border: 0.25mm solid #999;
+    background: #fff !important;
+    color: #000 !important;
+  }
+}

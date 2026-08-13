@@ -86,6 +86,20 @@ export default async function StaffDashboardPage() {
           </div>
         )}
 
+        {/* Every staff member reaches their own published shifts from here.
+            Unlike the editor link below it, this one is not gated: the whole
+            point of the schedule is that the person working the shift can see
+            it. What they see is limited by the data, not by this button. */}
+        <Link href="/staff/schedule" className="press rise" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: '13px 16px', borderRadius: 14, textDecoration: 'none',
+          border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
+          color: 'var(--text)', fontWeight: 600, fontSize: '0.92rem',
+          animationDelay: '215ms',
+        }}>
+          🗓️ המשמרות שלי
+        </Link>
+
         {/* The GM reaches the menu from here — they have no owner dashboard. */}
         {canEditMenu(me) && (
           <Link href="/owner/editor" className="press rise" style={{

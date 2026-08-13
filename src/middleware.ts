@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { LOYALTY_ENABLED } from '@/lib/settings/keys'
 import { isOp, canEditMenu, OP_ONLY_PREFIXES, MENU_EDITOR_PREFIX } from '@/lib/staff/access'
+import { SCHEDULE_PREFIXES } from '@/lib/shifts/access'
 import { canManageFloor, FLOOR_PREFIXES } from '@/lib/waiter/access'
 
 const PROTECTED_ROUTES = [
@@ -9,6 +10,7 @@ const PROTECTED_ROUTES = [
   '/staff/dashboard',
   MENU_EDITOR_PREFIX,
   ...OP_ONLY_PREFIXES,
+  ...SCHEDULE_PREFIXES,
   ...FLOOR_PREFIXES,
 ]
 
@@ -85,13 +87,20 @@ export async function middleware(request: NextRequest) {
   // Authenticated isn't authorized: with Google sign-in open to any account,
   // staff/owner dashboards additionally require a public.staff row
   // (RLS lets each user read only their own row).
+  // The schedule pages (/owner/schedule, /staff/schedule) require a staff row
+  // and nothing more at this layer. Whether you may DRAFT a week additionally
+  // depends on the venue's own settings — a table middleware would have to
+  // read on every request — so that decision is re-made server-side in the
+  // page. Deliberately NOT added to OP_ONLY_PREFIXES: the general manager runs
+  // the schedule without holding full admin, exactly as they do the menu.
   // The floor builder is gated on floor management, which is a WIDER circle
   // than the editor: OP, general manager, and shift manager. The layout
   // changes when the room changes — a booth pulled out for a party, two tables
   // joined — and that happens mid-service when the owner is not there. Every
   // save is snapshotted into waiter_floor_history with its actor, so it stays
   // attributable. Mirrors is_floor_manager() (migration 022).
-  const staffProtected = pathname.startsWith('/staff/dashboard')
+  const scheduleProtected = SCHEDULE_PREFIXES.some((p) => pathname.startsWith(p))
+  const staffProtected = pathname.startsWith('/staff/dashboard') || scheduleProtected
   const editorProtected = pathname.startsWith(MENU_EDITOR_PREFIX)
   const opProtected = OP_ONLY_PREFIXES.some((p) => pathname.startsWith(p))
   const floorProtected = FLOOR_PREFIXES.some((p) => pathname.startsWith(p))

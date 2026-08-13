@@ -76,6 +76,10 @@ export default async function OwnerDashboardPage() {
           <span style={{ fontSize: '1.3rem' }}>🍽️</span>
           <span>צפייה בתפריט</span>
         </Link>
+        <Link href="/owner/schedule" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }}>🗓️</span>
+          <span>סידור עבודה</span>
+        </Link>
         <Link href="/owner/floor" style={navCard}>
           <span style={{ fontSize: '1.3rem' }}>🗺️</span>
           <span>מפת השולחנות</span>
