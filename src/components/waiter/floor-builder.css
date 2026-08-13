@@ -1,0 +1,253 @@
+/* ══════════════════════════════════════════════════════════════════════
+   FLOOR BUILDER  (/owner/floor)
+
+   Draw the room once, adjust it forever. The canvas is the product here, so
+   everything else — palette, inspector, save bar — stays quiet around it.
+
+   Reads the portal's tokens (--bg, --line, --neon, …) so it belongs to the
+   owner panel rather than importing the waiter app's design system.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.fb { display: flex; flex-direction: column; gap: 14px; }
+
+.fb-skel {
+  block-size: 420px; border-radius: 16px;
+  background: linear-gradient(90deg, var(--bg-elev), var(--bg-elev-2), var(--bg-elev));
+  background-size: 200% 100%;
+  animation: fbShimmer 1.4s linear infinite;
+}
+@keyframes fbShimmer { to { background-position: -200% 0; } }
+
+/* ── Floors ───────────────────────────────────────────────────────── */
+.fb-floors { display: flex; gap: 8px; flex-wrap: wrap; }
+.fb-tab {
+  position: relative;
+  min-height: 40px; padding-inline: 14px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg-elev); color: var(--text-dim);
+  font: inherit; font-size: 0.86rem; cursor: pointer;
+  transition: border-color .18s var(--ease), color .18s var(--ease), background-color .18s var(--ease);
+}
+.fb-tab:hover { border-color: var(--line-strong); color: var(--text); }
+.fb-tab.on { border-color: var(--neon); color: var(--neon); background: var(--neon-soft); }
+.fb-tab--add { border-style: dashed; color: var(--text-faint); }
+/* An unconfigured floor is a real state, not a styling detail: it is the one
+   thing telling the owner "you have not drawn this room yet". */
+.fb-dot {
+  display: inline-block; inline-size: 6px; block-size: 6px; border-radius: 50%;
+  background: var(--neon); margin-inline-start: 6px; vertical-align: middle;
+}
+
+/* ── Palette ──────────────────────────────────────────────────────── */
+.fb-tools {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px;
+  padding: 12px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--bg-elev);
+}
+.fb-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fb-group-label { font-size: 0.7rem; letter-spacing: .08em; color: var(--text-faint); }
+.fb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.fb-chip {
+  min-height: 34px; padding-inline: 10px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--text-dim);
+  font: inherit; font-size: 0.78rem; cursor: pointer;
+  transition: border-color .18s var(--ease), color .18s var(--ease);
+}
+.fb-chip:hover:not(:disabled) { border-color: var(--line-strong); color: var(--text); }
+.fb-chip:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Landmark chips carry the colour of the thing they place, so the palette
+   doubles as the map's legend. */
+.fb-chip--lm { border-color: color-mix(in srgb, var(--c, var(--line)) 55%, transparent); color: var(--c, var(--text-dim)); }
+[data-lm='entrance'] { --c: #4ADE80; }
+[data-lm='kitchen']  { --c: #FBBF24; }
+[data-lm='wc']       { --c: #A8A5B0; }
+[data-lm='bar']      { --c: #38E1FF; }
+[data-lm='register'] { --c: #C084FC; }
+
+/* ── Layout ───────────────────────────────────────────────────────── */
+.fb-main { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
+@media (min-width: 900px) {
+  .fb-main { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+
+.fb-canvas-wrap { min-width: 0; }
+.fb-canvas {
+  position: relative; inline-size: 100%;
+  border: 1px solid var(--line-strong); border-radius: 14px;
+  background: var(--bg-elev);
+  overflow: hidden;
+  touch-action: none;      /* dragging IS the gesture here */
+  user-select: none;
+}
+.fb-grid {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--line) 70%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--line) 70%, transparent) 1px, transparent 1px);
+}
+
+/* Where the dragged object will actually land. Shown alongside the free-moving
+   object, never instead of it: snapped-only feels like the grid is fighting
+   you, free-only hides the result. */
+.fb-preview {
+  position: absolute; transform: translate(-50%, -50%);
+  border: 2px dashed var(--neon); border-radius: 10px;
+  background: var(--neon-soft);
+  pointer-events: none; z-index: 2;
+}
+
+.fb-obj {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--bg-elev-2); color: var(--text);
+  cursor: grab; touch-action: none;
+  transition: box-shadow .18s var(--ease), border-color .18s var(--ease);
+}
+.fb-obj:active { cursor: grabbing; }
+.fb-obj.is-sel { border-color: var(--neon); box-shadow: 0 0 0 2px var(--neon-soft); z-index: 4; }
+/* The object under the pointer rides above everything and lifts, so you can
+   see what you are carrying. */
+.fb-obj.is-live {
+  z-index: 6; transition: none;
+  transform: translate(-50%, -50%) scale(1.06);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, .5);
+  cursor: grabbing;
+}
+
+.fb-table b { font-size: 0.95rem; font-weight: 700; line-height: 1; }
+.fb-table--round { border-radius: 50%; }
+.fb-table--booth { border-inline-start-width: 4px; background: color-mix(in srgb, #8b5a2b 20%, var(--bg-elev-2)); }
+.fb-table--tall { border-block-start-width: 4px; border-radius: 6px; }
+.fb-table--bar { border-radius: 999px; background: color-mix(in srgb, #38E1FF 12%, var(--bg-elev-2)); }
+.fb-table--large { border-width: 2px; }
+/* Shape must beat kind: both set border-radius, and at equal specificity the
+   later rule silently won — a round tall table rendered square. */
+.fb-obj.fb-table--round { border-radius: 50%; }
+
+.fb-tag {
+  position: absolute; inset-block-end: 2px; inset-inline-start: 50%;
+  transform: translateX(-50%);
+  padding: 0 5px; border-radius: 999px;
+  font-size: 9px; font-weight: 700; white-space: nowrap; pointer-events: none;
+}
+.fb-table--owners { box-shadow: inset 0 0 0 1px var(--neon); }
+.fb-table--owners .fb-tag { background: var(--neon); color: #0b0b0d; }
+.fb-table--vip { box-shadow: inset 0 0 0 1px #d4af37; }
+.fb-table--vip .fb-tag { background: #d4af37; color: #0b0b0d; }
+
+.fb-prop {
+  border-style: dashed; color: var(--text-faint);
+  background: color-mix(in srgb, var(--text-faint) 8%, transparent);
+  font-size: 0.68rem; text-align: center;
+}
+.fb-prop span { padding-inline: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-inline-size: 100%; }
+/* Landmarks are the opposite of scenery: solid, named, glyphed, and clearly
+   above the obstacles — they are what makes the map readable at a glance. */
+.fb-prop--lm {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--c, var(--text-faint)) 55%, transparent);
+  background: color-mix(in srgb, var(--c, var(--text-faint)) 14%, var(--bg-elev));
+  color: var(--c, var(--text-dim));
+  font-weight: 700;
+}
+.fb-prop--lm b { font-size: 1rem; line-height: 1; }
+
+/* ── Side panel ───────────────────────────────────────────────────── */
+.fb-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fb-hint {
+  margin: 0; padding: 12px;
+  border: 1px dashed var(--line); border-radius: 12px;
+  color: var(--text-faint); font-size: 0.82rem;
+}
+.fb-inspector {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px; border: 1px solid var(--neon); border-radius: 14px;
+  background: var(--bg-elev);
+}
+.fb-inspector header b { font-size: 0.98rem; }
+.fb-field { display: flex; flex-direction: column; gap: 5px; }
+.fb-field > span { font-size: 0.72rem; color: var(--text-faint); }
+.fb-field input {
+  min-height: 38px; padding-inline: 10px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--text); font: inherit; font-size: 0.86rem;
+}
+.fb-field input:focus { border-color: var(--neon); outline: none; }
+
+.fb-seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.fb-seg-b {
+  min-height: 34px; padding-inline: 10px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg); color: var(--text-dim);
+  font: inherit; font-size: 0.76rem; font-weight: 600; cursor: pointer;
+  transition: border-color .18s var(--ease), color .18s var(--ease), background-color .18s var(--ease);
+}
+.fb-seg-b.on { border-color: var(--neon); color: var(--neon); background: var(--neon-soft); }
+.fb-seg-b:disabled { opacity: .5; cursor: not-allowed; }
+
+.fb-steppers { display: flex; gap: 8px; }
+.fb-stepper {
+  flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  padding: 4px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+}
+.fb-stepper > span { font-size: 0.7rem; color: var(--text-faint); }
+.fb-stepper b { font-size: 0.9rem; min-inline-size: 14px; text-align: center; }
+.fb-stepper button {
+  inline-size: 26px; block-size: 26px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--bg-elev); color: var(--text);
+  font: inherit; cursor: pointer; line-height: 1;
+}
+.fb-stepper button:disabled { opacity: .35; cursor: not-allowed; }
+
+.fb-row { display: flex; gap: 8px; }
+.fb-row > .fb-btn { flex: 1; }
+.fb-btn {
+  min-height: 40px; padding-inline: 14px;
+  border: 1px solid var(--line); border-radius: 11px;
+  background: var(--bg); color: var(--text);
+  font: inherit; font-size: 0.83rem; font-weight: 600; cursor: pointer;
+  transition: border-color .18s var(--ease), background-color .18s var(--ease), transform .12s var(--ease);
+}
+.fb-btn:hover:not(:disabled) { border-color: var(--line-strong); }
+.fb-btn:active:not(:disabled) { transform: scale(.98); }
+.fb-btn:disabled { opacity: .45; cursor: not-allowed; }
+.fb-btn--primary { border-color: transparent; background: var(--neon); color: #0b0b0d; }
+.fb-btn--danger { border-color: color-mix(in srgb, #fb7185 45%, transparent); color: #fb7185; }
+
+.fb-note { margin: 0; font-size: 0.7rem; color: var(--text-faint); line-height: 1.4; }
+
+.fb-unplaced {
+  padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-elev);
+}
+.fb-unplaced h3 { margin: 0 0 8px; font-size: 0.72rem; letter-spacing: .08em; color: var(--text-faint); font-weight: 700; }
+
+/* ── Save bar ─────────────────────────────────────────────────────── */
+.fb-save {
+  position: sticky; inset-block-end: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(10px);
+}
+.fb-dirty { font-size: 0.78rem; color: var(--neon); }
+.fb-clean { font-size: 0.78rem; color: var(--text-faint); }
+
+.fb-toast {
+  position: fixed; inset-block-end: 20px; inset-inline: 20px;
+  margin-inline: auto; max-inline-size: 380px; z-index: 60;
+  padding: 11px 14px; border-radius: 12px;
+  border: 1px solid var(--line-strong); background: var(--bg-elev-2); color: var(--text);
+  font-size: 0.83rem; text-align: center; box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+}
+.fb-toast.bad { border-color: #fb7185; color: #fda4af; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-obj, .fb-btn, .fb-tab, .fb-chip, .fb-seg-b { transition: none; }
+  .fb-obj.is-live { transform: translate(-50%, -50%); }
+  .fb-skel { animation: none; }
+}

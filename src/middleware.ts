@@ -2,12 +2,14 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { LOYALTY_ENABLED } from '@/lib/settings/keys'
 import { isOp, canEditMenu, OP_ONLY_PREFIXES, MENU_EDITOR_PREFIX } from '@/lib/staff/access'
+import { canManageFloor, FLOOR_PREFIXES } from '@/lib/waiter/access'
 
 const PROTECTED_ROUTES = [
   '/customer/dashboard',
   '/staff/dashboard',
   MENU_EDITOR_PREFIX,
   ...OP_ONLY_PREFIXES,
+  ...FLOOR_PREFIXES,
 ]
 
 // Everything that only makes sense when the loyalty club is live. While the
@@ -83,10 +85,17 @@ export async function middleware(request: NextRequest) {
   // Authenticated isn't authorized: with Google sign-in open to any account,
   // staff/owner dashboards additionally require a public.staff row
   // (RLS lets each user read only their own row).
+  // The floor builder is gated on floor management, which is a WIDER circle
+  // than the editor: OP, general manager, and shift manager. The layout
+  // changes when the room changes — a booth pulled out for a party, two tables
+  // joined — and that happens mid-service when the owner is not there. Every
+  // save is snapshotted into waiter_floor_history with its actor, so it stays
+  // attributable. Mirrors is_floor_manager() (migration 022).
   const staffProtected = pathname.startsWith('/staff/dashboard')
   const editorProtected = pathname.startsWith(MENU_EDITOR_PREFIX)
   const opProtected = OP_ONLY_PREFIXES.some((p) => pathname.startsWith(p))
-  const ownerProtected = editorProtected || opProtected
+  const floorProtected = FLOOR_PREFIXES.some((p) => pathname.startsWith(p))
+  const ownerProtected = editorProtected || opProtected || floorProtected
 
   if (user && (staffProtected || ownerProtected)) {
     const { data: staffRow } = await supabase
@@ -117,6 +126,7 @@ export async function middleware(request: NextRequest) {
       !row
       || (editorProtected && !canEditMenu(row))
       || (opProtected && !isOp(row))
+      || (floorProtected && !canManageFloor(row))
 
     if (denied) {
       // Authenticated but not authorized. Sending them back to a sign-in page

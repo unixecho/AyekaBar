@@ -74,8 +74,24 @@ function Sheet({ value, customInitial, onClose, onPick }: {
   const sheetRef = useRef<HTMLDivElement>(null)
 
   // Escape closes, and the background must not scroll behind the sheet.
+  //
+  // The dependency array is deliberately EMPTY. It used to be `[onClose]`,
+  // and the caller passes `onClose={() => setOpen(false)}` — a fresh closure
+  // every render. Since this sheet contains a text input, every keystroke
+  // re-rendered it, changed the identity, and made React tear the effect down
+  // and rebuild it: the cleanup restored `body.style.overflow` and the setup
+  // re-locked it, once per character. The same defect in the staff app's
+  // Sheet (whose cleanup restores FOCUS) made it impossible to type a name at
+  // all.
+  //
+  // RULE: an effect whose cleanup has a side effect — scroll lock, focus
+  // restore, pointer capture — must not depend on an unstable callback. Empty
+  // deps, and reach the current callback through a ref.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -83,7 +99,8 @@ function Sheet({ value, customInitial, onClose, onPick }: {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
     }
-  }, [onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const trimmed = custom.trim()
 
