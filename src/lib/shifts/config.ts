@@ -8,7 +8,7 @@
 // moves them.
 
 import type {
-  FeatureFlags, SafetyRules, ShiftPreset, ShiftRole, ShiftSettings, Station, Venue,
+  FeatureFlags, HM, SafetyRules, ShiftPreset, ShiftRole, ShiftSettings, Station, Venue,
 } from './types'
 
 /** The one venue that exists today. A second bar is a second row here — no
@@ -116,6 +116,12 @@ export function defaultSettings(venueId: string): ShiftSettings {
     workingDays: [0, 1, 2, 3, 4, 5, 6],
     openTime: '17:00',
     closeTime: '03:00',
+    // Empty, not pre-filled with a guess at Friday/Saturday's actual hours —
+    // "short days by design" is real but venue-specific, and defaultSettings
+    // exists to be a starting point the manager overwrites, never a
+    // hard-coded rule (see this file's header). The Manager Panel is where
+    // Friday and Saturday actually get set.
+    dayHours: {},
     presets: DEFAULT_PRESETS,
     roles: DEFAULT_ROLES,
     stations: DEFAULT_STATIONS,
@@ -124,6 +130,18 @@ export function defaultSettings(venueId: string): ShiftSettings {
     scheduleManagers: [],
     onboardedAt: null,
   }
+}
+
+/** The operating window for one weekday — `dayHours[weekday]` if the manager
+ *  set one, otherwise the venue default. The single place both the rules
+ *  engine and the panel resolve "what hours does Thursday actually run",
+ *  so they cannot read that question two different ways. */
+export function hoursForDay(settings: ShiftSettings, weekday: number): { open: HM; close: HM } {
+  // Optional-chained: a browser session persisted before dayHours existed
+  // (this is a localStorage prototype, not a real migration system — see
+  // mock.ts's restore()) has no such key at all, not an empty object.
+  const override = settings.dayHours?.[weekday]
+  return override ?? { open: settings.openTime, close: settings.closeTime }
 }
 
 /** Palette offered when the manager adds a preset or a role. Drawn from the

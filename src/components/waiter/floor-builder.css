@@ -266,6 +266,13 @@
 }
 .fb-unplaced h3 { margin: 0 0 8px; font-size: 0.72rem; letter-spacing: .08em; color: var(--text-faint); font-weight: 700; }
 
+/* Deleted-but-recoverable — a muted, dashed variant of the same card, so it
+   reads as "gone, but reachable" rather than sitting alongside the live
+   unplaced list as if it were equally ready to drag onto the map. */
+.fb-removed { border-style: dashed; opacity: .82; }
+.fb-chip--restore { border-color: color-mix(in srgb, #4ADE80 45%, var(--line)); color: #4ADE80; }
+.fb-chip--restore:hover:not(:disabled) { border-color: #4ADE80; background: color-mix(in srgb, #4ADE80 12%, var(--bg)); }
+
 /* ── Save bar ─────────────────────────────────────────────────────── */
 .fb-save {
   position: sticky; inset-block-end: 0; z-index: 5;

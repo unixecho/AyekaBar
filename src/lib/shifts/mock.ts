@@ -266,6 +266,11 @@ function restore(): ShiftsDB | null {
     // A stored db from an older shape would crash the builder in a way that
     // looks like a bug in the builder. Cheap shape check, then give up.
     if (!parsed?.venue?.id || !Array.isArray(parsed.shifts) || !parsed.settings?.safety) return null
+    // A field ADDED to settings since this was saved (dayHours, 2026-08-14)
+    // is missing entirely rather than empty — that is not disqualifying the
+    // way a missing `safety` block is, just something to backfill so every
+    // reader downstream can assume the key exists.
+    if (!parsed.settings.dayHours) parsed.settings.dayHours = {}
     return parsed
   } catch {
     return null

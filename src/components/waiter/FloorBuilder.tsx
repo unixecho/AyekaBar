@@ -31,7 +31,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addFloor, addProp, addTable, canvasOf, deactivateTable, isLandmark,
-  loadFloorPlan, onFloor, PROP_LANDMARKS, PROP_OBSTACLES, removeProp,
+  loadFloorPlan, onFloor, PROP_LANDMARKS, PROP_OBSTACLES, reactivateTable, removeProp,
   saveFloorLayout, setTableLabelKind, suggestNumber, tableName, UNIQUE_VIOLATION,
   type Floor, type FloorPlan, type FloorProp, type FloorTable,
   type LabelKind, type PropKind, type TableKind, type TableShape,
@@ -255,10 +255,46 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
     const err = sel.kind === 'table' ? await deactivateTable(sel.id) : await removeProp(sel.id)
     setBusy(false)
     if (err) { flash(err, true); return }
-    setPlan((p) => p && (sel.kind === 'table'
-      ? { ...p, tables: p.tables.filter((t) => t.id !== sel.id) }
-      : { ...p, props: p.props.filter((x) => x.id !== sel.id) }))
+    setPlan((p) => {
+      if (!p) return p
+      if (sel.kind === 'table') {
+        // Moves into removedTables rather than vanishing — its number is
+        // free again (migration 028), and it is one tap from coming back.
+        const removed = p.tables.find((t) => t.id === sel.id)
+        return {
+          ...p,
+          tables: p.tables.filter((t) => t.id !== sel.id),
+          removedTables: removed ? [...p.removedTables, { ...removed, active: false }] : p.removedTables,
+        }
+      }
+      return { ...p, props: p.props.filter((x) => x.id !== sel.id) }
+    })
     setSel(null)
+  }
+
+  /** The other half of onDeleteSelected: bring a removed table back,
+   *  unplaced, on whichever floor is currently open. */
+  async function onRestoreTable(id: string) {
+    if (!floorId) return
+    setBusy(true)
+    const { row, error, code } = await reactivateTable(id, floorId)
+    setBusy(false)
+    if (error || !row) {
+      flash(
+        code === UNIQUE_VIOLATION
+          ? 'המספר הזה כבר תפוס על ידי שולחן אחר — שנו את המספר שלו לפני השחזור'
+          : (error ?? 'לא ניתן לשחזר'),
+        true
+      )
+      return
+    }
+    setPlan((p) => p && {
+      ...p,
+      tables: [...p.tables, row],
+      removedTables: p.removedTables.filter((t) => t.id !== id),
+    })
+    setSel({ kind: 'table', id: row.id })
+    flash(`שולחן ${row.number} שוחזר — גררו אותו למקום`)
   }
 
   async function onSetLabel(id: string, label_kind: LabelKind) {
@@ -457,6 +493,22 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
                 {unplaced.map((t) => (
                   <button key={t.id} className="fb-chip" onClick={() => placeOnMap(t)} disabled={!canManage}>
                     {tableName(t)} ←
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Deleted tables land here rather than vanishing — their numbers
+              are free again (migration 028), and restoring is one tap. */}
+          {plan.removedTables.length > 0 && canManage && (
+            <section className="fb-unplaced fb-removed">
+              <h3>הוסרו · {plan.removedTables.length}</h3>
+              <div className="fb-chips">
+                {plan.removedTables.map((t) => (
+                  <button key={t.id} className="fb-chip fb-chip--restore"
+                    onClick={() => void onRestoreTable(t.id)} disabled={busy}>
+                    ↺ {tableName(t)}
                   </button>
                 ))}
               </div>

@@ -84,13 +84,14 @@ const assign = (shiftId, staffId, roleId = 'bartender') => {
   return { id: `as${assignSeq}`, venueId: 'v1', shiftId, staffId, roleId, status: 'assigned' }
 }
 
-function snapshot({ shifts = [], assignments = [], safety = {}, features = {}, availability = [], neighbouring, workingDays }) {
+function snapshot({ shifts = [], assignments = [], safety = {}, features = {}, availability = [], neighbouring, workingDays, dayHours }) {
   const settings = config.defaultSettings('v1')
   return {
     venue: config.AYEKA_VENUE,
     settings: {
       ...settings,
       workingDays: workingDays ?? settings.workingDays,
+      dayHours: dayHours ?? settings.dayHours,
       safety: { ...settings.safety, ...safety },
       features: { ...settings.features, ...features },
     },
@@ -174,6 +175,28 @@ section('Per-shift rules')
   const w = rules.evaluate(snapshot({ shifts: [s], assignments: [assign(s.id, 's2')] }))
   check('a shift outside operating hours is informational, not an error',
     w.find((x) => x.code === 'outside_hours')?.severity === 'info')
+}
+{
+  // Friday (D(5)) given a short custom window; every other day still uses
+  // the venue default (17:00–03:00) with no override present.
+  const fridayShort = { 5: { open: '15:00', close: '20:00' } }
+  const friShift = shift(5, '18:00', '23:00')   // sticks 3h out of the 15:00–20:00 override
+  const overridden = rules.evaluate(snapshot({
+    shifts: [friShift], assignments: [assign(friShift.id, 's2')], dayHours: fridayShort,
+  }))
+  check('a per-day hour override is honoured for that weekday', has(overridden, 'outside_hours'))
+
+  const sameHoursOnThursday = shift(4, '18:00', '23:00')   // identical times, un-overridden day
+  const notOverridden = rules.evaluate(snapshot({
+    shifts: [sameHoursOnThursday], assignments: [assign(sameHoursOnThursday.id, 's2')], dayHours: fridayShort,
+  }))
+  check('a day with no override still uses the venue default', !has(notOverridden, 'outside_hours'))
+
+  const withinOverride = shift(5, '16:00', '19:00')   // inside 15:00–20:00
+  const clean = rules.evaluate(snapshot({
+    shifts: [withinOverride], assignments: [assign(withinOverride.id, 's2')], dayHours: fridayShort,
+  }))
+  check('a shift inside the overridden window is silent', !has(clean, 'outside_hours'))
 }
 {
   const s = shift(1, '18:00', '23:00')

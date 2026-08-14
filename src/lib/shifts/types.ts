@@ -106,9 +106,15 @@ export interface ShiftSettings {
   venueId: string
   /** Day numbers the venue operates, 0 = Sunday. */
   workingDays: number[]
-  /** Advisory opening window; shifts outside it warn but are allowed. */
+  /** Advisory opening window for a day with no override below; shifts
+   *  outside it warn but are allowed. */
   openTime: HM
   closeTime: HM
+  /** Per-day override of the window above, keyed by weekday (0 = Sunday). A
+   *  day absent from this map uses openTime/closeTime — Friday and Saturday
+   *  running shorter hours than the rest of the week is the common case this
+   *  exists for, but any day can be overridden. */
+  dayHours: Partial<Record<number, { open: HM; close: HM }>>
   presets: ShiftPreset[]
   roles: ShiftRole[]
   stations: Station[]

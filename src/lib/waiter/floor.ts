@@ -81,6 +81,12 @@ export interface FloorPlan {
   floors: Floor[]
   tables: FloorTable[]
   props: FloorProp[]
+  /** Deactivated tables — migration 028 means their numbers are already free
+   *  for reuse, and this is the one-tap way to actually reuse the ROW rather
+   *  than retyping the number into a brand-new table. Never mixed into
+   *  `tables`, so nothing that already filters that array (unplaced, magnet
+   *  grid, hour totals) has to learn about a third state. */
+  removedTables: FloorTable[]
 }
 
 export const tableName = (t: FloorTable) => t.label ?? String(t.number)
@@ -94,14 +100,18 @@ export async function loadFloorPlan(): Promise<FloorPlan> {
     supabase.from('waiter_floors')
       .select('id,key,name_he,name_en,canvas_w,canvas_h,configured,sort_order')
       .eq('active', true).order('sort_order'),
-    supabase.from('waiter_tables').select(TABLE_COLS).eq('active', true).order('number'),
+    // Both states in one query — split client-side — rather than two round
+    // trips. `active` is never used to filter WHICH rows exist here.
+    supabase.from('waiter_tables').select(`${TABLE_COLS},active`).order('number'),
     supabase.from('waiter_floor_props')
       .select('id,floor_id,kind,label,pos_x,pos_y,grid_w,grid_h,rotation,active')
       .eq('active', true),
   ])
+  const rows = (tables.data ?? []) as (FloorTable & { active: boolean })[]
   return {
     floors: (floors.data ?? []) as Floor[],
-    tables: (tables.data ?? []) as FloorTable[],
+    tables: rows.filter((t) => t.active),
+    removedTables: rows.filter((t) => !t.active),
     props: (props.data ?? []) as FloorProp[],
   }
 }
@@ -170,6 +180,31 @@ export async function deactivateTable(id: string): Promise<string | null> {
   return error?.message ?? null
 }
 
+/**
+ * Bring a deactivated table back — the other half of `deactivateTable`.
+ * Dropped onto `floorId` UNPLACED (position cleared) rather than at its old
+ * spot: the room may well have changed since it was removed, and "reappears
+ * in the unplaced pool, drag it where you actually want it" is the same
+ * flow `placeOnMap` already gives a brand-new table.
+ *
+ * Can fail on `waiter_tables_active_number_key` (migration 028) if some
+ * OTHER table has since claimed this one's old number — a real possibility,
+ * since deactivating is exactly what frees a number for reuse. The caller
+ * decides how to word that; this only reports it.
+ */
+export async function reactivateTable(
+  id: string, floorId: string
+): Promise<{ row: FloorTable | null; error: string | null; code: string | null }> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('waiter_tables')
+    .update({ active: true, floor_id: floorId, pos_x: null, pos_y: null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select(TABLE_COLS)
+    .maybeSingle()
+  return { row: (data as FloorTable) ?? null, error: error?.message ?? null, code: error?.code ?? null }
+}
+
 export async function addProp(p: {
   floor_id: string; kind: PropKind; label?: string | null
   pos_x?: number | null; pos_y?: number | null; grid_w?: number; grid_h?: number
@@ -235,9 +270,18 @@ export async function saveFloorLayout(
 
   // PATCH per row: PostgREST has no multi-row update with differing values,
   // and a floor is a few dozen rows at most.
+  //
+  // `number` belongs here, not just in the history snapshot below — it used
+  // to be missing from this payload entirely, so retyping a table's number
+  // in the inspector updated the on-screen card and the local `dirty` flag,
+  // Save reported success, and the database quietly kept the OLD number.
+  // The portal and the OMS app read the same table live, so the two showed
+  // different numbers for the same physical table — which is exactly what
+  // was reported.
   const results = await Promise.all([
     ...tables.map((t) =>
       supabase.from('waiter_tables').update({
+        number: t.number,
         pos_x: t.pos_x, pos_y: t.pos_y, label: t.label, zone: t.zone, seats: t.seats,
         floor_id: floorId, kind: t.kind, shape: t.shape,
         grid_w: t.grid_w, grid_h: t.grid_h, rotation: t.rotation, updated_at: stamp,
@@ -251,7 +295,14 @@ export async function saveFloorLayout(
     ),
   ])
   const failed = results.find((r) => r.error)
-  if (failed?.error) return failed.error.message
+  if (failed?.error) {
+    // Two tables given the same number in one sitting (or swapped numbers,
+    // which fails on whichever row's UPDATE lands first) hits the active-only
+    // unique index (migration 028) — surface that plainly rather than the
+    // raw Postgres constraint name.
+    if (failed.error.code === UNIQUE_VIOLATION) return 'שני שולחנות קיבלו אותו מספר — בדקו את המספרים ונסו שוב'
+    return failed.error.message
+  }
 
   const configured = tables.length > 0 && tables.every(isPlaced)
   const floorUpdate = await supabase.from('waiter_floors').update({

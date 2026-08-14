@@ -11,6 +11,7 @@
 // image again. Errors are loud and publishing asks for confirmation; nothing
 // is blocked.
 
+import { hoursForDay } from './config'
 import {
   dayIndex, durationMinutes, gapBetween, intervalOf, parseHM, type Interval,
 } from './time'
@@ -150,16 +151,22 @@ export function evaluate(snapshot: ScheduleSnapshot): Warning[] {
           ar: 'وردية في يوم مغلق حسب الإعدادات',
         },
       })
-    } else if (outsideOpeningHours(shift, settings.openTime, settings.closeTime)) {
-      out.push({
-        id: `hours:${shift.id}`,
-        code: 'outside_hours', severity: 'info', shiftIds: [shift.id], date: shift.date,
-        message: {
-          he: `המשמרת חורגת משעות הפעילות (${settings.openTime}–${settings.closeTime})`,
-          en: `Shift falls outside operating hours (${settings.openTime}–${settings.closeTime})`,
-          ar: `الوردية خارج ساعات العمل (${settings.openTime}–${settings.closeTime})`,
-        },
-      })
+    } else {
+      // Friday/Saturday running shorter hours than the rest of the week is
+      // the case this exists for, but hoursForDay resolves whichever
+      // weekday this shift actually falls on — not always the venue default.
+      const { open, close } = hoursForDay(settings, weekday)
+      if (outsideOpeningHours(shift, open, close)) {
+        out.push({
+          id: `hours:${shift.id}`,
+          code: 'outside_hours', severity: 'info', shiftIds: [shift.id], date: shift.date,
+          message: {
+            he: `המשמרת חורגת משעות הפעילות (${open}–${close})`,
+            en: `Shift falls outside operating hours (${open}–${close})`,
+            ar: `الوردية خارج ساعات العمل (${open}–${close})`,
+          },
+        })
+      }
     }
 
     // The same person twice on one shift is always a mistake, even in two

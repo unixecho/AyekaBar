@@ -75,6 +75,13 @@ create table if not exists public.shift_settings (
   working_days      smallint[] not null default '{0,1,2,3,4,5,6}',
   open_time         time not null default '17:00',
   close_time        time not null default '03:00',
+  -- Per-weekday override of the pair above, e.g. {"5":{"open":"15:00","close":"01:00"}}
+  -- keyed by weekday (0=Sunday) as a JSON string key. Friday/Saturday running
+  -- shorter than the rest of the week is the common case; any day may be
+  -- overridden. A day absent from this object uses open_time/close_time —
+  -- see hoursForDay() in src/lib/shifts/config.ts, which resolves the exact
+  -- same fallback client-side.
+  day_hours         jsonb not null default '{}'::jsonb,
   presets           jsonb not null default '[]'::jsonb,
   roles             jsonb not null default '[]'::jsonb,
   stations          jsonb not null default '[]'::jsonb,

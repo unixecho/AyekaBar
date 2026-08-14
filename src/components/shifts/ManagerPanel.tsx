@@ -81,6 +81,72 @@ export default function ManagerPanel({ onRerunSetup }: { onRerunSetup: () => voi
         </div>
       </section>
 
+      {/* ---- per-day hour overrides ---- */}
+      <section className="sh-panel">
+        <SectionHead title={t('dayHoursTitle')} hint={t('dayHoursHint')} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[0, 1, 2, 3, 4, 5, 6].map((d) => {
+            const override = settings.dayHours[d]
+            const on = !!override
+            return (
+              <div key={d} style={{
+                padding: '10px 12px', borderRadius: 13,
+                border: '1px solid var(--line)', background: 'var(--bg-elev-2)',
+              }}>
+                <button
+                  type="button" role="switch" aria-checked={on} className="press"
+                  onClick={() => {
+                    const next = { ...settings.dayHours }
+                    if (on) delete next[d]
+                    else next[d] = { open: settings.openTime, close: settings.closeTime }
+                    dispatch({ type: 'settings.update', patch: { dayHours: next } })
+                  }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 10, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', font: 'inherit',
+                  }}
+                >
+                  <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>{dayName(d, lang)}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: '0.76rem', color: 'var(--text-faint)' }}>
+                      {on ? t('dayHoursCustom') : (
+                        <>{t('dayHoursDefault')} <span style={{ direction: 'ltr', display: 'inline-block' }}>{settings.openTime}–{settings.closeTime}</span></>
+                      )}
+                    </span>
+                    <Switch on={on} small />
+                  </span>
+                </button>
+
+                {on && (
+                  <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+                    <div style={{ flex: '1 1 120px' }}>
+                      <p className="sh-sub" style={{ margin: '0 0 4px' }}>{t('startTime')}</p>
+                      <TimeWheel
+                        value={override.open}
+                        onChange={(v) => dispatch({
+                          type: 'settings.update',
+                          patch: { dayHours: { ...settings.dayHours, [d]: { ...override, open: v } } },
+                        })}
+                      />
+                    </div>
+                    <div style={{ flex: '1 1 120px' }}>
+                      <p className="sh-sub" style={{ margin: '0 0 4px' }}>{t('endTime')}</p>
+                      <TimeWheel
+                        value={override.close}
+                        onChange={(v) => dispatch({
+                          type: 'settings.update',
+                          patch: { dayHours: { ...settings.dayHours, [d]: { ...override, close: v } } },
+                        })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
       {/* ---- presets ---- */}
       <section className="sh-panel">
         <SectionHead title={t('stepPresets')} hint={t('stepPresetsHint')} />
