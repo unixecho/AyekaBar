@@ -37,6 +37,8 @@ import {
   type LabelKind, type PropKind, type TableKind, type TableShape,
 } from '@/lib/waiter/floor'
 import { cellSize, effSpan, gridDims, isPlaced, snapToGrid, type Canvas } from '@/lib/waiter/grid'
+import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
+import PromptSheet, { type PromptRequest } from '@/components/PromptSheet'
 import './floor-builder.css'
 
 const KIND_HE: Record<TableKind, string> = {
@@ -73,6 +75,8 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null)
+  const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
+  const [promptReq, setPromptReq] = useState<PromptRequest | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
 
   const flash = useCallback((text: string, bad = false) => {
@@ -306,10 +310,19 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
     }
   }
 
-  async function onAddFloor() {
+  function onAddFloor() {
     if (!plan) return
-    const name = window.prompt('שם הקומה החדשה')?.trim()
-    if (!name) return
+    setPromptReq({
+      title: 'קומה חדשה',
+      body: 'שם הקומה כפי שיוצג לצוות',
+      placeholder: 'למשל: גג',
+      confirmLabel: 'הוספה',
+      onConfirm: (name) => void addFloorNamed(name),
+    })
+  }
+
+  async function addFloorNamed(name: string) {
+    if (!plan) return
     const key = `floor-${Date.now().toString(36)}`
     setBusy(true)
     const { row, error } = await addFloor({ key, name_he: name, sort_order: plan.floors.length })
@@ -345,7 +358,15 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
             key={f.id}
             className={`fb-tab${f.id === floorId ? ' on' : ''}`}
             onClick={() => {
-              if (dirty && !window.confirm('יש שינויים שלא נשמרו. לעבור קומה בכל זאת?')) return
+              if (dirty) {
+                setConfirmReq({
+                  title: 'יש שינויים שלא נשמרו',
+                  body: 'לעבור קומה בכל זאת? השינויים שלא נשמרו יאבדו.',
+                  confirmLabel: 'מעבר בכל זאת',
+                  onConfirm: () => { setFloorId(f.id); setSel(null); setDirty(false) },
+                })
+                return
+              }
               setFloorId(f.id); setSel(null); setDirty(false)
             }}
           >
@@ -529,6 +550,9 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
       )}
 
       {msg && <div className={`fb-toast${msg.bad ? ' bad' : ''}`} role="status">{msg.text}</div>}
+
+      <ConfirmSheet request={confirmReq} onClose={() => setConfirmReq(null)} />
+      <PromptSheet request={promptReq} onClose={() => setPromptReq(null)} />
     </div>
   )
 }
