@@ -139,6 +139,11 @@ export interface ScheduleStaff {
   role: string
   /** False for someone kept for history but no longer schedulable. */
   active: boolean
+  /** True for a staff row the owner authorized by email but who has not yet
+   *  signed in (`auth_user_id` still null — see migration 006). Schedulable
+   *  now so a new hire's first week can be built before their first shift;
+   *  surfaced so the UI can say why someone has no colour/initial yet. */
+  pending?: boolean
 }
 
 // ── The schedule itself ────────────────────────────────────────────────

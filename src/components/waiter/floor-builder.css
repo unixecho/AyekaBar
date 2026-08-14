@@ -159,6 +159,39 @@
 
 /* ── Side panel ───────────────────────────────────────────────────── */
 .fb-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* On a phone the canvas runs to `aspect-ratio: canvas.w / canvas.h` at full
+   device width, which for most rooms is several screen-heights tall — and the
+   canvas is `touch-action: none` (dragging IS the gesture there, see above),
+   so a swipe that starts anywhere over it does not scroll the page. Below
+   900px the inspector sat in normal flow AFTER that canvas, which meant
+   selecting a landmark to resize it put the controls a scroll away with no
+   touch gesture that could reach them — the object could be selected and
+   dragged (both happen ON the canvas, no scrolling needed) but its size
+   controls were functionally unreachable. Promoting it to a fixed bottom
+   sheet the instant something is selected removes the scroll dependency
+   entirely, on the same footing as every other bottom sheet in this app. */
+@media (max-width: 899px) {
+  .fb-side:has(.fb-inspector) {
+    position: fixed; inset-inline: 0; inset-block-end: 0; z-index: 40;
+    max-height: 72dvh; overflow-y: auto;
+    margin: 0; gap: 0;
+    background: var(--bg-elev);
+    border: 1px solid var(--line-strong); border-bottom: none;
+    border-radius: 18px 18px 0 0;
+    padding: 14px 14px calc(env(safe-area-inset-bottom) + 14px);
+    box-shadow: 0 -14px 34px rgba(0, 0, 0, .55);
+    animation: fbSheetUp .3s var(--ease);
+  }
+  /* The unplaced-tables list would otherwise render inside the same fixed
+     block and get clipped by max-height along with the inspector — it is
+     reachable in normal flow above the canvas instead while a sheet is up. */
+  .fb-side:has(.fb-inspector) .fb-unplaced { display: none; }
+}
+@keyframes fbSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .fb-side:has(.fb-inspector) { animation: none; }
+}
 .fb-hint {
   margin: 0; padding: 12px;
   border: 1px dashed var(--line); border-radius: 12px;
@@ -169,7 +202,14 @@
   padding: 14px; border: 1px solid var(--neon); border-radius: 14px;
   background: var(--bg-elev);
 }
+.fb-inspector header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .fb-inspector header b { font-size: 0.98rem; }
+.fb-close {
+  inline-size: 26px; block-size: 26px; border-radius: 999px; flex: 0 0 auto;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text-faint);
+  font: inherit; font-size: 0.8rem; line-height: 1; cursor: pointer;
+}
+.fb-close:hover { color: var(--text); border-color: var(--line-strong); }
 .fb-field { display: flex; flex-direction: column; gap: 5px; }
 .fb-field > span { font-size: 0.72rem; color: var(--text-faint); }
 .fb-field input {

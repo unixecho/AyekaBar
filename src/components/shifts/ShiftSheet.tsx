@@ -65,6 +65,19 @@ export default function ShiftSheet({
     setRequirements(preset.requirements.map((r) => ({ ...r })))
   }
 
+  /** "Custom shift" used to just detach the preset LABEL while silently
+   *  leaving whichever preset's station and staffing levels were still
+   *  loaded — every field stayed editable, so nothing was technically
+   *  broken, but it did not read as a blank slate the way "custom" implies.
+   *  This clears station and role requirements too; the time stays put
+   *  (there is no more reason to blank a useful default there than for any
+   *  other field), and every field remains freely editable either way. */
+  function useCustomShift() {
+    setPresetId(null)
+    setStationId(null)
+    setRequirements([])
+  }
+
   function setMin(roleId: string, delta: number) {
     setRequirements((prev) => {
       const found = prev.find((r) => r.roleId === roleId)
@@ -132,7 +145,7 @@ export default function ShiftSheet({
               ))}
               <Pill
                 active={presetId === null} color="#a8a5b0"
-                onClick={() => setPresetId(null)} label={t('customShift')}
+                onClick={useCustomShift} label={t('customShift')}
               />
             </div>
           </Section>

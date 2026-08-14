@@ -32,7 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addFloor, addProp, addTable, canvasOf, deactivateTable, isLandmark,
   loadFloorPlan, onFloor, PROP_LANDMARKS, PROP_OBSTACLES, removeProp,
-  saveFloorLayout, setTableLabelKind, suggestNumber, tableName,
+  saveFloorLayout, setTableLabelKind, suggestNumber, tableName, UNIQUE_VIOLATION,
   type Floor, type FloorPlan, type FloorProp, type FloorTable,
   type LabelKind, type PropKind, type TableKind, type TableShape,
 } from '@/lib/waiter/floor'
@@ -207,13 +207,32 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   async function onAddTable() {
     if (!floorId || !plan) return
     setBusy(true)
-    const number = suggestNumber(plan.tables)
-    const { row, error } = await addTable({ number, floor_id: floorId })
+
+    // `suggestNumber` only sees ACTIVE tables (loadFloorPlan filters on
+    // active=true), but `waiter_tables.number` is unique across every row —
+    // active or deactivated. A number "freed" by deleting a table is not
+    // actually free at the database level, so the first guess can collide.
+    // Retry forward past every number the database actually rejects, rather
+    // than surfacing that as a dead end — the visible symptom this fixes was
+    // "duplicate key value violates … waiter_tables_number_key" on every
+    // attempt to add a table after clearing an old layout.
+    const blocked = new Set(plan.tables.map((t) => t.number))
+    let row: FloorTable | null = null
+    let lastError: string | null = null
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const number = suggestNumber(Array.from(blocked, (n) => ({ number: n })))
+      const result = await addTable({ number, floor_id: floorId })
+      if (result.row) { row = result.row; break }
+      if (result.code === UNIQUE_VIOLATION) { blocked.add(number); continue }
+      lastError = result.error
+      break
+    }
+
     setBusy(false)
-    if (error || !row) { flash(error ?? 'לא ניתן להוסיף שולחן', true); return }
-    setPlan((p) => p && { ...p, tables: [...p.tables, row] })
+    if (!row) { flash(lastError ?? 'לא ניתן להוסיף שולחן', true); return }
+    setPlan((p) => p && { ...p, tables: [...p.tables, row!] })
     setSel({ kind: 'table', id: row.id })
-    flash(`שולחן ${number} נוסף — גררו אותו למקום`)
+    flash(`שולחן ${row.number} נוסף — גררו אותו למקום`)
   }
 
   async function onAddProp(kind: PropKind) {
@@ -424,6 +443,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
               onUnplace={() => sel!.kind === 'table'
                 ? patchTable(sel!.id, { pos_x: null, pos_y: null })
                 : patchProp(sel!.id, { pos_x: null, pos_y: null })}
+              onClose={() => setSel(null)}
               busy={busy}
             />
           ) : (
@@ -464,7 +484,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
 /* ── Inspector ─────────────────────────────────────────────────────── */
 
 function Inspector({
-  sel, obj, canManage, onPatchTable, onPatchProp, onReshape, onLabel, onDelete, onUnplace, busy,
+  sel, obj, canManage, onPatchTable, onPatchProp, onReshape, onLabel, onDelete, onUnplace, onClose, busy,
 }: {
   sel: NonNullable<Sel>
   obj: FloorTable | FloorProp
@@ -475,6 +495,10 @@ function Inspector({
   onLabel: (id: string, k: LabelKind) => void
   onDelete: () => void
   onUnplace: () => void
+  /** Below 900px this renders as a fixed bottom sheet over the canvas (see
+   *  floor-builder.css) rather than beside it, so there needs to be a way out
+   *  that isn't "tap the part of the canvas the sheet doesn't cover". */
+  onClose: () => void
   busy: boolean
 }) {
   const isTable = sel.kind === 'table'
@@ -485,6 +509,7 @@ function Inspector({
     <section className="fb-inspector">
       <header>
         <b>{isTable ? `שולחן ${tableName(t)}` : PROP_HE[p.kind]}</b>
+        <button type="button" className="fb-close" onClick={onClose} aria-label="סגירה">✕</button>
       </header>
 
       {isTable && (

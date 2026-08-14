@@ -133,7 +133,15 @@ export interface NewTable {
   grid_h?: number
 }
 
-export async function addTable(t: NewTable): Promise<{ row: FloorTable | null; error: string | null }> {
+/** Postgres unique_violation. `waiter_tables.number` is unique across ALL
+ *  rows, active or not — a deactivated table's number is not actually free,
+ *  even though `suggestNumber()` (fed only active rows) thinks it is. See the
+ *  retry loop in FloorBuilder's `onAddTable`. */
+export const UNIQUE_VIOLATION = '23505'
+
+export async function addTable(
+  t: NewTable
+): Promise<{ row: FloorTable | null; error: string | null; code: string | null }> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('waiter_tables')
@@ -150,7 +158,7 @@ export async function addTable(t: NewTable): Promise<{ row: FloorTable | null; e
     })
     .select(TABLE_COLS)
     .maybeSingle()
-  return { row: (data as FloorTable) ?? null, error: error?.message ?? null }
+  return { row: (data as FloorTable) ?? null, error: error?.message ?? null, code: error?.code ?? null }
 }
 
 /** Tables are deactivated, never deleted — historical orders still point at
