@@ -69,6 +69,19 @@ create policy waiter_pool_sessions_staff on public.waiter_pool_sessions
   using (public.is_staff_client()) with check (public.is_staff_client());
 
 -- Realtime, so the queue view updates live the way the floor map already
--- does (024_waiter_realtime.sql set the precedent).
-alter publication supabase_realtime add table public.waiter_pool_sessions;
+-- does (024_waiter_realtime.sql set the precedent). Guarded the same way
+-- that file is: `alter publication … add table` errors if the table is
+-- already a member, and this file must stay re-runnable.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public' and tablename = 'waiter_pool_sessions'
+  ) then
+    execute 'alter publication supabase_realtime add table public.waiter_pool_sessions';
+  end if;
+end;
+$$;
+
 alter table public.waiter_pool_sessions replica identity full;

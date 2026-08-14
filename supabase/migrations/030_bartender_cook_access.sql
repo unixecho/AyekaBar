@@ -98,13 +98,6 @@ declare
   me_role  text;
   cook_only boolean := false;
 begin
-  if tg_op = 'INSERT' then
-    if me is not null then
-      new.registered_by := me;
-    end if;
-    return new;
-  end if;
-
   if me is not null then
     select role, badge into me_role, me_badge from public.staff where id = me;
     -- "Cook" here means PURELY a cook — someone whose badge also carries a
@@ -112,6 +105,22 @@ begin
     -- exempt, matching the role-or-badge layering every other level here uses.
     cook_only := (me_role is distinct from 'owner')
       and me_badge = 'cook';
+  end if;
+
+  if tg_op = 'INSERT' then
+    -- A cook only ever ADVANCES an item that already exists — registering a
+    -- brand-new line is "creating order content", the same act §11 already
+    -- rules out at the order level. Without this, RLS being trigger-enforced
+    -- (see this file's header) would leave a real hole: a cook could not
+    -- open an order, but could still insert items into someone else's.
+    if cook_only then
+      raise exception 'a cook may not register a new item — only advance an existing one''s status'
+        using errcode = '42501';
+    end if;
+    if me is not null then
+      new.registered_by := me;
+    end if;
+    return new;
   end if;
 
   if new.status is distinct from old.status then
@@ -217,6 +226,8 @@ $$;
 
 -- ---- Verify (run after applying, against the LOCAL stack first) -----------
 --   A cook-badged staff member's insert into waiter_orders must fail 42501.
+--   A cook-badged staff member's insert into waiter_order_items (a new
+--   line) must ALSO fail 42501 — not just opening the order itself.
 --   A cook-badged staff member's update to waiter_order_items.status
 --   (registered -> preparing) must succeed and stamp claimed_by/claimed_at.
 --   The SAME staff member updating unit_agorot or qty must fail 42501.
