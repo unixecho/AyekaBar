@@ -88,6 +88,10 @@ export default async function OwnerDashboardPage() {
           <span style={{ fontSize: '1.3rem' }}>🧾</span>
           <span>יומן שינויים</span>
         </Link>
+        <Link href="/owner/reports" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }}>🧮</span>
+          <span>קבלות ומשמרות</span>
+        </Link>
       </div>
 
       <div className="rise" style={{ animationDelay: '210ms' }}>
