@@ -114,6 +114,8 @@ const TEST_STAFF = [
   { email: 'ofir@local.test',    password: 'localdev123', name: 'אופיר',     role: 'staff', badge: 'waiter',          colour: '#34d399' },
   { email: 'dana@local.test',    password: 'localdev123', name: 'דנה',       role: 'staff', badge: 'waiter',          colour: '#60a5fa' },
   { email: 'shift@local.test',   password: 'localdev123', name: 'שי משמרת',  role: 'staff', badge: 'manager',         colour: '#c084fc' },
+  { email: 'bar@local.test',     password: 'localdev123', name: 'ברי בר',    role: 'staff', badge: 'bartender',       colour: '#f59e0b' },
+  { email: 'cook@local.test',    password: 'localdev123', name: 'קובי טבח',  role: 'staff', badge: 'cook',            colour: '#22d3ee' },
 ]
 
 async function createLocalUser({ email, password, name }) {
