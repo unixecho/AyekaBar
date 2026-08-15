@@ -32,6 +32,20 @@ export const HAPPY_HOUR_KEY = 'happy_hour'
 /** The portal's review wall (migration 018). Shape + seed live in lib/reviews. */
 export const PORTAL_REVIEWS = 'portal_reviews'
 
+/** "Lets make a way for the owner to choose if all waiters get
+ *  notifications for all tables or table owned notifications so we can
+ *  fit multiple businesses" — 2026-08-16, ayeka-staff's global ready-
+ *  notification system (App.tsx). true = broadcast (every waiter sees
+ *  every table's ready items, today's only behavior before this
+ *  setting existed); false = scoped to tables the waiter is actually
+ *  assigned to (held_by_staff_id, or the order's own waiter_staff_id).
+ *  Public read (is_public=true, seeded by content update, not a
+ *  migration) — same posture LOYALTY_ENABLED already takes, since
+ *  ayeka-staff's own RLS has no other way to read app_settings than the
+ *  public-read policy. */
+export const OMS_NOTIFY_ALL_WAITERS = 'oms_notify_all_waiters'
+export const OMS_NOTIFY_ALL_WAITERS_DEFAULT = true
+
 export type PortalLinkKey = 'instagram' | 'facebook' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {

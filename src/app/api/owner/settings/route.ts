@@ -6,6 +6,7 @@ import {
   LOYALTY_VISIBLE, LOYALTY_VISIBLE_DEFAULT,
   PORTAL_LINKS, PORTAL_LINKS_DEFAULT, type PortalLinkKey,
   PORTAL_REVIEWS,
+  OMS_NOTIFY_ALL_WAITERS, OMS_NOTIFY_ALL_WAITERS_DEFAULT,
   SETTINGS_TAG,
 } from '@/lib/settings/keys'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
@@ -23,7 +24,7 @@ export async function GET() {
   const { data, error } = await auth.service
     .from('app_settings')
     .select('key, value, updated_at')
-    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS, PORTAL_REVIEWS])
+    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS, PORTAL_REVIEWS, OMS_NOTIFY_ALL_WAITERS])
 
   if (error) return NextResponse.json({ error: 'טעינת ההגדרות נכשלה' }, { status: 500 })
 
@@ -31,6 +32,7 @@ export async function GET() {
   const visibleRow = data?.find((r) => r.key === LOYALTY_VISIBLE)
   const linksRow = data?.find((r) => r.key === PORTAL_LINKS)
   const reviewsRow = data?.find((r) => r.key === PORTAL_REVIEWS)
+  const notifyAllRow = data?.find((r) => r.key === OMS_NOTIFY_ALL_WAITERS)
 
   return NextResponse.json({
     loyaltyEnabled: (loyaltyRow?.value as boolean | undefined) ?? LOYALTY_ENABLED_DEFAULT,
@@ -40,6 +42,8 @@ export async function GET() {
     portalLinksUpdatedAt: linksRow?.updated_at ?? null,
     portalReviews: normalizeReviews(reviewsRow?.value, PORTAL_REVIEWS_DEFAULT),
     portalReviewsUpdatedAt: reviewsRow?.updated_at ?? null,
+    omsNotifyAllWaiters: (notifyAllRow?.value as boolean | undefined) ?? OMS_NOTIFY_ALL_WAITERS_DEFAULT,
+    omsNotifyAllWaitersUpdatedAt: notifyAllRow?.updated_at ?? null,
   })
 }
 
@@ -48,7 +52,35 @@ export async function PATCH(request: NextRequest) {
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown; portalReviews?: unknown } | null
+    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown; portalReviews?: unknown; omsNotifyAllWaiters?: unknown } | null
+
+  if (body && 'omsNotifyAllWaiters' in body) {
+    if (typeof body.omsNotifyAllWaiters !== 'boolean') {
+      return NextResponse.json({ error: 'ערך לא תקין' }, { status: 400 })
+    }
+
+    const { data, error } = await auth.service
+      .from('app_settings')
+      .upsert({
+        key: OMS_NOTIFY_ALL_WAITERS,
+        value: body.omsNotifyAllWaiters,
+        is_public: true, // ayeka-staff's own RLS has no other read path for app_settings
+        updated_at: new Date().toISOString(),
+        updated_by: auth.userId,
+      }, { onConflict: 'key' })
+      .select('value, updated_at')
+      .single()
+
+    if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
+
+    // No revalidateTag here on purpose — this setting has no portal-facing
+    // reader; ayeka-staff polls app_settings directly, same cadence as
+    // its own realtime backup poll.
+    return NextResponse.json({
+      omsNotifyAllWaiters: data.value as boolean,
+      updatedAt: data.updated_at,
+    })
+  }
 
   if (body && 'loyaltyEnabled' in body) {
     if (typeof body.loyaltyEnabled !== 'boolean') {

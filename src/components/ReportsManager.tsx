@@ -50,8 +50,77 @@ const PAGE = 30
 export default function ReportsManager() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <NotifyScopeToggle />
       <ShiftPanel />
       <ReceiptsPanel />
+    </div>
+  )
+}
+
+/* ── OMS notification scope ─────────────────────────────────────────
+   2026-08-16: "Lets make a way for the owner to choose if all waiters
+   get notifications for all tables or table owned notifications so we
+   can fit multiple businesses." ayeka-staff's own global ready-alert
+   reads this — see its App.tsx. Lives here, not the main dashboard, since
+   it's an OMS-operational switch, not a portal-facing one — the other
+   toggles on /owner/dashboard all answer "what does a customer see,"
+   this one answers "who does a waiter's phone buzz for." */
+function NotifyScopeToggle() {
+  const [allWaiters, setAllWaiters] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void fetch('/api/owner/settings', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => setAllWaiters(j.omsNotifyAllWaiters ?? true))
+  }, [])
+
+  async function set(next: boolean) {
+    setBusy(true); setError(null)
+    setAllWaiters(next) // optimistic
+    try {
+      const res = await fetch('/api/owner/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ omsNotifyAllWaiters: next }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setAllWaiters(!next)
+      setError('שינוי המצב נכשל. נסה/י שוב.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (allWaiters === null) return null
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ fontWeight: 700, color: 'var(--text)' }}>התראות מוכן להגשה</span>
+        <div role="group" style={{ display: 'flex', gap: 6 }}>
+          <button
+            style={allWaiters ? primary : ghost} disabled={busy}
+            onClick={() => !allWaiters && void set(true)}
+          >
+            כל המלצרים
+          </button>
+          <button
+            style={!allWaiters ? primary : ghost} disabled={busy}
+            onClick={() => allWaiters && void set(false)}
+          >
+            רק בעל/ת השולחן
+          </button>
+        </div>
+      </div>
+      <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: 'var(--text-dim)' }}>
+        {allWaiters
+          ? 'כל מלצר/ית רואה התראת "מוכן להגשה" עבור כל שולחן בקומה.'
+          : 'רק המלצר/ית המשויכ/ת לשולחן (או שסימנ/ה את עצמו/ה כאחראי/ת עליו) מקבל/ת את ההתראה.'}
+      </p>
+      {error && <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: '#ff6b6b' }}>{error}</p>}
     </div>
   )
 }
