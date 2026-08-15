@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { MENU_SLUG, loc, type MenuCategory, type MenuItem, type Localized } from '@/lib/menu/types'
+import { MENU_SLUG, loc, type MenuCategory, type MenuItem, type MenuOptionGroup, type Localized } from '@/lib/menu/types'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import MenuVersionBar from '@/components/MenuVersionBar'
 import HappyHourCard from '@/components/HappyHourCard'
@@ -24,6 +24,13 @@ const T = {
   viewMenu: 'צפייה בתפריט', dash: '← ניהול',
   confirmDelCat: 'למחוק את הקטגוריה?',
   empty: 'אין עדיין קטגוריות. הוסף/י אחת למטה.',
+  // Item options (item E, 2026-08-15) — same-priced named choices a price
+  // split can't express: hookah flavor, a pasta sauce.
+  options: 'אפשרויות (כמו טעם נרגילה)',
+  optionGroupName: 'שם הקבוצה (למשל: טעם)',
+  optionChoiceName: 'שם האפשרות (למשל: תפוח)',
+  addChoice: '+ אפשרות',
+  addOptionGroup: '+ קבוצת אפשרויות',
 }
 
 function priceToInput(p: MenuItem['price']): string {
@@ -216,6 +223,46 @@ function ItemEditor({ item, onChange, onDelete, onUp, onDown }: {
     const has = badges.includes(b)
     onChange({ badges: has ? badges.filter((x) => x !== b) : [...badges, b], badge: undefined })
   }
+
+  // Option groups — ids minted once and kept stable (ayeka-staff snapshots
+  // them into selected_options, same posture item uid/category id already
+  // take: never re-derive an id from the label, which the owner can edit at
+  // any time). slug() best-effort transliterates for readability but a
+  // timestamp suffix is what actually guarantees uniqueness.
+  const options = item.options ?? []
+  const mintId = (label: string) => {
+    // Not a URL or a DOM selector — just a stable snapshot id (029's own
+    // comment) — so Hebrew/Arabic pass through untouched; only whitespace
+    // needs collapsing. The timestamp suffix is what actually guarantees
+    // uniqueness, same posture addCat's own id minting already takes.
+    const slug = label.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 24)
+    return `${slug || 'opt'}-${Date.now().toString(36)}`
+  }
+  const addOptionGroup = () => onChange({
+    options: [...options, { id: mintId('group'), label: { he: '' }, choices: [] }],
+  })
+  const updateGroup = (gi: number, patch: Partial<MenuOptionGroup>) => {
+    const next = options.map((g, i) => (i === gi ? { ...g, ...patch } : g))
+    onChange({ options: next })
+  }
+  const delGroup = (gi: number) => onChange({ options: options.filter((_, i) => i !== gi) })
+  const addChoice = (gi: number) => {
+    const next = options.map((g, i) => i === gi
+      ? { ...g, choices: [...g.choices, { id: mintId('choice'), he: '' }] }
+      : g)
+    onChange({ options: next })
+  }
+  const updateChoice = (gi: number, ci: number, he: string) => {
+    const next = options.map((g, i) => i === gi
+      ? { ...g, choices: g.choices.map((c, j) => (j === ci ? { ...c, he } : c)) }
+      : g)
+    onChange({ options: next })
+  }
+  const delChoice = (gi: number, ci: number) => {
+    const next = options.map((g, i) => i === gi ? { ...g, choices: g.choices.filter((_, j) => j !== ci) } : g)
+    onChange({ options: next })
+  }
+
   return (
     <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 10, background: 'var(--bg-elev-2)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -234,6 +281,28 @@ function ItemEditor({ item, onChange, onDelete, onUp, onDown }: {
             <label style={chk}><input type="checkbox" checked={badges.includes('new')} onChange={() => toggleBadge('new')} /> {T.badgeNew}</label>
             <label style={chk}><input type="checkbox" checked={item.available === false} onChange={(e) => onChange({ available: e.target.checked ? false : undefined })} /> {T.sold}</label>
             <button onClick={onDelete} className="press" style={{ ...ghost, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto', padding: '5px 10px' }}>{T.del}</button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-faint)' }}>{T.options}</span>
+            {options.map((g, gi) => (
+              <div key={g.id} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input value={g.label.he ?? ''} onChange={(e) => updateGroup(gi, { label: { ...g.label, he: e.target.value } })}
+                    placeholder={T.optionGroupName} style={{ ...input, flex: 1, fontWeight: 600 }} />
+                  <button onClick={() => delGroup(gi)} className="press" style={iconBtn} aria-label={T.del}>🗑</button>
+                </div>
+                {g.choices.map((c, cix) => (
+                  <div key={c.id} style={{ display: 'flex', gap: 6, paddingInlineStart: 14 }}>
+                    <input value={c.he ?? ''} onChange={(e) => updateChoice(gi, cix, e.target.value)}
+                      placeholder={T.optionChoiceName} style={{ ...input, flex: 1 }} />
+                    <button onClick={() => delChoice(gi, cix)} className="press" style={iconBtn} aria-label={T.del}>✕</button>
+                  </div>
+                ))}
+                <button onClick={() => addChoice(gi)} className="press" style={{ ...ghost, alignSelf: 'flex-start', fontSize: '0.78rem', padding: '4px 10px' }}>{T.addChoice}</button>
+              </div>
+            ))}
+            <button onClick={addOptionGroup} className="press" style={{ ...ghost, alignSelf: 'flex-start' }}>{T.addOptionGroup}</button>
           </div>
         </div>
       )}

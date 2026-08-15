@@ -280,6 +280,15 @@ function ItemRow({
           {it.available === false && <span className="badge sold-badge">{MENU_UI.sold[lang]}</span>}
         </div>
         {loc(it.note, lang) && <div className="item-note">{loc(it.note, lang)}</div>}
+        {/* Item E, 2026-08-15: "we want the customers to know the available
+            flavours" — read-only here, no selection (customers can't order
+            yet, CLAUDE.md's own boundary). Same choices ayeka-staff's
+            waiters pick from when they add the line. */}
+        {it.options?.map((g) => g.choices.length > 0 && (
+          <div className="item-note" key={g.id}>
+            {loc(g.label, lang)}: {g.choices.map((c) => loc(c, lang)).filter(Boolean).join(', ')}
+          </div>
+        ))}
       </div>
       {price && (
         <div className="price">

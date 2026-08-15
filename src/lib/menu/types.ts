@@ -9,6 +9,20 @@ export const RTL: Record<Lang, boolean> = { he: true, ar: true, en: false }
 
 export type Localized = { he?: string; en?: string; ar?: string }
 
+export interface MenuOptionChoice extends Localized {
+  /** Stable identity — what waiter_order_items.selected_options snapshots as
+   *  choiceId (029_waiter_item_options.sql's own comment). Never the label,
+   *  which the owner can edit at any time. */
+  id: string
+}
+
+export interface MenuOptionGroup {
+  /** Snapshotted as selected_options[].groupId — same stability rule. */
+  id: string
+  label: Localized
+  choices: MenuOptionChoice[]
+}
+
 export interface MenuItem extends Localized {
   /** Stable identity, minted by ensureUids(). Categories always had an `id`;
    *  items were addressed by array position, which changes on every reorder —
@@ -21,6 +35,16 @@ export interface MenuItem extends Localized {
   badge?: string
   image?: string
   available?: boolean
+  /** Choices a price split can't express — same-priced named options like
+   *  hookah flavor (item E, 2026-08-15) or a pasta sauce. Additive to the
+   *  price-variant mechanism, not a replacement (029's own header comment).
+   *  Absent/empty = no options, the common case. Owner-editable in
+   *  MenuEditor's ItemEditor; read (display-only, no selection) on the
+   *  public menu so customers can see what's actually available; read
+   *  again in ayeka-staff's add-item flow, where a choice per group is
+   *  required before the line can be registered and gets snapshotted into
+   *  waiter_order_items.selected_options. */
+  options?: MenuOptionGroup[]
 }
 
 export interface MenuCategory {
