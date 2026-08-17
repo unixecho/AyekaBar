@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOwner } from '@/lib/owner/guard'
 
+// 2026-08-16: explicit, not just implied by requireOwner()'s cookies() read
+// — this route's every response depends on a search param (?id=) and the
+// live database state behind a service-role client whose own fetch calls
+// carry no cache directive of their own. Belt-and-suspenders against
+// Next's Data Cache memoizing a Supabase REST response under this route,
+// which would read exactly like "the receipt doesn't show" (a stale/empty
+// result for a freshly-clicked id) without ever surfacing as a build/type
+// error. Flagged, not confirmed as root cause — see HANDOFF.md.
+export const dynamic = 'force-dynamic'
+
 // Receipts for the owner dashboard (PLAN_OMS_V2.md item 13 — Johnathan,
 // 2026-08-15: "all receipts need to be easily accessible to the owner
 // dashboard"). Service-role read of waiter_orders/waiter_order_items —

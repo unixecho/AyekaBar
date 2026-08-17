@@ -42,9 +42,16 @@ interface ShiftSession {
   ended_at: string | null; ended_by: string | null; ended_by_name: string | null
   status: 'active' | 'closed'
 }
+// 2026-08-16, migration 038: "a sign in option for bartenders and cooks
+// and log their sign ins with the shift timeline... a full audit."
+interface StationCheckin {
+  id: string; staff_id: string; staff_name: string | null
+  station: 'bar' | 'kitchen'; event: 'check_in' | 'check_out'; at: string
+}
 
 const money = (agorot: number) => `₪${(agorot / 100).toLocaleString('he-IL')}`
 const heDateTime = (s: string) => new Date(s).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+const heTime = (s: string) => new Date(s).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
 const PAGE = 30
 
 export default function ReportsManager() {
@@ -173,6 +180,7 @@ function ShiftPanel() {
             <button className="press" disabled={busy} onClick={() => void act('end')} style={{ ...ghost, marginTop: 10 }}>
               {busy ? 'סוגר…' : 'סיום משמרת'}
             </button>
+            <StationCheckinsList sessionId={active.id} />
           </>
         ) : (
           <>
@@ -202,6 +210,49 @@ function ShiftPanel() {
         </div>
       )}
     </section>
+  )
+}
+
+/** "log their sign ins with the shift timeline and make sure there's a
+ *  full audit for it" — 2026-08-16, migration 038. Every bartender/cook
+ *  clock-in/out for the currently active session, newest first. Polled,
+ *  not just loaded once — this is meant to be glanced at mid-shift, not
+ *  only reviewed after the fact. */
+function StationCheckinsList({ sessionId }: { sessionId: string }) {
+  const [checkins, setCheckins] = useState<StationCheckin[] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = () =>
+      fetch(`/api/owner/shifts?sessionId=${sessionId}`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((j) => { if (!cancelled) setCheckins(j.checkins ?? []) })
+    void load()
+    const id = window.setInterval(load, 20_000)
+    return () => { cancelled = true; window.clearInterval(id) }
+  }, [sessionId])
+
+  if (!checkins || checkins.length === 0) return null
+
+  const stationLabel = (s: StationCheckin['station']) => (s === 'bar' ? 'בר' : 'מטבח')
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--line)' }}>
+      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-dim)' }}>כניסות/יציאות לעמדה</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+        {[...checkins].reverse().map((c) => (
+          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem' }}>
+            <span style={{ color: c.event === 'check_in' ? 'var(--neon)' : 'var(--text-faint)' }}>
+              {c.event === 'check_in' ? '↓' : '↑'}
+            </span>
+            <span style={{ color: 'var(--text)', flex: 1, minWidth: 0 }}>
+              {c.staff_name ?? '—'} · {stationLabel(c.station)}
+            </span>
+            <span style={{ color: 'var(--text-faint)' }}>{heTime(c.at)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -267,13 +318,26 @@ function ReceiptsPanel() {
 
 function ReceiptDetailSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const [detail, setDetail] = useState<ReceiptDetail | null | undefined>(undefined)
+  // 2026-08-16: "the receipt doesn't show when clicking on it" — couldn't
+  // reproduce the failure itself (route + data both check out for real
+  // production rows), so this at least stops it from collapsing silently
+  // into the generic "not found" copy next time, which told nobody
+  // whether the request failed, came back non-ok, or genuinely had no row.
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    setFetchError(null)
     fetch(`/api/owner/reports?id=${id}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null)
+          throw new Error(body?.error ?? `HTTP ${r.status}`)
+        }
+        return r.json()
+      })
       .then((j) => { if (!cancelled) setDetail(j) })
-      .catch(() => { if (!cancelled) setDetail(null) })
+      .catch((e) => { if (!cancelled) { setDetail(null); setFetchError(String(e?.message ?? e)) } })
     return () => { cancelled = true }
   }, [id])
 
@@ -299,7 +363,11 @@ function ReceiptDetailSheet({ id, onClose }: { id: string; onClose: () => void }
       >
         <div style={{ background: 'var(--bg-elev-2)', border: '1px solid var(--line-strong)', borderRadius: 18, overflow: 'hidden', padding: 18, maxHeight: '80vh', overflowY: 'auto' }}>
           {detail === undefined && <div className="sk" style={{ height: 160, borderRadius: 10 }} />}
-          {detail === null && <p style={{ color: 'var(--text-dim)', textAlign: 'center' }}>הקבלה לא נמצאה.</p>}
+          {detail === null && (
+            <p style={{ color: 'var(--text-dim)', textAlign: 'center' }}>
+              הקבלה לא נמצאה{fetchError ? ` (${fetchError})` : ''}.
+            </p>
+          )}
           {detail && (
             <>
               <div style={{ textAlign: 'center', paddingBottom: 12, marginBottom: 10, borderBottom: '1px dashed var(--line-strong)' }}>
