@@ -17,11 +17,11 @@ const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
 const I18N: Record<Lang, {
   brand: ReactNode; tagline: string; navigate: string; menu: string; instagram: string
   facebook: string; review: string; loyalty: string; soon: string; team: string
-  footer: string
+  footer: string; scrollCue: string
 }> = {
-  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', facebook: 'פייסבוק', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', footer: '© אייכה בר' },
-  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', facebook: 'Facebook', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', footer: '© Ayeka Bar' },
-  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', facebook: 'فيسبوك', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', footer: '© אייכה בר' },
+  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', facebook: 'פייסבוק', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', footer: '© אייכה בר', scrollCue: 'ביקורות' },
+  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', facebook: 'Facebook', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', footer: '© Ayeka Bar', scrollCue: 'Reviews' },
+  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', facebook: 'فيسبوك', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', footer: '© אייכה בר', scrollCue: 'التقييمات' },
 }
 
 const ICONS = {
@@ -152,13 +152,35 @@ export default function Portal({
           </a>
         </div>
 
-        {/* Without a cue almost nobody scrolls a link-hub that fits the screen,
-            and the wall is the whole point of scrolling. Chevron only: on a
-            desktop viewport the wall's own heading lands just below this, and
-            labelling both made the same phrase appear twice in a row. */}
-        <div className="rw-cue" aria-hidden style={{ animation: `rise-in .55s var(--ease) ${delay()} backwards` }}>
-          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-        </div>
+        {/* 2026-08-19: "more obvious, inviting, intuitive and professional,
+            iOS style" — was a bare, decorative, non-interactive chevron
+            (aria-hidden, pointer-events:none). Now a real button: a glass
+            capsule sized to an actual iOS touch target (44pt), the chevron
+            doubled (the common "more below" motif — a single arrow reads as
+            "back/forward" as often as "scroll"), a short label, and a soft
+            breathing glow so it visually invites a tap instead of waiting to
+            be noticed. Tapping it — not just looking at it — is the
+            "intuitive" half: it smooth-scrolls straight to the wall.
+            Without a cue almost nobody scrolls a link-hub that fits the
+            screen, and the wall is the whole point of scrolling. The label
+            ("Reviews") is deliberately shorter than and worded differently
+            from the wall's own eyebrow ("What people say") right below it —
+            a glance-able pointer, not a second copy of the same sentence. */}
+        <button
+          type="button"
+          className="rw-cue press"
+          aria-label={t.scrollCue}
+          onClick={() => document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          style={{ animation: `rise-in .55s var(--ease) ${delay()} backwards` }}
+        >
+          <span className="rw-cue-badge">
+            <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 5.5l6 6 6-6" />
+              <path d="M6 12.5l6 6 6-6" />
+            </svg>
+          </span>
+          <span className="rw-cue-label">{t.scrollCue}</span>
+        </button>
       </div>
 
       <ReviewWall block={reviews} lang={lang} />

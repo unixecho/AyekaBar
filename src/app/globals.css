@@ -728,7 +728,10 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   padding-bottom: 4px;
 }
 
-/* Scroll cue, pinned to the bottom of the first screen. */
+/* Scroll cue, pinned to the bottom of the first screen — 2026-08-19,
+   "more obvious, inviting, intuitive and professional, iOS style." A real
+   button now (was a decorative, non-interactive div), reset to plain text
+   layout so the badge + label read as one control, not a browser button. */
 .rw-cue {
   position: absolute;
   bottom: -2px;
@@ -737,21 +740,49 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  font-size: 0.74rem;
-  font-weight: 500;
-  letter-spacing: 0.2px;
-  color: var(--text-faint);
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 4px 10px;
+  font-family: inherit;
+  cursor: pointer;
   white-space: nowrap;
-  pointer-events: none;
 }
-.rw-cue svg { animation: cue-bob 2.2s var(--ease) infinite; }
+.rw-cue-label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
+}
+/* The badge: a proper 44pt iOS touch target, glass-capsule finish (soft
+   tint + blur + hairline border) matching the hero's own button language
+   (btnStyle in Portal.tsx) rather than inventing a new one, plus a warm
+   glow ring that breathes — the same "glow = come here" vocabulary the
+   review CTA's shimmer and the hero logo's drop-shadow already use. */
+.rw-cue-badge {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  color: var(--neon-soft);
+  background: rgba(255, 138, 92, 0.1);
+  border: 1px solid rgba(255, 138, 92, 0.28);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 0 0 0 rgba(255, 138, 92, 0.35);
+  animation: cue-bob 2.2s var(--ease) infinite, cue-glow 2.2s var(--ease) infinite;
+}
 @keyframes cue-bob {
-  0%, 100% { transform: translateY(0); opacity: .55 }
-  50%      { transform: translateY(4px); opacity: 1 }
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(4px); }
+}
+@keyframes cue-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 92, 0.35); }
+  50%      { box-shadow: 0 0 14px 3px rgba(255, 138, 92, 0.3); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-cue svg { animation: none; opacity: .7; }
+  .rw-cue-badge { animation: none; box-shadow: 0 0 10px 1px rgba(255, 138, 92, 0.22); }
 }
 
 .rw-head { text-align: center; margin-bottom: 16px; }

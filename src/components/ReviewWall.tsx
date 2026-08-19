@@ -399,7 +399,7 @@ export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock;
   const paged = count > 1
 
   return (
-    <section ref={sectionRef} className={`rw${inView ? ' in' : ''}`} aria-label={t.region}>
+    <section id="reviews" ref={sectionRef} className={`rw${inView ? ' in' : ''}`} aria-label={t.region}>
       <header className="rw-head">
         <p className="rw-eyebrow">{t.eyebrow}</p>
         <div className="rw-score">
