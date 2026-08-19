@@ -731,12 +731,27 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
 /* Scroll cue, pinned to the bottom of the first screen — 2026-08-19,
    "more obvious, inviting, intuitive and professional, iOS style." A real
    button now (was a decorative, non-interactive div), reset to plain text
-   layout so the badge + label read as one control, not a browser button. */
+   layout so the badge + label read as one control, not a browser button.
+   2026-08-20 🐛 — "on my phone the button is positioned slightly off to
+   the right and then it's centered." Root cause: centering here used to
+   be left:50%+transform:translateX(-50%), but the button's OWN entrance
+   animation (its inline style, Portal.tsx) also drives `transform` via
+   the rise-in keyframes — a CSS animation's transform REPLACES whatever
+   the element's transform would otherwise be, it doesn't compose with a
+   separately-set one. So for the animation's active window (its delay +
+   duration, since fill-mode is backwards) the button sat at its raw
+   left:50% position — offset right by half its own width, not centered —
+   and only snapped to centered once the animation finished and backwards
+   stopped applying. Centered with left/right/margin instead, which needs
+   no transform at all, so the entrance animation's own transform is free
+   to do whatever it wants without fighting this for the same property. */
 .rw-cue {
   position: absolute;
   bottom: -2px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: fit-content;
   display: flex;
   flex-direction: column;
   align-items: center;
