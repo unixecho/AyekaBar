@@ -12,6 +12,7 @@
 // for. The report-generation half is real, separate follow-up work.
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 
 interface Receipt {
   id: string
@@ -347,7 +348,20 @@ function ReceiptDetailSheet({ id, onClose }: { id: string; onClose: () => void }
     return g ? (g.name?.trim() || `אלמוני ${g.seq}`) : i.seat_name
   }
 
-  return (
+  // 2026-08-19: "when clicking a on a receipt it shows at the bottom of
+  // the page so you have to scroll down to see it." `position:fixed` only
+  // escapes to the viewport when NO ancestor establishes its own
+  // containing block (a transform/filter/animation on ANY ancestor traps
+  // it) — this component used to render as a normal nested child of
+  // ReportsManager, three levels under page.tsx's own `.rise` wrapper and
+  // template.tsx's page-transition wrapper, either of which (or something
+  // added later, by anyone) could become that trap. Rather than keep
+  // proving which one (the 2026-08-16 investigation already traced the
+  // whole chain once and found nothing conclusive), this renders through
+  // a portal straight onto `document.body` — structurally outside every
+  // ancestor's DOM subtree, so no ancestor's CSS can ever affect its
+  // containing block again, regardless of what changes above it later.
+  return createPortal(
     <div
       role="dialog" aria-modal="true" onClick={onClose}
       style={{
@@ -377,19 +391,31 @@ function ReceiptDetailSheet({ id, onClose }: { id: string; onClose: () => void }
                 <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-dim)' }}>{heDateTime(detail.order.opened_at)} · {detail.order.waiter_name}</span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {detail.items.map((i) => (
-                  <div key={i.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                    <span style={{ color: 'var(--text-faint)', fontSize: '0.82rem', flex: 'none', paddingTop: 1 }}>{i.qty}×</span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <b style={{ fontSize: '0.88rem', color: 'var(--text)' }}>{i.name_he}{i.variant && <em style={{ fontStyle: 'normal', color: 'var(--text-dim)' }}> · {i.variant}</em>}</b>
-                      {i.note && <small style={{ display: 'block', color: 'var(--neon-soft)', fontSize: '0.76rem' }}>{i.note}</small>}
-                      {whose(i, detail.guests) && <small style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-faint)' }}>{whose(i, detail.guests)}</small>}
-                    </span>
-                    <span style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text)' }}>{money(i.unit_agorot * i.qty)}</span>
-                  </div>
-                ))}
-              </div>
+              {/* 2026-08-19: an order whose items were all voided (e.g. an
+                  abandoned table with unaccepted lines — ayeka-staff's own
+                  session 7 work the same evening) legitimately has an empty
+                  `items` array; that used to render as a blank gap between
+                  the header and the total, indistinguishable from "the data
+                  didn't load" at a glance. */}
+              {detail.items.length === 0 ? (
+                <p style={{ color: 'var(--text-faint)', textAlign: 'center', padding: '10px 0', fontSize: '0.82rem' }}>
+                  אין פריטים בקבלה זו.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {detail.items.map((i) => (
+                    <div key={i.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <span style={{ color: 'var(--text-faint)', fontSize: '0.82rem', flex: 'none', paddingTop: 1 }}>{i.qty}×</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <b style={{ fontSize: '0.88rem', color: 'var(--text)' }}>{i.name_he}{i.variant && <em style={{ fontStyle: 'normal', color: 'var(--text-dim)' }}> · {i.variant}</em>}</b>
+                        {i.note && <small style={{ display: 'block', color: 'var(--neon-soft)', fontSize: '0.76rem' }}>{i.note}</small>}
+                        {whose(i, detail.guests) && <small style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-faint)' }}>{whose(i, detail.guests)}</small>}
+                      </span>
+                      <span style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text)' }}>{money(i.unit_agorot * i.qty)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--line-strong)', fontWeight: 700, color: 'var(--text)' }}>
                 <span>סה״כ</span>
@@ -400,7 +426,8 @@ function ReceiptDetailSheet({ id, onClose }: { id: string; onClose: () => void }
         </div>
         <button onClick={onClose} className="press" style={{ ...ghost, width: '100%', marginTop: 8, textAlign: 'center' }}>סגירה</button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
