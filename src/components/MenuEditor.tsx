@@ -21,6 +21,12 @@ const T = {
   name: 'שם', note: 'תיאור', price: 'מחיר (מספר, טווח כמו 30/34, או ריק)',
   catTitle: 'שם הקטגוריה', catNote: 'הערת קטגוריה',
   mustTry: 'חובה לטעום', badgeNew: 'חדש', sold: 'אזל',
+  // Out-of-stock overview (2026-08-20) — "put all the items marked out of
+  // stock in the same category for the managers to return it to the menu
+  // quickly... and to easily see which items are out of stock."
+  outOfStockTitle: 'אזל מהמלאי',
+  outOfStockHint: 'כל הפריטים שסומנו כ"אזל", מכל הקטגוריות, כדי שיהיה קל למצוא ולהחזיר למלאי בלחיצה אחת.',
+  backInStock: '↩ החזרה למלאי',
   viewMenu: 'צפייה בתפריט', dash: '← ניהול',
   confirmDelCat: 'למחוק את הקטגוריה?',
   empty: 'אין עדיין קטגוריות. הוסף/י אחת למטה.',
@@ -137,6 +143,20 @@ export default function MenuEditor() {
   const addItem = (ci: number) => edit((d) => { d[ci].items.push({ he: 'פריט חדש', price: null }) })
   const delItem = (ci: number, ii: number) => edit((d) => { d[ci].items.splice(ii, 1) })
   const moveItem = (ci: number, ii: number, dir: -1 | 1) => edit((d) => { const j = ii + dir; const it = d[ci].items; if (j < 0 || j >= it.length) return;[it[ii], it[j]] = [it[j], it[ii]] })
+  const restoreItem = (ci: number, ii: number) => edit((d) => { d[ci].items[ii].available = undefined })
+
+  // Out-of-stock overview — a VIRTUAL grouping, not a real move: an item
+  // stays in its actual category (deleting it out of "Cocktails" into a
+  // real "Out of Stock" category would lose exactly the context a manager
+  // needs to file it back correctly, the opposite of "return it to the
+  // menu quickly"). Flattened across every category, in menu order, so
+  // the list reads the same way the menu itself does.
+  const outOfStock = cats.flatMap((cat, ci) =>
+    cat.items
+      .map((item, ii) => ({ ci, ii, item }))
+      .filter(({ item }) => item.available === false)
+      .map(({ ci: c, ii: i, item }) => ({ ci: c, ii: i, item, catIcon: cat.icon, catTitle: loc(cat.title, 'he') }))
+  )
 
   if (loading) return <p style={{ color: 'var(--text-dim)', padding: '40px 0', textAlign: 'center' }}>{T.loading}</p>
   if (loadError) return <p style={{ color: '#ff6b6b', padding: '40px 0', textAlign: 'center' }}>{T.loadErr}</p>
@@ -158,6 +178,34 @@ export default function MenuEditor() {
           above the item list because they decide what the item list means. */}
       <MenuVersionBar />
       <HappyHourCard categories={cats} />
+
+      {/* 2026-08-20: "put all the items marked out of stock in the same
+          category for the managers to return it to the menu quickly...
+          and to easily see which items are out of stock." Only rendered
+          when there's actually something out — an always-present empty
+          box would be exactly the kind of ambient clutter this page
+          already avoids (see cats.length===0 right below, same posture). */}
+      {outOfStock.length > 0 && (
+        <div style={outOfStockCard}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '1.05rem' }}>⚠️</span>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>{T.outOfStockTitle}</h3>
+            <span style={outOfStockCount}>{outOfStock.length}</span>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', margin: '4px 0 10px' }}>{T.outOfStockHint}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {outOfStock.map(({ ci, ii, item, catIcon, catTitle }) => (
+              <div key={`${ci}-${ii}`} style={outOfStockRow}>
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <b style={{ fontSize: '0.9rem', color: 'var(--text)' }}>{item.he}</b>
+                  <small style={{ fontSize: '0.74rem', color: 'var(--text-faint)' }}>{catIcon} {catTitle}</small>
+                </span>
+                <button onClick={() => restoreItem(ci, ii)} className="press" style={restoreBtn}>{T.backInStock}</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {cats.length === 0 && <p style={{ color: 'var(--text-faint)', textAlign: 'center', padding: '10px 0' }}>{T.empty}</p>}
 
@@ -326,6 +374,13 @@ function LangRow({ label, value, onChange, skipHe }: {
 }
 
 const card: CSSProperties = { background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14, padding: 12 }
+// Warm amber, not the delete-action red (#ff6b6b) already used elsewhere in
+// this file — "out of stock" is a state to fix, not a destructive action to
+// fear, so it gets its own distinct tone rather than borrowing danger's.
+const outOfStockCard: CSSProperties = { background: 'rgba(255,178,64,0.06)', border: '1px solid rgba(255,178,64,0.28)', borderRadius: 14, padding: 12 }
+const outOfStockCount: CSSProperties = { marginInlineStart: 'auto', borderRadius: 999, padding: '2px 9px', fontSize: '0.76rem', fontWeight: 700, color: '#ffb240', background: 'rgba(255,178,64,0.14)', border: '1px solid rgba(255,178,64,0.3)' }
+const outOfStockRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-elev-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px' }
+const restoreBtn: CSSProperties = { flex: '0 0 auto', padding: '7px 11px', borderRadius: 9, border: '1px solid rgba(74,222,128,0.35)', background: 'rgba(74,222,128,0.1)', color: '#4ade80', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }
 const input: CSSProperties = { padding: '9px 11px', borderRadius: 9, border: '1px solid var(--line-strong)', background: 'var(--bg-elev-2)', color: 'var(--text)', fontSize: '0.92rem', fontFamily: 'inherit', outline: 'none', width: '100%' }
 const iconBtn: CSSProperties = { width: 32, height: 32, flex: '0 0 auto', borderRadius: 8, border: '1px solid var(--line-strong)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'inherit' }
 const ghost: CSSProperties = { padding: '8px 13px', borderRadius: 10, border: '1px solid var(--line-strong)', background: 'transparent', color: 'var(--text-dim)', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', textDecoration: 'none', display: 'inline-block' }
