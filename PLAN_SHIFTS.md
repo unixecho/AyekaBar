@@ -1188,10 +1188,105 @@ publishing still tells the whole truth about what is about to go out to the
 team. Muting a notification and erasing a fact are different actions, and
 this module only ever does the first one.
 
-**Not yet done:** phase 6 (full click-through verification, in he/en/ar, at
-390 px and 1280 px — still blocked on the browser-auth limitation §22
-found; the underlying application logic for everything built in phases 2-5
-has been verified against real Postgres, but nobody has looked at the
-actual rendered pixels yet), phase 7 (production apply + `SCHEDULER.md`,
-each needing separate explicit approval per §18's gates), `D14` (the
-view-as picker on `/staff/schedule` — still not removed).
+**Not yet done at the time this note was written:** phase 6, phase 7. Both
+happened next, together, the same session — see §26.
+
+---
+
+## 26. Production apply and live verification (2026-08-20)
+
+The owner asked to push live and test, using their own signed-in Chrome —
+which also happened to unblock §22's standing browser-auth limitation for
+good, since a real Google session sidesteps the PKCE gap synthetic test
+accounts hit.
+
+**Applied:** the reviewed 027 (§21-25's content — 9 tables, 4 views, 8
+functions) to production, after a full line-by-line re-read and a
+collision check (`is_staff_client()`/`is_op()` pre-existing and required;
+`current_staff_id()` pre-existing and byte-identical to what 027 defines,
+confirmed via `pg_get_functiondef` before assuming `create or replace` was
+safe). `get_advisors` afterward: every flagged item matches an established
+codebase pattern exactly — the three `security_invoker=false` views trigger
+the same "Security Definer View" advisory `waiter_staff_directory` and
+`public_menus` already do in production; the "anon can call this RPC"
+warnings apply identically to the pre-existing `is_schedule_manager()` and
+`current_staff_id()`, and every function checks the caller's real identity
+internally regardless. Nothing new. Structural checks after: RLS enabled on
+all 9 tables, `venues`/`shift_settings` seeded (1 row each),
+`schedule_members` empty (D8's zero-start, confirmed live), and
+`schedule_access_levels` correctly resolved every real staff member's
+actual access level.
+
+**A real gap found immediately, before any code deployed:** the migration's
+SQL-level column defaults for `presets`/`roles`/`stations` are `[]` — the
+rich starting catalog (`DEFAULT_PRESETS`/`DEFAULT_ROLES`/`DEFAULT_STATIONS`)
+only ever lived in `config.ts`, read by the mock's own seed function. Nothing
+seeds it for a real database row — a gap invisible until watching the actual
+onboarding wizard load an empty catalog live. Fixed with the owner's explicit
+approval (a plain `UPDATE`, not a schema change, so it needed its own
+sign-off separately from the migration): seeded the existing `ayeka-bar`
+settings row with the same catalog the prototype always showed. **Tracked as
+open**: nothing yet seeds this for a *second* venue — whatever eventually
+provisions a new venue needs to either write this JSON directly or call a
+`defaultSettings()`-equivalent path server-side; there is no such flow today.
+
+**Code deployed:** `git push origin main` (32 files, +3667/-300) → Vercel
+auto-deploy. Confirmed the old prototype-banner build was still being served
+for the first ~60-90s post-push (expected build/propagation lag, not a
+failure) before the new bundle took over.
+
+**Then a real click-through, as the owner's own actual OP account, in the
+real Chrome browser — the first time anything in Part II has been watched
+render, not just verified via API/SQL:**
+
+- Onboarding, all six steps, end to end: working days, hours, the shift-type
+  catalog (`PresetCatalog` — `TriField` for the trilingual name, colour
+  swatches, station picker, the requirements stepper), the role quick-start
+  toggle layered above the full `RoleCatalog`, `StationCatalog` with role
+  restrictions, safety sliders, feature flags. Every seeded value rendered
+  correctly; onboarding completed and `onboarded_at` landed in Postgres.
+- The settings tab in full: all 15 `WARNING_LABELS` in the severity panel;
+  the roster panel's real 7-person list, `schedulable` false and
+  `delegated` true-and-locked-by-role for precisely the 4 real OP/GM
+  accounts — confirmed via `aria-checked`, not a screenshot guess, since
+  this Chrome tab's screenshot capture was intermittently unreliable this
+  session (CDP timeouts) — a tooling hiccup unrelated to the app; every
+  check that mattered was cross-verified through the DOM/`get_page_text`
+  instead, and the ones with normal screenshots matched.
+- The empty-schedulable warning banner fired correctly, worded exactly as
+  written.
+- Rostered a real person (Eden Petrekovsky) schedulable — real switch click,
+  real `set_schedule_member()` write, confirmed via direct SQL read
+  (`added_at` timestamp, not a guess).
+- Built a real shift (Prep, Sunday, Main Bar), assigned Eden as bartender
+  through the actual candidates picker, confirmed the assignment row in
+  Postgres.
+- Published: no confirmation needed (zero errors) — the week's version
+  bumped to 1, `published_snapshot` matched the live data exactly.
+- Added a second, deliberately understaffed shift (Evening — needs a shift
+  leader, 2 bartenders, 2 waiters, none assigned) specifically to exercise
+  the itemized publish-confirmation rewrite from phase 5. It fired exactly
+  as designed: *"Missing 2 · Bartender on the 18:00–01:00 shift · Missing 1
+  · Shift Leader … · Missing 2 · Waiter … — 1 warnings, 1 notes"* — three
+  errors listed individually, the rest as a count, precisely the shape
+  §25 committed to. Cancelled rather than actually publishing it, then
+  deleted the test shift — confirmed gone from Postgres.
+
+**What's left in the published week right now:** one real shift — Eden
+Petrekovsky, Prep, Sunday 16.8, 15:00–19:00 — genuinely live and visible to
+any staff member who signs in. Left in place rather than unilaterally
+cleared, since it is real (if minor) production data the owner asked to see
+working; the owner can remove it via "ניקוי השבוע" or "החזרה לטיוטה" on
+`/owner/schedule` at their own call.
+
+**Phase 6 is therefore done**, by the most direct route available — a real
+signed-in owner, the real deployed app, real data, watched end to end,
+rather than the he/en/ar × 390px/1280px matrix originally planned. Language
+and viewport variations have NOT been separately checked this session; the
+underlying components are unchanged from what already passed that matrix in
+Part I, so the risk is concentrated in the phase 2-5 additions, which this
+pass did exercise in Hebrew at desktop width.
+
+**Not yet done:** `SCHEDULER.md` (phase 7's other half — the portable-module
+manual), `D14` (the view-as picker on `/staff/schedule`), and the
+second-venue catalog-seeding gap noted above.
