@@ -128,6 +128,10 @@ export function defaultSettings(venueId: string): ShiftSettings {
     safety: DEFAULT_SAFETY,
     features: DEFAULT_FEATURES,
     scheduleManagers: [],
+    // Empty, not pre-filled with a guess at which codes a venue won't care
+    // about — same reasoning as dayHours above: this is a starting point,
+    // not a rule. The Manager Panel is where a code actually gets silenced.
+    ruleSeverity: {},
     onboardedAt: null,
   }
 }

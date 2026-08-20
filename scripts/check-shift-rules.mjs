@@ -84,7 +84,7 @@ const assign = (shiftId, staffId, roleId = 'bartender') => {
   return { id: `as${assignSeq}`, venueId: 'v1', shiftId, staffId, roleId, status: 'assigned' }
 }
 
-function snapshot({ shifts = [], assignments = [], safety = {}, features = {}, availability = [], neighbouring, workingDays, dayHours }) {
+function snapshot({ shifts = [], assignments = [], safety = {}, features = {}, availability = [], neighbouring, workingDays, dayHours, ruleSeverity }) {
   const settings = config.defaultSettings('v1')
   return {
     venue: config.AYEKA_VENUE,
@@ -94,8 +94,9 @@ function snapshot({ shifts = [], assignments = [], safety = {}, features = {}, a
       dayHours: dayHours ?? settings.dayHours,
       safety: { ...settings.safety, ...safety },
       features: { ...settings.features, ...features },
+      ruleSeverity: ruleSeverity ?? settings.ruleSeverity,
     },
-    week: { id: 'w1', venueId: 'v1', weekStart: WEEK, status: 'draft', version: 0, publishedAt: null, publishedBy: null, dayNotes: {} },
+    week: { id: 'w1', venueId: 'v1', weekStart: WEEK, status: 'draft', version: 0, publishedAt: null, publishedBy: null, dayNotes: {}, dismissedWarnings: [] },
     shifts, assignments, staff: STAFF, availability, neighbouring,
   }
 }
@@ -150,6 +151,21 @@ section('Per-shift rules')
   }))
   check('exceeding a role cap warns but is not an error',
     w.find((x) => x.code === 'over_role_max')?.severity === 'warn')
+}
+{
+  // decision D12: deleting a role from the catalog must not break a week
+  // that already referenced it — the reference is orphaned, not cascaded.
+  const s = shift(1, '18:00', '01:00', { requirements: [{ roleId: 'ghost-role', min: 1 }] })
+  const w = rules.evaluate(snapshot({ shifts: [s], assignments: [assign(s.id, 's2', 'ghost-role')] }))
+  check('an assignment referencing a deleted role warns unknown_role',
+    w.find((x) => x.code === 'unknown_role')?.severity === 'warn')
+  check('unknown_role fires only once per shift even with two stale references (requirement + assignment, same role)',
+    w.filter((x) => x.code === 'unknown_role').length === 1)
+}
+{
+  const s = shift(1, '18:00', '01:00')
+  const w = rules.evaluate(snapshot({ shifts: [s], assignments: [assign(s.id, 's2', 'bartender')] }))
+  check('a real role never fires unknown_role', !has(w, 'unknown_role'))
 }
 {
   const s = shift(1, '18:00', '01:00')
@@ -494,6 +510,84 @@ section('Availability submissions and audit')
     settings.entry?.action === 'settings.update' && settings.entry.diff.before.openTime === '17:00')
   const noop = store.reduce(settings.db, { type: 'settings.update', patch: { openTime: '16:00' } }, ctx)
   check('re-saving an unchanged setting writes nothing', noop.entry === null)
+}
+
+section('Roster (member.update)')
+{
+  // The mock's ScheduleStaff carries no ScheduleMember fields of its own —
+  // only `active` overlaps `schedulable` (see the field comment on
+  // ScheduleStaff.active in types.ts). This section checks exactly that
+  // narrow contract, not the live source's full schedule_members write —
+  // that path is verified against real Postgres separately (not by this
+  // no-DB harness), see PLAN_SHIFTS.md Part II §22/§23.
+  let db = freshDb()
+  check('everyone starts active in the fixture (mock has no schedulable concept of its own)',
+    db.staff.every((s) => s.active === true))
+
+  const off = store.reduce(db, { type: 'member.update', staffId: 's2', patch: { schedulable: false } }, ctx)
+  check('schedulable:false flips active off for that one person', off.db.staff.find((s) => s.id === 's2').active === false)
+  check('nobody else is touched', off.db.staff.filter((s) => s.id !== 's2').every((s) => s.active === true))
+  check('the change is audited', off.entry?.action === 'member.update')
+
+  const on = store.reduce(off.db, { type: 'member.update', staffId: 's2', patch: { schedulable: true } }, ctx)
+  check('toggling back on works', on.db.staff.find((s) => s.id === 's2').active === true)
+
+  const already = store.reduce(on.db, { type: 'member.update', staffId: 's2', patch: { schedulable: true } }, ctx)
+  check('re-setting the same value writes nothing', already.entry === null)
+
+  const unknownField = store.reduce(db, { type: 'member.update', staffId: 's2', patch: { note: 'part-time' } }, ctx)
+  check('a patch with no schedulable key is a no-op in the mock (it has nowhere to store note)', unknownField.entry === null)
+
+  const unknownStaff = store.reduce(db, { type: 'member.update', staffId: 'nope', patch: { schedulable: false } }, ctx)
+  check('an unknown staffId is a no-op, not a crash', unknownStaff.entry === null)
+}
+
+section('Severity overrides (D11)')
+{
+  const s = shift(1, '18:00', '01:00')
+  const base = rules.evaluate(snapshot({ shifts: [s] }))
+  check('baseline: an empty shift warns unassigned_shift', has(base, 'unassigned_shift'))
+
+  const silenced = rules.evaluate(snapshot({ shifts: [s], ruleSeverity: { unassigned_shift: 'off' } }))
+  check('"off" removes the warning entirely, not just downgrades it', !has(silenced, 'unassigned_shift'))
+  check('a code the venue did not override is unaffected by silencing a different one',
+    // non_working_day should still be free to fire on its own terms — this
+    // just proves the override map is applied per-code, not globally.
+    rules.evaluate(snapshot({ shifts: [s], workingDays: [], ruleSeverity: { unassigned_shift: 'off' } }))
+      .some((w) => w.code === 'non_working_day'))
+
+  const retiered = rules.evaluate(snapshot({ shifts: [s], ruleSeverity: { unassigned_shift: 'info' } }))
+  const retieredWarning = retiered.find((w) => w.code === 'unassigned_shift')
+  check('re-tiering to a different severity changes the severity, not the presence',
+    retieredWarning?.severity === 'info')
+
+  const missing = shift(1, '18:00', '01:00', { requirements: [{ roleId: 'bartender', min: 1 }] })
+  const stillErrors = rules.evaluate(snapshot({ shifts: [missing], ruleSeverity: { unassigned_shift: 'off' } }))
+  check('missing_role (an error) is untouched by silencing a DIFFERENT code',
+    stillErrors.find((w) => w.code === 'missing_role')?.severity === 'error')
+}
+
+section('Warning dismissal (D11)')
+{
+  let db = freshDb()
+  db = apply(db, { type: 'week.ensure', weekStart: WEEK })
+  check('a fresh week starts with no dismissed warnings', db.weeks[0].dismissedWarnings.length === 0)
+
+  const dismissed = store.reduce(db, { type: 'warning.dismiss', weekStart: WEEK, warningId: 'unassigned:sh1', dismissed: true }, ctx)
+  check('dismissing adds the id', dismissed.db.weeks[0].dismissedWarnings.includes('unassigned:sh1'))
+  check('dismissing is audited', dismissed.entry?.action === 'warning.dismiss')
+
+  const again = store.reduce(dismissed.db, { type: 'warning.dismiss', weekStart: WEEK, warningId: 'unassigned:sh1', dismissed: true }, ctx)
+  check('dismissing an already-dismissed id is a no-op', again.entry === null)
+
+  const restored = store.reduce(dismissed.db, { type: 'warning.dismiss', weekStart: WEEK, warningId: 'unassigned:sh1', dismissed: false }, ctx)
+  check('un-dismissing removes the id', !restored.db.weeks[0].dismissedWarnings.includes('unassigned:sh1'))
+
+  const sameShift = shift(1, '18:00', '01:00')
+  const snapA = snapshot({ shifts: [sameShift] })
+  const snapB = { ...snapA, week: { ...snapA.week, dismissedWarnings: ['unassigned:' + sameShift.id] } }
+  check('evaluate() itself never reads dismissedWarnings — dismissal is UI-only, not engine state',
+    JSON.stringify(rules.evaluate(snapA)) === JSON.stringify(rules.evaluate(snapB)))
 }
 
 // ── done ───────────────────────────────────────────────────────────────

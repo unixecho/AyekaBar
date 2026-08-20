@@ -6,11 +6,12 @@ import {
 } from 'react'
 import { canDelegateSchedule, canManageSchedule, type ScheduleAccessRow } from '@/lib/shifts/access'
 import { MockShiftsSource, clearPersisted } from '@/lib/shifts/mock'
+import { SupabaseShiftsSource } from '@/lib/shifts/supabase-source'
 import { t as translate, type StringKey } from '@/lib/shifts/i18n'
-import { todayIn } from '@/lib/shifts/time'
+import { todayIn, weekStartOf } from '@/lib/shifts/time'
 import type { ShiftsDataSource } from '@/lib/shifts/adapter'
 import type { ScheduleAction, ShiftsDB } from '@/lib/shifts/store'
-import type { Lang, Tri } from '@/lib/shifts/types'
+import type { ISODate, Lang, Tri } from '@/lib/shifts/types'
 
 // The module carries its own stylesheet rather than appending to globals.css.
 // Importing it here — from the one component every schedule surface mounts —
@@ -49,6 +50,9 @@ interface ShiftsContext {
   /** Prototype-only: pretend to be a different member of the demo roster. */
   setViewerStaffId: (staffId: string) => void
   dispatch: (action: ScheduleAction) => Promise<void>
+  /** Re-read the currently loaded window without an action — the roster
+   *  panel's live-updating poll uses this, not dispatch(). */
+  refresh: () => Promise<void>
   resetDemo: () => Promise<void>
   isMock: boolean
   today: string
@@ -79,9 +83,25 @@ export default function ShiftsProvider({
   const [viewAs, setViewAs] = useState<string | null>(null)
 
   useEffect(() => {
-    const source = new MockShiftsSource({ id: access.id ?? null, name: actorName })
+    // ?demo=1 forces the localStorage prototype even when real data is
+    // available — kept for demos so nobody has to roster the live team just
+    // to show the builder. Every other load is the real source.
+    const demo = new URLSearchParams(window.location.search).get('demo') === '1'
+    const source: ShiftsDataSource = demo
+      ? new MockShiftsSource({ id: access.id ?? null, name: actorName })
+      : new SupabaseShiftsSource()
     sourceRef.current = source
-    source.load().then(setDb)
+
+    // A Sunday-aligned guess for the FIRST fetch's 3-week window — venueless
+    // and timezoneless by necessity, since neither is known before the first
+    // response arrives. It only has to be close: once `db.venue` loads,
+    // ScheduleWorkspace computes the real `weekStartFor(today, db.venue)` in
+    // the venue's own timezone and re-centres via its existing
+    // `week.ensure` navigation effect if this guess was ever a week off.
+    const now = new Date()
+    const todayGuess: ISODate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    source.load(weekStartOf(todayGuess, 0)).then(setDb)
+
     // The language choice is shared with the rest of the app — the portal and
     // the menu already persist it under this key, and a manager who set the
     // site to English should not find the schedule in Hebrew.
@@ -114,6 +134,12 @@ export default function ShiftsProvider({
     setDb(await source.dispatch(action))
   }, [])
 
+  const refresh = useCallback(async () => {
+    const source = sourceRef.current
+    if (!source) return
+    setDb(await source.refresh())
+  }, [])
+
   const resetDemo = useCallback(async () => {
     const source = sourceRef.current
     if (!source || !(source instanceof MockShiftsSource)) return
@@ -139,11 +165,11 @@ export default function ShiftsProvider({
       tri: (value) => value[lang] || value.he || value.en,
       viewer,
       setViewerStaffId: setViewAs,
-      dispatch, resetDemo,
+      dispatch, refresh, resetDemo,
       isMock: sourceRef.current?.isMock ?? true,
       today: todayIn(db.venue.timezone),
     }
-  }, [db, lang, setLang, viewer, dispatch, resetDemo])
+  }, [db, lang, setLang, viewer, dispatch, refresh, resetDemo])
 
   if (!value) return <ScheduleSkeleton />
 

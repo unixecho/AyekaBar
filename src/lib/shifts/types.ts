@@ -125,6 +125,17 @@ export interface ShiftSettings {
    *  purpose: the grant is per-venue, and public.staff is a shared table the
    *  waiter app and every auth guard already depend on. */
   scheduleManagers: string[]
+  /** Per-venue override of the rules engine's severity for one warning code —
+   *  `{ outside_hours: 'off' }` silences a code this venue doesn't care
+   *  about, permanently, without a deploy. Keyed by `WarningCode` (defined in
+   *  rules.ts) but typed loosely as `string` here rather than importing that
+   *  type, so this file keeps its "no dependency on the rest of the module"
+   *  property — rules.ts already imports types FROM here, and importing back
+   *  would be a cycle. `evaluate()` is the only reader and knows the valid
+   *  keys. Absent or `'off'`-free means "use the engine's own default
+   *  severity for every code" — an empty object, not a per-code default
+   *  copied in here, so the engine's defaults stay in exactly one place. */
+  ruleSeverity: Partial<Record<string, 'error' | 'warn' | 'info' | 'off'>>
   /** Null until the onboarding flow is completed; the panel edits the same
    *  fields forever after. */
   onboardedAt: string | null
@@ -143,13 +154,40 @@ export interface ScheduleStaff {
   colour: string | null
   badge: string | null
   role: string
-  /** False for someone kept for history but no longer schedulable. */
+  /** Whether this person is on the roster the scheduler actually uses. On the
+   *  mock source this was always true — "no soft-delete in public.staff, so
+   *  anyone returned is active by definition" (see the old /api/shifts/staff
+   *  route). On the live source it is `schedule_members.schedulable`, which
+   *  starts false for everyone (no row = not schedulable — PLAN_SHIFTS.md
+   *  Part II decision D8) until the owner opts each person in via the
+   *  roster panel. Filtering the assignment picker on `active` therefore
+   *  gives "warn loudly, never block" (D7) for free: an empty roster shows
+   *  nobody to assign rather than erroring. */
   active: boolean
   /** True for a staff row the owner authorized by email but who has not yet
    *  signed in (`auth_user_id` still null — see migration 006). Schedulable
    *  now so a new hire's first week can be built before their first shift;
    *  surfaced so the UI can say why someone has no colour/initial yet. */
   pending?: boolean
+}
+
+/** One row of `schedule_members` — a venue's own per-person scheduling
+ *  configuration, on top of the `ScheduleStaff` projection above. Not every
+ *  `ScheduleStaff` has one: no row is exactly how "not schedulable" is
+ *  represented (D8). Kept as its own type, distinct from `ScheduleStaff`,
+ *  because the roster panel needs to read/write these fields directly rather
+ *  than through the flattened `active` boolean the rest of the UI uses. */
+export interface ScheduleMember {
+  staffId: string
+  schedulable: boolean
+  /** Key into settings.roles. Pre-selects the assignment picker; optional. */
+  defaultRoleId: string | null
+  /** Null = use settings.safety.maxWeeklyHours. */
+  maxWeeklyHours: number | null
+  employmentType: string
+  /** Manual ordering in the roster panel and the assignment picker. */
+  sortOrder: number | null
+  note: string
 }
 
 // ── The schedule itself ────────────────────────────────────────────────
@@ -168,6 +206,12 @@ export interface ScheduleWeek {
   publishedBy: string | null
   /** Free-text notes pinned to a whole day, keyed by date. */
   dayNotes: Record<ISODate, string>
+  /** Warning ids (see `Warning.id` in rules.ts) the manager has acknowledged
+   *  for this draft. Shared between co-managers on purpose — a dismissal is a
+   *  fact about the week, not about one browser (D11). Evaporates on its own
+   *  once the underlying problem changes shape, since the id is derived from
+   *  the warning's own content. */
+  dismissedWarnings: string[]
 }
 
 export interface Shift {
@@ -253,6 +297,8 @@ export type AuditAction =
   | 'week.create'
   | 'week.publish'
   | 'week.unpublish'
+  | 'member.update'
+  | 'warning.dismiss'
   | 'shift.create'
   | 'shift.update'
   | 'shift.delete'

@@ -5,6 +5,7 @@ import { BADGE_OPTIONS, badgeMeta } from '@/lib/staff/badges'
 import { accessLabel } from '@/lib/staff/access'
 import RolePicker from '@/components/RolePicker'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
+import Switch from '@/components/Switch'
 
 interface Member {
   id: string
@@ -54,6 +55,8 @@ const T = {
   addedPending: 'נוסף/ה. ההרשאה תופעל בכניסה הראשונה עם Google מהאימייל הזה.',
   addedActive: 'נוסף/ה לצוות. הגישה פעילה מיד.',
   updated: 'האימייל כבר היה ברשימה — התפקיד עודכן.',
+  schedulable: 'זמין/ה לסידור עבודה',
+  schedulableHint: 'מופיע/ה כמי שאפשר לשבץ במסך סידור העבודה (owner/schedule).',
 }
 
 type Notice = { kind: 'ok' | 'err'; text: string } | null
@@ -71,6 +74,15 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
   const [busyId, setBusyId] = useState<string | null>(null)
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
 
+  // staff.id -> schedulable. A separate fetch because this is the shift
+  // scheduler's own state (schedule_members, not a public.staff column —
+  // see PLAN_SHIFTS.md Part II decision D8), read through its own read-only
+  // route rather than coupling /api/owner/staff to a different module's
+  // tables. Missing from the map (not yet fetched, or the scheduler venue
+  // isn't set up) reads as false — the same "no row = not schedulable"
+  // default the scheduler itself uses.
+  const [schedulable, setSchedulable] = useState<Record<string, boolean>>({})
+
   const load = useCallback(async () => {
     setLoadError(null)
     try {
@@ -84,7 +96,36 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const loadSchedulable = useCallback(async () => {
+    try {
+      const res = await fetch('/api/shifts/roster', { cache: 'no-store' })
+      if (!res.ok) return
+      const json = await res.json() as { staff?: { id: string; active: boolean }[] }
+      const map: Record<string, boolean> = {}
+      for (const s of json.staff ?? []) map[s.id] = s.active
+      setSchedulable(map)
+    } catch {
+      // Scheduler not reachable (module not installed elsewhere, or offline)
+      // — every switch just reads off, which is the correct default anyway.
+    }
+  }, [])
+
+  useEffect(() => { load(); loadSchedulable() }, [load, loadSchedulable])
+
+  async function toggleSchedulable(id: string, next: boolean) {
+    setSchedulable((cur) => ({ ...cur, [id]: next }))
+    try {
+      const res = await fetch('/api/shifts/member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: id, schedulable: next }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setSchedulable((cur) => ({ ...cur, [id]: !next }))
+      setNotice({ kind: 'err', text: 'עדכון הזמינות לסידור נכשל' })
+    }
+  }
 
   async function addMember(e: React.FormEvent) {
     e.preventDefault()
@@ -238,9 +279,11 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                 delay={Math.min(i, 8) * 40}
                 isSelf={!!m.auth_user_id && m.auth_user_id === currentUserId}
                 busy={busyId === m.id}
+                schedulable={schedulable[m.id] ?? false}
                 onBadge={(badge) => patchMember(m.id, { badge })}
                 onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
                 onDisplayName={(displayName) => patchMember(m.id, { displayName })}
+                onToggleSchedulable={() => toggleSchedulable(m.id, !(schedulable[m.id] ?? false))}
                 onRemove={() => askRemove(m)}
               />
             ))}
@@ -254,12 +297,13 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 }
 
 function MemberRow({
-  m, delay, isSelf, busy, onBadge, onToggleOwner, onDisplayName, onRemove,
+  m, delay, isSelf, busy, schedulable, onBadge, onToggleOwner, onDisplayName, onToggleSchedulable, onRemove,
 }: {
-  m: Member; delay: number; isSelf: boolean; busy: boolean
+  m: Member; delay: number; isSelf: boolean; busy: boolean; schedulable: boolean
   onBadge: (badge: string) => void
   onToggleOwner: () => void
   onDisplayName: (name: string | null) => void
+  onToggleSchedulable: () => void
   onRemove: () => void
 }) {
   const meta = badgeMeta(m.badge, m.role)
@@ -356,6 +400,30 @@ function MemberRow({
           </p>
         </div>
       )}
+
+      {/* Schedulable — the shift scheduler's own state, not a public.staff
+          column (PLAN_SHIFTS.md Part II decision D8). Available even for a
+          pending invite: the point is rostering someone before their first
+          shift, same reasoning as the scheduler's own roster panel. */}
+      <button
+        type="button" role="switch" aria-checked={schedulable} disabled={busy} className="press"
+        onClick={onToggleSchedulable}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+          padding: '9px 2px', border: 'none', borderTop: '1px solid var(--line)',
+          background: 'none', borderRadius: 0, font: 'inherit', cursor: 'pointer', textAlign: 'start',
+        }}
+      >
+        <span style={{ flex: 1 }}>
+          <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)' }}>
+            {T.schedulable}
+          </span>
+          <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: 2 }}>
+            {T.schedulableHint}
+          </span>
+        </span>
+        <Switch on={schedulable} />
+      </button>
 
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

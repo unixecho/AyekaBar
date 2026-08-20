@@ -91,6 +91,7 @@ export function seed(
     id: `week-${weekStart}`, venueId: AYEKA_VENUE.id, weekStart,
     status: 'draft', version: 0, publishedAt: null, publishedBy: null,
     dayNotes: weekStart === thisWeek ? { [addDays(thisWeek, 5)]: 'אספקת בירה ב-19:00 — מישהו צריך לקבל את המשלוח.' } : {},
+    dismissedWarnings: [],
   }))
 
   const shifts: Shift[] = []
@@ -202,7 +203,9 @@ export class MockShiftsSource implements ShiftsDataSource {
 
   constructor(private actor: { id: string | null; name: string | null }) {}
 
-  async load(): Promise<ShiftsDB> {
+  // Ignores the requested week — everything is in memory already, unlike the
+  // live source it shares an interface with (see adapter.ts's ShiftsDataSource).
+  async load(_weekStart?: ISODate): Promise<ShiftsDB> {
     const real = await fetchRealStaff()
     const restored = this.db ?? restore()
 
@@ -227,6 +230,13 @@ export class MockShiftsSource implements ShiftsDataSource {
     this.db = db
     persist(db)
     return db
+  }
+
+  /** load() already re-fetches the real roster live on every call (see its
+   *  own comment) — a poll gets exactly the same freshness a real reload
+   *  would, without touching the seeded shifts/assignments. */
+  async refresh(): Promise<ShiftsDB> {
+    return this.load()
   }
 
   /** Prototype-only escape hatch, wired to the "reset demo data" button. */

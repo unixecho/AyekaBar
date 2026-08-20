@@ -36,6 +36,7 @@ export type WarningCode =
   | 'non_working_day'
   | 'outside_hours'
   | 'inactive_staff'
+  | 'unknown_role'
 
 export interface Warning {
   /** Stable across recomputes so React keys and "dismissed" state survive. */
@@ -126,6 +127,27 @@ export function evaluate(snapshot: ScheduleSnapshot): Warning[] {
           },
         })
       }
+    }
+
+    // An assignment or a shift's own requirements can reference a role the
+    // venue no longer defines — the catalog editor deletes a role without
+    // touching anything that referenced it (decision D12: deleting a
+    // catalog entry never breaks a week). This is the warning that makes
+    // that safe to do: the reference is not silently ignored, and the UI
+    // renders it as a neutral "removed role" chip rather than crashing.
+    const unknownRoleIds = new Set<string>()
+    for (const a of mine) if (!roleById.has(a.roleId)) unknownRoleIds.add(a.roleId)
+    for (const req of shift.requirements) if (!roleById.has(req.roleId)) unknownRoleIds.add(req.roleId)
+    for (const roleId of Array.from(unknownRoleIds)) {
+      out.push({
+        id: `unknown-role:${shift.id}:${roleId}`,
+        code: 'unknown_role', severity: 'warn', shiftIds: [shift.id], date: shift.date,
+        message: {
+          he: `משמרת ${when} מתייחסת לתפקיד שהוסר מהרשימה`,
+          en: `The ${when} shift references a role that no longer exists`,
+          ar: `تشير وردية ${when} إلى دور لم يعد موجودًا`,
+        },
+      })
     }
 
     if (hours > safety.maxDailyHours * 60) {
@@ -336,7 +358,22 @@ export function evaluate(snapshot: ScheduleSnapshot): Warning[] {
     }
   }
 
-  return out.sort((a, b) =>
+  // Per-venue severity overrides (decision D11) — applied last, once, over
+  // every warning this evaluation produced, rather than threaded through
+  // each individual check above. A venue that has decided `outside_hours`
+  // doesn't matter to them sets `{ outside_hours: 'off' }` once, in
+  // settings, and never sees it again; `'error'`/`'warn'`/`'info'` re-tier a
+  // code without silencing it. This is the durable half of "warnings are
+  // fine but we can't spam the manager" — grouping and dismissal (see
+  // WarningsPanel) are the other two, UI-side.
+  const overridden: Warning[] = []
+  for (const w of out) {
+    const override = settings.ruleSeverity?.[w.code]
+    if (override === 'off') continue
+    overridden.push(override ? { ...w, severity: override } : w)
+  }
+
+  return overridden.sort((a, b) =>
     SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
     || (a.date ?? '').localeCompare(b.date ?? '')
     || a.id.localeCompare(b.id))

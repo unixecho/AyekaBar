@@ -7,6 +7,7 @@
 // still renders something readable.
 
 import type { AuditAction, Lang, Tri } from './types'
+import type { WarningCode } from './rules'
 
 export const S = {
   // ── shell ──
@@ -83,6 +84,15 @@ export const S = {
   publishAnyway:    { he: 'פרסום בכל זאת',      en: 'Publish anyway',      ar: 'انشر رغم ذلك' },
   publishWithErrors:{ he: 'לפרסם עם שגיאות?',   en: 'Publish with errors?', ar: 'النشر مع وجود أخطاء؟' },
   publishErrorsBody:{ he: 'יש שגיאות פתוחות בסידור. אפשר לפרסם — רק תדע/י מה יוצא לצוות.', en: 'This week still has errors. You can publish — just know what the team is getting.', ar: 'ما زالت هناك أخطاء. يمكنك النشر — لكن اعرف ما سيصل للطاقم.' },
+  andNMoreErrors:   { he: 'ועוד {n} שגיאות',     en: 'and {n} more',        ar: 'و{n} أخرى' },
+  showInfoNotices:  { he: 'הצגת הערות מידע',     en: 'Show info notices',   ar: 'إظهار ملاحظات إعلامية' },
+  showDismissed:    { he: 'הצגת {n} התראות מוסתרות', en: 'Show {n} dismissed', ar: 'إظهار {n} مخفية' },
+  hideDismissed:    { he: 'הסתרת התראות מוסתרות', en: 'Hide dismissed',     ar: 'إخفاء المخفية' },
+  dismissedSectionTitle: { he: 'התראות מוסתרות', en: 'Dismissed',          ar: 'مخفية' },
+  dismiss:          { he: 'הסתרה',               en: 'Dismiss',             ar: 'إخفاء' },
+  restore:          { he: 'שחזור',               en: 'Restore',             ar: 'استعادة' },
+  warningSensitivity:     { he: 'רגישות התראות', en: 'Warning sensitivity', ar: 'حساسية التنبيهات' },
+  warningSensitivityHint: { he: 'סוגי התראה שכבויים כאן לא יוצגו יותר, בשום שבוע — לצמיתות, עד שיופעלו מחדש.', en: 'A warning type turned off here stops appearing entirely, in every week — permanently, until switched back on.', ar: 'نوع التنبيه المُطفأ هنا لن يظهر بعد الآن، في أي أسبوع — بشكل دائم حتى إعادة تفعيله.' },
 
   // ── settings / onboarding ──
   setupTitle:       { he: 'הקמת הסידור',        en: 'Schedule setup',      ar: 'إعداد الجدول' },
@@ -101,6 +111,32 @@ export const S = {
   stepRolesHint:    { he: 'התפקידים שמשובצים במשמרת, ומה התקן שלהם.', en: 'The roles you staff a shift with, and how many of each.', ar: 'الأدوار في الوردية وعدد كل منها.' },
   stepStations:     { he: 'עמדות',              en: 'Stations',            ar: 'المحطات' },
   stepStationsHint: { he: 'איפה עומדים — בר ראשי, פטיו, סגירה.', en: 'Where people stand — main bar, patio, closing prep.', ar: 'أين يقف الطاقم — البار، الفناء، الإغلاق.' },
+
+  // ── catalog editors (shift types / roles / stations) ──
+  quickStartRoles:  { he: 'התחלה מהירה — תפקידים נפוצים בלחיצה אחת. את/ה יכול/ה להוסיף, לשנות שם ולמחוק כל תפקיד למטה.', en: 'Quick start — common roles, one tap each. Add, rename, or delete any role below.', ar: 'بداية سريعة — أدوار شائعة بنقرة واحدة. أضف أو أعد التسمية أو احذف أي دور أدناه.' },
+  newPreset:        { he: 'משמרת חדשה',         en: 'New shift type',      ar: 'نوع وردية جديد' },
+  newRole:          { he: 'תפקיד חדש',          en: 'New role',            ar: 'دور جديد' },
+  newStation:       { he: 'עמדה חדשה',          en: 'New station',         ar: 'محطة جديدة' },
+  addPreset:        { he: 'הוספת סוג משמרת',    en: 'Add a shift type',    ar: 'إضافة نوع وردية' },
+  addRole:          { he: 'הוספת תפקיד',        en: 'Add a role',          ar: 'إضافة دور' },
+  addStation:       { he: 'הוספת עמדה',         en: 'Add a station',       ar: 'إضافة محطة' },
+  color:            { he: 'צבע',                en: 'Colour',              ar: 'اللون' },
+  defaultStation:   { he: 'עמדת ברירת מחדל',    en: 'Default station',     ar: 'المحطة الافتراضية' },
+  staffingNeeded:   { he: 'תקן איוש',           en: 'Staffing needed',     ar: 'التوظيف المطلوب' },
+  noRolesYet:       { he: 'אין עדיין תפקידים מוגדרים — הוסיפו למטה תחת "תפקידים".', en: 'No roles defined yet — add some under "Roles" below.', ar: 'لا توجد أدوار بعد — أضف تحت "الأدوار" أدناه.' },
+  linkedBadge:      { he: 'תפקיד מקושר בצוות',  en: 'Linked staff title',  ar: 'اللقب المرتبط بالطاقم' },
+  noBadgeLink:      { he: 'ללא קישור',          en: 'No link',             ar: 'بدون ربط' },
+  restrictToRoles:  { he: 'הגבלה לתפקידים',     en: 'Restrict to roles',   ar: 'تقييد بالأدوار' },
+  noRoleRestriction:{ he: 'פתוח לכל התפקידים',  en: 'Open to every role',  ar: 'مفتوح لكل الأدوار' },
+  deletePresetImpact:{ he: '{n} משמרות בשבועות המוצגים כרגע נוצרו מהתבנית הזו — הן יישארו, רק בלי הקישור לתבנית.', en: '{n} shifts in the weeks currently shown were created from this type — they will stay, just without the link back to it.', ar: '{n} وردية في الأسابيع المعروضة أُنشئت من هذا النوع — ستبقى، فقط دون الربط بالنوع.' },
+  deleteRoleImpact: { he: '{n} שיבוצים/תקנים בשבועות המוצגים כרגע מתייחסים לתפקיד הזה — הם יסומנו כתפקיד שהוסר.', en: '{n} assignments/requirements in the weeks currently shown reference this role — they will show as a removed role.', ar: '{n} إسناد/متطلب في الأسابيع المعروضة يشير لهذا الدور — سيظهر كدور محذوف.' },
+  deleteStationImpact:{ he: '{n} משמרות בשבועות המוצגים כרגע מוגדרות עם העמדה הזו — הן יישארו, רק בלי עמדה.', en: '{n} shifts in the weeks currently shown are set to this station — they will stay, just without a station.', ar: '{n} وردية في الأسابيع المعروضة محددة بهذه المحطة — ستبقى، فقط دون محطة.' },
+  deleteNoImpact:   { he: 'שום דבר בשבועות המוצגים כרגע לא מתייחס לזה.', en: 'Nothing in the weeks currently shown references this.', ar: 'لا شيء في الأسابيع المعروضة يشير لهذا.' },
+  removedRole:      { he: 'תפקיד שהוסר',        en: 'Removed role',        ar: 'دور محذوف' },
+  langHebrew:       { he: 'עברית',              en: 'Hebrew',              ar: 'العبرية' },
+  langEnglish:      { he: 'אנגלית',             en: 'English',             ar: 'الإنجليزية' },
+  langArabic:       { he: 'ערבית',              en: 'Arabic',              ar: 'العربية' },
+  willShowAs:       { he: 'יוצג בתור:',          en: 'Will show as:',       ar: 'سيظهر باسم:' },
   stepSafety:       { he: 'כללי בטיחות',        en: 'Safety rules',        ar: 'قواعد السلامة' },
   stepSafetyHint:   { he: 'הגבולות שהמערכת תתריע עליהם. היא מתריעה, לא חוסמת.', en: 'The limits the system flags. It warns, it never blocks.', ar: 'الحدود التي ينبّه عليها النظام. ينبّه ولا يمنع.' },
   stepFeatures:     { he: 'יכולות נוספות',      en: 'Optional features',   ar: 'ميزات إضافية' },
@@ -124,6 +160,11 @@ export const S = {
   delegationHint:          { he: 'הסידור באחריות המנהל/ת הכללי/ת. אפשר להעביר את ההרשאה גם לאחראי/ת משמרת מסוים/ת.', en: 'Scheduling belongs to the general manager. You can hand it to a specific shift manager as well.', ar: 'الجدولة مسؤولية المدير العام. يمكن منحها لمسؤول وردية بعينه.' },
   delegated:               { he: 'רשאי/ת לנהל',  en: 'Can manage',               ar: 'يمكنه الإدارة' },
   byRole:                  { he: 'לפי תפקיד',    en: 'By role',                  ar: 'حسب الدور' },
+  rosterTitle:             { he: 'צוות וסידור', en: 'Team & scheduling',        ar: 'الطاقم والجدولة' },
+  rosterHint:              { he: 'כל מי שברשימת הצוות. סמנו מי זמין/ה לשיבוץ בסידור, ולמי יש הרשאה לבנות ולפרסם אותו.', en: 'Everyone on the staff list. Mark who can be scheduled, and who may build and publish the schedule.', ar: 'كل من في قائمة الطاقم. حدّد من يمكن جدولته، ومن يملك صلاحية بناء الجدول ونشره.' },
+  schedulableLabel:        { he: 'בסידור',       en: 'Schedulable',              ar: 'قابل للجدولة' },
+  pendingBadge:            { he: 'ממתין/ה לכניסה ראשונה', en: 'Awaiting first sign-in', ar: 'بانتظار أول تسجيل دخول' },
+  noOneSchedulableYet:     { he: 'אף אחד עדיין לא מסומן/ת כזמין/ה לסידור — הסידור לא יוכל להיבנות עד שיסומנו אנשי צוות כאן.', en: 'Nobody is marked schedulable yet — the schedule can\'t be built until people are opted in here.', ar: 'لا أحد محدَّد كقابل للجدولة بعد — لا يمكن بناء الجدول حتى يتم تفعيل أفراد الطاقم هنا.' },
 
   // ── staff view ──
   notPublished:     { he: 'הסידור לשבוע הזה עוד לא פורסם.', en: 'This week has not been published yet.', ar: 'لم يُنشر جدول هذا الأسبوع بعد.' },
@@ -191,6 +232,8 @@ export const AUDIT_LABELS: Record<AuditAction, Tri> = {
   'week.create':          { he: 'פתיחת שבוע',          en: 'Week created',         ar: 'إنشاء أسبوع' },
   'week.publish':         { he: 'פרסום סידור',         en: 'Schedule published',   ar: 'نشر الجدول' },
   'week.unpublish':       { he: 'החזרה לטיוטה',        en: 'Returned to draft',    ar: 'إرجاع لمسودة' },
+  'member.update':        { he: 'עדכון סידור צוות',    en: 'Roster updated',       ar: 'تحديث الجدولة' },
+  'warning.dismiss':      { he: 'הסתרת התראה',        en: 'Warning dismissed',    ar: 'إخفاء تنبيه' },
   'shift.create':         { he: 'יצירת משמרת',         en: 'Shift created',        ar: 'إنشاء وردية' },
   'shift.update':         { he: 'עדכון משמרת',         en: 'Shift updated',        ar: 'تحديث وردية' },
   'shift.delete':         { he: 'מחיקת משמרת',         en: 'Shift deleted',        ar: 'حذف وردية' },
@@ -203,4 +246,27 @@ export const AUDIT_LABELS: Record<AuditAction, Tri> = {
   'swap.approve':         { he: 'אישור החלפה',         en: 'Swap approved',        ar: 'اعتماد التبديل' },
   'swap.reject':          { he: 'דחיית החלפה',         en: 'Swap rejected',        ar: 'رفض التبديل' },
   'swap.cancel':          { he: 'ביטול בקשה',          en: 'Request cancelled',    ar: 'إلغاء الطلب' },
+}
+
+/** Generic per-code labels — for the warnings panel's group headers and the
+ *  severity settings panel. Distinct from a `Warning.message`, which is
+ *  generated per-instance with real context ("2 × Bartender missing on the
+ *  18:00 shift"); this is just "what kind of thing is this", the same job
+ *  AUDIT_LABELS does for the audit log. */
+export const WARNING_LABELS: Record<WarningCode, Tri> = {
+  overlap:               { he: 'חפיפת משמרות',           en: 'Overlapping shifts',        ar: 'تداخل الورديات' },
+  duplicate:             { he: 'שיבוץ כפול',             en: 'Duplicate assignment',       ar: 'إسناد مكرر' },
+  min_rest:              { he: 'מנוחה לא מספקת',         en: 'Insufficient rest',          ar: 'راحة غير كافية' },
+  max_weekly_hours:      { he: 'חריגה משעות שבועיות',    en: 'Over weekly hours',          ar: 'تجاوز الساعات الأسبوعية' },
+  max_daily_hours:       { he: 'משמרת ארוכה מדי',        en: 'Shift too long',             ar: 'وردية طويلة جدًا' },
+  max_consecutive_days:  { he: 'ימים רצופים רבים מדי',   en: 'Too many consecutive days',  ar: 'أيام متتالية كثيرة جدًا' },
+  missing_role:          { he: 'חסר בתקן',               en: 'Understaffed role',          ar: 'نقص في الدور' },
+  over_role_max:         { he: 'חריגה מהתקן',            en: 'Over the role cap',          ar: 'تجاوز حد الدور' },
+  unassigned_shift:      { he: 'משמרת ללא איוש',         en: 'Unstaffed shift',            ar: 'وردية بدون طاقم' },
+  unavailable:           { he: 'התנגשות עם אי-זמינות',   en: 'Conflicts with unavailability', ar: 'تعارض مع عدم التوفر' },
+  partial_conflict:      { he: 'התנגשות חלקית עם זמינות', en: 'Partial availability conflict', ar: 'تعارض جزئي مع التوفر' },
+  non_working_day:       { he: 'יום סגור',               en: 'Non-working day',            ar: 'يوم إغلاق' },
+  outside_hours:         { he: 'מחוץ לשעות הפעילות',     en: 'Outside operating hours',    ar: 'خارج ساعات العمل' },
+  inactive_staff:        { he: 'עובד/ת לא פעיל/ה בסידור', en: 'Not schedulable',           ar: 'غير قابل للجدولة' },
+  unknown_role:          { he: 'תפקיד שהוסר',            en: 'Removed role',               ar: 'دور محذوف' },
 }

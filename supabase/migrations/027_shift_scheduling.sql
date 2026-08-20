@@ -1,10 +1,13 @@
 -- ============================================================
 -- Ayeka Bar — Shift scheduling.
 --
--- ⚠️ NOT APPLIED. This file is the data-model proposal that accompanies the
--- prototype at /owner/schedule. The prototype runs entirely on browser
--- storage; nothing here has touched any database, local or production.
--- Applying it is a separate, explicit decision — see PLAN_SHIFTS.md §Rollout.
+-- ⚠️ NOT YET APPLIED ANYWHERE. Revised 2026-08-20 (see PLAN_SHIFTS.md Part II)
+-- to add schedule_members, schedule_roster, and two settings columns, BEFORE
+-- this file was ever applied to any database — so it is edited in place
+-- rather than patched by a later migration, and the history below describes
+-- one coherent module rather than an unapplied draft plus a patch on top of
+-- it. Applying it — to the LOCAL stack first, then production on its own
+-- explicit approval — is still a separate decision. See PLAN_SHIFTS.md §18.
 --
 -- Numbered 027: this was drafted as 026, and a concurrent session landed
 -- 026_waiter_floor_landmarks.sql first. Nothing here depends on that file.
@@ -16,7 +19,7 @@
 -- modified — the roster stays exactly where it is, which is the contract
 -- STAFF_APP.md sets for anything that touches it.
 --
--- THREE DESIGN DECISIONS WORTH THE READING TIME
+-- FOUR DESIGN DECISIONS WORTH THE READING TIME
 --
 -- 1. EVERY ROW CARRIES venue_id, and one venue is seeded. Ayeka Bar is a
 --    single bar and does not need multi-tenancy today; the column costs one
@@ -37,6 +40,15 @@
 --    a view — never the live rows. It is the same guarantee `menus.published`
 --    + `public_menus` already give the menu: "invisible until published" is a
 --    property of the data model, not a rule the UI has to remember.
+--
+-- 4. WHO IS SCHEDULABLE IS A SEPARATE TABLE, NOT A public.staff COLUMN.
+--    `schedule_members` (added 2026-08-20) holds one row per person the
+--    scheduler actually rosters. No row means "not schedulable" — the module
+--    launches with zero rows and therefore zero schedulable people, on
+--    purpose, until the owner opts each person in. Same reasoning as
+--    `shift_settings.schedule_managers`: public.staff is shared with another
+--    application and every auth guard, so scheduling-specific state lives in
+--    this module's own tables, never as a widening of that one.
 --
 -- Mirrors src/lib/shifts/access.ts. `is_schedule_manager()` and
 -- `canManageSchedule()` must change together — `is_op()` drifting from
@@ -103,6 +115,13 @@ create table if not exists public.shift_settings (
   -- scheduling. This keeps the blast radius inside the module and makes the
   -- grant per-venue for free.
   schedule_managers uuid[] not null default '{}',
+  -- Per-venue override of the rules engine's severity for one warning code,
+  -- e.g. {"outside_hours":"off","max_consecutive_days":"warn"}. The owner's
+  -- constraint was "warnings are fine but we can't spam the manager" — this
+  -- is the durable half of that answer (the other two are UI: grouping and
+  -- per-warning dismissal, see dismissed_warnings below). Read by
+  -- evaluate() in src/lib/shifts/rules.ts as the last step, never hard-coded.
+  rule_severity     jsonb not null default '{}'::jsonb,
   onboarded_at      timestamptz,
   updated_at        timestamptz not null default now(),
   updated_by        uuid references auth.users(id) on delete set null
@@ -111,6 +130,53 @@ create table if not exists public.shift_settings (
 insert into public.shift_settings (venue_id)
 select id from public.venues where slug = 'ayeka-bar'
 on conflict (venue_id) do nothing;
+
+-- ── Schedule members ───────────────────────────────────────────────────
+-- Who the scheduler actually rosters, on top of who exists in public.staff.
+--
+-- NO ROW MEANS NOT SCHEDULABLE. That is what makes "starts at zero" true
+-- without a data migration or a backfill script: the table is empty at
+-- creation, so nobody is schedulable until the owner opts each person in —
+-- exactly the launch behaviour PLAN_SHIFTS.md Part II asks for. Toggling
+-- someone OFF later sets schedulable = false rather than deleting the row,
+-- so per-person configuration (their default role, their hours cap) survives
+-- a seasonal absence instead of being retyped when they come back.
+--
+-- Why a table and not a public.staff column: same reasoning as
+-- shift_settings.schedule_managers above — public.staff is shared with the
+-- waiter app and read by middleware with an explicit column list, so
+-- scheduling-specific state stays inside this module. Why a table and not a
+-- uuid[] (the way schedule_managers is): an array carries one bit per
+-- person; default_role_id and max_weekly_hours are the next two things any
+-- real venue asks for within a month of using this.
+create table if not exists public.schedule_members (
+  venue_id          uuid not null references public.venues(id) on delete cascade,
+  staff_id          uuid not null references public.staff(id)  on delete cascade,
+  schedulable       boolean not null default true,
+  -- Key into settings.roles. Pre-selects the assignment picker with the role
+  -- this person actually holds; optional, since a venue may roster someone
+  -- who floats between roles.
+  default_role_id   text,
+  -- Null = use shift_settings.safety.maxWeeklyHours. Set only when this one
+  -- person's contract differs from the venue default (a part-timer, a
+  -- student).
+  max_weekly_hours  integer check (max_weekly_hours is null or max_weekly_hours > 0),
+  employment_type   text not null default 'regular',
+  -- Manual ordering in the roster panel and the assignment picker — the
+  -- default (join order) is rarely the order a manager wants to scan.
+  sort_order        integer,
+  note              text not null default '',
+  added_at          timestamptz not null default now(),
+  added_by          uuid references auth.users(id) on delete set null,
+  primary key (venue_id, staff_id)
+);
+
+create index if not exists schedule_members_staff_idx
+  on public.schedule_members (staff_id);
+
+comment on table public.schedule_members is
+  'One row per person the scheduler rosters for a venue. No row = not '
+  'schedulable. See PLAN_SHIFTS.md Part II, decision D8.';
 
 -- ── Weeks ──────────────────────────────────────────────────────────────
 
@@ -127,6 +193,12 @@ create table if not exists public.schedule_weeks (
   day_notes          jsonb not null default '{}'::jsonb,   -- {"2026-08-21": "…"}
   -- The frozen copy the team reads. See design note 3 in the header.
   published_snapshot jsonb,
+  -- Warning ids (evaluate()'s stable Warning.id, see rules.ts) the manager has
+  -- acknowledged for this draft. Shared between co-managers on purpose — a
+  -- dismissal is a fact about the week, not about one browser. It evaporates
+  -- on its own the moment the underlying problem changes shape, because the
+  -- id is derived from the warning's own content.
+  dismissed_warnings jsonb not null default '[]'::jsonb,
   created_at         timestamptz not null default now(),
   unique (venue_id, week_start)
 );
@@ -322,6 +394,56 @@ $$;
 
 grant execute on function public.current_staff_id() to authenticated;
 
+-- The team's read of the roster: every public.staff row, left-joined to this
+-- venue's schedule_members so someone with no row still appears (as
+-- not-schedulable) rather than being invisible. Same construction as
+-- waiter_staff_directory (migration 025) and for the same reason: RLS on
+-- public.staff lets a signed-in user read only their OWN row, so nobody else
+-- can otherwise see the team at all — not to roster them, and not even to
+-- put a name and colour on a colleague in a swap request.
+--
+-- Gated by is_staff_client() — ANY signed-in staff member, not managers only
+-- — matching venues_read and shift_settings_read's existing precedent that
+-- "who's on the team and what roles exist" is ordinary staff-visible
+-- information, same class as the public /team page's badges. The genuinely
+-- privileged surface is the WRITE (schedule_members_manage, manager-only,
+-- below) and the columns here stop at name/colour/badge/schedulability —
+-- no email, no auth_user_id. Revised 2026-08-20 after building the API
+-- routes surfaced that a plain staff member legitimately needs this to
+-- render a colleague's name on a published shift or a swap offer.
+create or replace view public.schedule_roster
+with (security_invoker = false, security_barrier = true) as
+  select
+    v.id as venue_id,
+    s.id as staff_id,
+    coalesce(nullif(trim(s.display_name), ''),
+             nullif(trim(concat_ws(' ', s.first_name, s.last_name)), ''),
+             s.email) as name,
+    s.initial,
+    s.colour,
+    s.badge,
+    s.role,
+    (s.auth_user_id is null) as pending,
+    coalesce(sm.schedulable, false) as schedulable,
+    sm.default_role_id,
+    sm.max_weekly_hours,
+    sm.employment_type,
+    sm.sort_order,
+    sm.note
+  from public.venues v
+  cross join public.staff s
+  left join public.schedule_members sm
+    on sm.venue_id = v.id and sm.staff_id = s.id
+  where public.is_staff_client();
+
+grant select on public.schedule_roster to authenticated;
+
+comment on view public.schedule_roster is
+  'Every staff row for a venue, joined to that person''s schedule_members '
+  'row when one exists. Readable by any staff member (not schedulable by '
+  'default — no row = false); writable only by a schedule manager via '
+  'schedule_members_manage. See PLAN_SHIFTS.md Part II, decision D9.';
+
 -- ============================================================
 -- RLS
 -- ============================================================
@@ -334,6 +456,7 @@ alter table public.shift_assignments  enable row level security;
 alter table public.shift_availability enable row level security;
 alter table public.shift_swaps        enable row level security;
 alter table public.shift_audit        enable row level security;
+alter table public.schedule_members   enable row level security;
 
 -- Venues and settings: any signed-in staff member may READ (the staff view
 -- needs role names, station names and the feature flags to render at all).
@@ -351,6 +474,22 @@ create policy shift_settings_write on public.shift_settings
   for all to authenticated
   using (public.is_schedule_manager(venue_id))
   with check (public.is_schedule_manager(venue_id));
+
+-- schedule_members: only a schedule manager may write (roster it, toggle
+-- someone's schedulable flag). A plain staff member may read their OWN row —
+-- so the eventual "you're on the schedule" state is knowable client-side —
+-- but not anyone else's; the manager's full-roster read goes through
+-- schedule_roster above, which does not depend on this policy at all.
+drop policy if exists schedule_members_manage on public.schedule_members;
+create policy schedule_members_manage on public.schedule_members
+  for all to authenticated
+  using (public.is_schedule_manager(venue_id))
+  with check (public.is_schedule_manager(venue_id));
+
+drop policy if exists schedule_members_own_read on public.schedule_members;
+create policy schedule_members_own_read on public.schedule_members
+  for select to authenticated
+  using (staff_id = public.current_staff_id());
 
 -- The draft is manager-only, at the row level. This is the whole "invisible
 -- until published" guarantee: an ordinary staff member selecting from these
@@ -423,10 +562,12 @@ drop view if exists public.published_schedule;
 create view public.published_schedule
 with (security_invoker = false, security_barrier = true) as
   select
+    w.id,
     w.venue_id,
     w.week_start,
     w.version,
     w.published_at,
+    w.published_by,
     w.day_notes,
     w.published_snapshot
   from public.schedule_weeks w
@@ -671,6 +812,90 @@ $$;
 
 grant execute on function public.clear_schedule_week(uuid) to authenticated;
 
+-- Added 2026-08-20 (PLAN_SHIFTS.md Part II, phase 3 — the roster panel).
+-- Upsert one person's schedule_members row and log it, atomically. Plain
+-- table writes could not do the audit half at all: shift_audit has no INSERT
+-- policy for `authenticated`, only for the SECURITY DEFINER functions below,
+-- and log_shift_audit() itself is not (and should not be) directly
+-- RPC-callable — it does not check who is allowed to write for which venue,
+-- so exposing it directly would let anyone fabricate an audit line. This
+-- mirrors the same check + write + audit shape the five functions above
+-- already use, for the same reason: a manager toggling a person's
+-- schedulable flag is exactly the kind of mutation "every mutation appears
+-- in the log" (PLAN_SHIFTS.md Part I's acceptance criteria) means.
+--
+-- p_patch is a JSON object keyed by the TS field names (schedulable,
+-- defaultRoleId, maxWeeklyHours, employmentType, sortOrder, note) — an
+-- ABSENT key leaves that column unchanged, the same "only touch what's in
+-- the patch" contract settings.update already has in the reducer. Present-
+-- but-null clears a nullable column.
+create or replace function public.set_schedule_member(p_venue uuid, p_staff uuid, p_patch jsonb)
+returns public.schedule_members
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_row public.schedule_members;
+  v_before public.schedule_members;
+  v_name text;
+  v_was_schedulable boolean;
+begin
+  if not public.is_schedule_manager(p_venue) then
+    raise exception 'not a schedule manager' using errcode = 'insufficient_privilege';
+  end if;
+
+  select * into v_before from public.schedule_members
+   where venue_id = p_venue and staff_id = p_staff;
+  v_was_schedulable := coalesce(v_before.schedulable, false);
+
+  insert into public.schedule_members (
+    venue_id, staff_id, schedulable, default_role_id, max_weekly_hours,
+    employment_type, sort_order, note, added_by
+  )
+  values (
+    p_venue, p_staff,
+    coalesce((p_patch->>'schedulable')::boolean, true),
+    p_patch->>'defaultRoleId',
+    nullif(p_patch->>'maxWeeklyHours', '')::integer,
+    coalesce(p_patch->>'employmentType', 'regular'),
+    nullif(p_patch->>'sortOrder', '')::integer,
+    coalesce(p_patch->>'note', ''),
+    auth.uid()
+  )
+  on conflict (venue_id, staff_id) do update set
+    schedulable      = case when p_patch ? 'schedulable' then (p_patch->>'schedulable')::boolean else schedule_members.schedulable end,
+    default_role_id  = case when p_patch ? 'defaultRoleId' then nullif(p_patch->>'defaultRoleId', '') else schedule_members.default_role_id end,
+    max_weekly_hours = case when p_patch ? 'maxWeeklyHours' then nullif(p_patch->>'maxWeeklyHours', '')::integer else schedule_members.max_weekly_hours end,
+    employment_type  = case when p_patch ? 'employmentType' then coalesce(p_patch->>'employmentType', 'regular') else schedule_members.employment_type end,
+    sort_order       = case when p_patch ? 'sortOrder' then nullif(p_patch->>'sortOrder', '')::integer else schedule_members.sort_order end,
+    note             = case when p_patch ? 'note' then coalesce(p_patch->>'note', '') else schedule_members.note end
+  returning * into v_row;
+
+  select coalesce(nullif(trim(s.display_name), ''),
+                  nullif(trim(concat_ws(' ', s.first_name, s.last_name)), ''),
+                  s.email)
+    into v_name
+  from public.staff s where s.id = p_staff;
+
+  perform public.log_shift_audit(
+    p_venue, 'member.update',
+    case
+      when p_patch ? 'schedulable' and v_row.schedulable and not v_was_schedulable
+        then format('%s נוסף/ה לסידור', coalesce(v_name, '—'))
+      when p_patch ? 'schedulable' and not v_row.schedulable and v_was_schedulable
+        then format('%s הוסר/ה מהסידור', coalesce(v_name, '—'))
+      else format('עודכנו פרטי הסידור של %s', coalesce(v_name, '—'))
+    end,
+    jsonb_build_object('staffId', p_staff, 'before', to_jsonb(v_before), 'after', to_jsonb(v_row))
+  );
+
+  return v_row;
+end;
+$$;
+
+grant execute on function public.set_schedule_member(uuid, uuid, jsonb) to authenticated;
+
 create or replace function public.decide_shift_swap(
   p_swap uuid, p_approve boolean, p_note text default ''
 )
@@ -768,6 +993,13 @@ comment on view public.schedule_access_levels is
 --   -- must be false for a plain staff member, true for the GM
 --   select public.is_schedule_manager(
 --     (select id from public.venues where slug = 'ayeka-bar'));
+--
+--   -- must return AT MOST the caller's own row (0 rows if never rostered)
+--   select * from public.schedule_members;
+--
+--   -- must return the full staff list for ANY signed-in staff member
+--   -- (this view is deliberately not manager-gated — see its comment)
+--   select * from public.schedule_roster;
 --
 -- And re-run scripts/check-isolation.mjs afterwards: the staff app must still
 -- be unable to touch anything this migration created.

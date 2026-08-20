@@ -1,22 +1,21 @@
 import { NextResponse } from 'next/server'
 import { requireMenuEditor } from '@/lib/owner/guard'
 
-// The real roster, for the shift-scheduling prototype's assignment picker.
+// DEMO-ONLY as of PLAN_SHIFTS.md Part II (2026-08-20). This route served the
+// prototype's assignment picker before migration 027 existed; the live
+// source now reads the roster through `schedule_roster` — see
+// src/lib/shifts/state-query.ts and GET /api/shifts/roster — which carries
+// each person's real `schedulable` state, something this route never had.
+// Kept, unchanged, because `MockShiftsSource` (mock.ts) still calls it for
+// the `?demo=1` prototype path, so removing it would break the demo rather
+// than the live app. Do not point any new live surface at this route.
 //
-// `public.staff` RLS lets a signed-in user read only their OWN row (by
-// design — emails and roles are not a colleague's business), so the
-// schedule builder cannot read who else is on the team via the browser's
-// own session, the same problem migration 025's `waiter_staff_directory`
-// view solved for the floor map. This route is the API-route equivalent of
-// that view: a service-role read, gated, returning only display-safe fields.
-//
-// Gated with `requireMenuEditor` (OP or general manager) rather than a
-// dedicated schedule guard: `canManageSchedule()`'s extra per-person
-// delegation clause lives in `shift_settings.schedule_managers`, a table
-// that does not exist until migration 027 is applied (see
-// src/lib/shifts/guard.ts). Until then OP-or-GM *is* the complete rule, not
-// an approximation of it — this route stays correct as written and gets no
-// less permissive when 027 lands, only more so.
+// Original rationale, still accurate for the demo path: `public.staff` RLS
+// lets a signed-in user read only their OWN row, so the mock builder cannot
+// read who else is on the team via the browser's own session — the same
+// problem migration 025's `waiter_staff_directory` view solved for the floor
+// map. Gated with `requireMenuEditor` (OP or general manager) since that
+// predates `is_schedule_manager()` existing at all.
 export async function GET() {
   const auth = await requireMenuEditor()
   if (!auth.ok) return auth.res

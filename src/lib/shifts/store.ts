@@ -16,7 +16,7 @@
 import { addDays, weekDates, weekStartOf } from './time'
 import type {
   Assignment, AuditEntry, AvailabilitySubmission, ISODate, RoleRequirement,
-  ScheduleStaff, ScheduleWeek, Shift, ShiftSettings, SwapRequest, Venue,
+  ScheduleMember, ScheduleStaff, ScheduleWeek, Shift, ShiftSettings, SwapRequest, Venue,
 } from './types'
 
 /** A published week is a frozen COPY, not a filter over the live rows. Staff
@@ -59,6 +59,8 @@ export type ScheduleAction =
   | { type: 'week.unpublish'; weekStart: ISODate }
   | { type: 'week.copy'; from: ISODate; to: ISODate }
   | { type: 'week.clear'; weekStart: ISODate }
+  | { type: 'member.update'; staffId: string; patch: Partial<Omit<ScheduleMember, 'staffId'>> }
+  | { type: 'warning.dismiss'; weekStart: ISODate; warningId: string; dismissed: boolean }
   | { type: 'shift.create'; weekStart: ISODate; date: ISODate; presetId: string | null; start: string; end: string; stationId: string | null; requirements: RoleRequirement[] }
   | { type: 'shift.update'; shiftId: string; patch: Partial<Omit<Shift, 'id' | 'venueId' | 'weekId'>> }
   | { type: 'shift.delete'; shiftId: string }
@@ -109,6 +111,7 @@ export function reduce(db: ShiftsDB, action: ScheduleAction, ctx: ActionContext)
       const week: ScheduleWeek = {
         id: ctx.id(), venueId, weekStart: action.weekStart,
         status: 'draft', version: 0, publishedAt: null, publishedBy: null, dayNotes: {},
+        dismissedWarnings: [],
       }
       next = { ...db, weeks: [...db.weeks, week] }
       log('week.create', `נפתח שבוע ${action.weekStart}`, { weekStart: action.weekStart })
@@ -168,6 +171,7 @@ export function reduce(db: ShiftsDB, action: ScheduleAction, ctx: ActionContext)
       const week: ScheduleWeek = target ?? {
         id: ctx.id(), venueId, weekStart: action.to,
         status: 'draft', version: 0, publishedAt: null, publishedBy: null, dayNotes: {},
+        dismissedWarnings: [],
       }
       const offset = weekDates(action.to)
       const sourceDates = weekDates(action.from)
@@ -205,6 +209,47 @@ export function reduce(db: ShiftsDB, action: ScheduleAction, ctx: ActionContext)
       if (!removed) return { db, entry: null }
       next = clearWeek(db, action.weekStart)
       log('shift.delete', `נוקו ${removed} משמרות מהשבוע ${action.weekStart}`, { weekStart: action.weekStart, removed })
+      break
+    }
+
+    case 'member.update': {
+      // The mock's ScheduleStaff has no ScheduleMember fields of its own —
+      // only `active` overlaps `schedulable` (see the field comment on
+      // ScheduleStaff.active). Other patch keys (defaultRoleId,
+      // maxWeeklyHours, …) are accepted without effect here, same as the
+      // rest of this reducer treats fields the demo doesn't model; the live
+      // source (dispatch-write.ts) stores all of them for real.
+      const person = db.staff.find((s) => s.id === action.staffId)
+      if (!person || !('schedulable' in action.patch)) return { db, entry: null }
+      const nextActive = !!action.patch.schedulable
+      if (person.active === nextActive) return { db, entry: null }
+      next = { ...db, staff: db.staff.map((s) => (s.id === person.id ? { ...s, active: nextActive } : s)) }
+      log('member.update',
+        nextActive ? `${person.name} נוסף/ה לסידור` : `${person.name} הוסר/ה מהסידור`,
+        { staffId: person.id, before: { schedulable: person.active }, after: { schedulable: nextActive } })
+      break
+    }
+
+    case 'warning.dismiss': {
+      // Shared, not per-browser — dismissedWarnings lives on the week, and
+      // a warning's own id is derived from its content (see rules.ts), so
+      // a dismissal evaporates on its own the moment the underlying problem
+      // changes shape (decision D11). Note() is called even for this rather
+      // than special-casing "no audit" — the reducer's own control flow
+      // (see the `summary === null` early return at the bottom of this
+      // function) discards any state change that doesn't log one, so a
+      // silent version of this action would silently not persist either.
+      const week = findWeek(db, action.weekStart)
+      if (!week) return { db, entry: null }
+      const has = week.dismissedWarnings.includes(action.warningId)
+      if (has === action.dismissed) return { db, entry: null }
+      const dismissedWarnings = action.dismissed
+        ? [...week.dismissedWarnings, action.warningId]
+        : week.dismissedWarnings.filter((id) => id !== action.warningId)
+      next = { ...db, weeks: db.weeks.map((w) => (w.id === week.id ? { ...w, dismissedWarnings } : w)) }
+      log('warning.dismiss',
+        action.dismissed ? `התראה הוסתרה לשבוע ${action.weekStart}` : `התראה הוחזרה לשבוע ${action.weekStart}`,
+        { weekStart: action.weekStart, warningId: action.warningId, dismissed: action.dismissed })
       break
     }
 

@@ -290,6 +290,49 @@ export default function ShiftSheet({
               </div>
             )
           })}
+
+          {/* An assignment whose role was deleted from the catalog since it
+              was made (decision D12 — deleting a role never breaks a week,
+              it just orphans the reference). Without this block the
+              assignment above would be invisible here: it belongs to no
+              role in settings.roles, so the .map() above never renders it,
+              even though the person is still genuinely on the shift. */}
+          {(() => {
+            const orphaned = assignments.filter((a) => !settings.roles.some((r) => r.id === a.roleId))
+            if (!orphaned.length) return null
+            return (
+              <div style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+                <span className="sh-label" style={{ color: 'var(--text-faint)' }}>{t('removedRole')}</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {orphaned.map((a) => {
+                    const person = db.staff.find((s) => s.id === a.staffId)
+                    return (
+                      <button
+                        key={a.id} type="button" className="press"
+                        disabled={readOnly}
+                        onClick={() => setConfirm({
+                          title: `${t('remove')} ${person?.name ?? a.staffId ?? ''}`,
+                          body: t('removedRole'),
+                          confirmLabel: t('remove'),
+                          onConfirm: () => { void dispatch({ type: 'assignment.delete', assignmentId: a.id }) },
+                        })}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          padding: '5px 10px', borderRadius: 999, font: 'inherit',
+                          fontSize: '0.78rem', fontWeight: 600, cursor: readOnly ? 'default' : 'pointer',
+                          border: '1px dashed var(--line-strong)', background: 'var(--bg-elev-2)',
+                          color: 'var(--text-faint)',
+                        }}
+                      >
+                        {person?.name ?? '—'}
+                        {!readOnly && <span aria-hidden style={{ opacity: 0.6 }}>✕</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
         </Section>
 
         {/* ---- note ---- */}

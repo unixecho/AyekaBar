@@ -86,9 +86,27 @@ export default function ScheduleWorkspace() {
 
   function onPublishClick() {
     if (counts.errors > 0) {
+      // Errors individually, warnings/infos as a count — a confirmation
+      // that gets read rather than reflexively dismissed (decision D11).
+      // Dismissed warnings are NOT filtered out of this gate: dismissal
+      // mutes the list view (WarningsPanel), it does not change what is
+      // actually true about the week, and publishing is exactly the moment
+      // that should still know the whole truth.
+      const errors = warnings.filter((w) => w.severity === 'error')
+      const MAX_LISTED = 4
+      const listed = errors.slice(0, MAX_LISTED).map((e) => tri(e.message)).join(' · ')
+      const overflow = errors.length > MAX_LISTED
+        ? ` ${t('andNMoreErrors').replace('{n}', String(errors.length - MAX_LISTED))}`
+        : ''
+      const rest = [
+        counts.warns ? `${counts.warns} ${t('warnsLabel')}` : null,
+        counts.infos ? `${counts.infos} ${t('infosLabel')}` : null,
+      ].filter(Boolean).join(', ')
+      const body = listed + overflow + (rest ? ` — ${rest}` : '')
+
       setConfirm({
         title: t('publishWithErrors'),
-        body: t('publishErrorsBody'),
+        body,
         confirmLabel: t('publishAnyway'),
         onConfirm: () => { void publish() },
       })
@@ -255,7 +273,9 @@ export default function ScheduleWorkspace() {
           <WarningsPanel
             warnings={warnings}
             shifts={bundle?.shifts ?? []}
+            dismissedWarnings={bundle?.week.dismissedWarnings ?? []}
             onOpenShift={viewer.canManage ? (shift) => { setTab('week'); setSheet({ type: 'edit', shift }) } : undefined}
+            onDismiss={(warningId, dismissed) => { void dispatch({ type: 'warning.dismiss', weekStart, warningId, dismissed }) }}
           />
         )}
 

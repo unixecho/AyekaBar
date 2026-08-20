@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import ModalPortal from '@/components/ModalPortal'
 import Switch from '@/components/Switch'
 import TimeWheel from '@/components/TimeWheel'
+import { PresetCatalog, RoleCatalog, StationCatalog } from '@/components/shifts/CatalogEditor'
 import NumberSlider from '@/components/shifts/NumberSlider'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
 import { DEFAULT_ROLES, SAFETY_BOUNDS } from '@/lib/shifts/config'
@@ -27,7 +28,6 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
   const { db, t, tri, lang, dispatch } = useShifts()
   const [step, setStep] = useState<Step>('days')
   const [draft, setDraft] = useState<ShiftSettings>(() => structuredCloneish(db.settings))
-  const [newStation, setNewStation] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -125,62 +125,20 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
           )}
 
           {step === 'presets' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {draft.presets.map((preset) => (
-                <div key={preset.id} className="sh-panel" style={{ padding: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <span style={{
-                      width: 10, height: 10, borderRadius: 999, background: preset.color, flex: '0 0 auto',
-                    }} aria-hidden />
-                    <span className="sh-label" style={{ flex: 1 }}>{tri(preset.name)}</span>
-                    <button
-                      type="button" className="press"
-                      onClick={() => patch({ presets: draft.presets.filter((p) => p.id !== preset.id) })}
-                      style={{
-                        font: 'inherit', fontSize: '0.76rem', fontWeight: 600, color: '#ff6b6b',
-                        background: 'none', border: 'none', cursor: 'pointer',
-                      }}
-                    >
-                      {t('remove')}
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    <div style={{ flex: '1 1 120px' }}>
-                      <p className="sh-sub" style={{ margin: '0 0 4px' }}>{t('startTime')}</p>
-                      <TimeWheel
-                        value={preset.start}
-                        onChange={(v) => patch({
-                          presets: draft.presets.map((p) => (p.id === preset.id ? { ...p, start: v } : p)),
-                        })}
-                      />
-                    </div>
-                    <div style={{ flex: '1 1 120px' }}>
-                      <p className="sh-sub" style={{ margin: '0 0 4px' }}>{t('endTime')}</p>
-                      <TimeWheel
-                        value={preset.end}
-                        onChange={(v) => patch({
-                          presets: draft.presets.map((p) => (p.id === preset.id ? { ...p, end: v } : p)),
-                        })}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {!draft.presets.length && (
-                <p className="sh-sub" style={{ margin: 0 }}>
-                  {tri({ he: 'אפשר להמשיך בלי תבניות ולבנות כל משמרת ידנית.', en: 'You can continue without presets and build each shift by hand.', ar: 'يمكنك المتابعة بدون قوالب.' })}
-                </p>
-              )}
-            </div>
+            <PresetCatalog settings={draft} onChange={patch} />
           )}
 
           {step === 'team' && (
             <>
+              <p className="sh-sub" style={{ margin: '0 0 8px' }}>{t('quickStartRoles')}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
                 {/* The catalogue, not the draft — otherwise switching a role
                     off would remove it from the list and there would be no way
                     to switch it back on. Any role the venue invented later is
-                    unioned in so a re-run of setup cannot silently drop it. */}
+                    unioned in so a re-run of setup cannot silently drop it.
+                    A one-tap quick start ("start from these" — common job
+                    titles most bars share); the full editor right below it
+                    covers renaming, custom roles, and everything else. */}
                 {[...DEFAULT_ROLES, ...draft.roles.filter((r) => !DEFAULT_ROLES.some((d) => d.id === r.id))].map((role) => {
                   const on = draft.roles.some((r) => r.id === role.id)
                   return (
@@ -199,42 +157,11 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
                 })}
               </div>
 
-              <h3 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: 700 }}>{t('stepStations')}</h3>
+              <RoleCatalog settings={draft} onChange={patch} />
+
+              <h3 style={{ margin: '24px 0 8px', fontSize: '0.9rem', fontWeight: 700 }}>{t('stepStations')}</h3>
               <p className="sh-sub" style={{ margin: '0 0 10px' }}>{t('stepStationsHint')}</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                {draft.stations.map((s) => (
-                  <button
-                    key={s.id} type="button" className="press"
-                    onClick={() => patch({ stations: draft.stations.filter((x) => x.id !== s.id) })}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '7px 12px', borderRadius: 999, font: 'inherit',
-                      fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
-                      border: '1px solid rgba(56,225,255,0.35)', background: 'rgba(56,225,255,0.08)',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    {s.emoji} {tri(s.name)}
-                    <span aria-hidden style={{ opacity: 0.6 }}>✕</span>
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  value={newStation} onChange={(e) => setNewStation(e.target.value)}
-                  placeholder={tri({ he: 'עמדה חדשה', en: 'New station', ar: 'محطة جديدة' })}
-                  maxLength={24}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addStation() }}
-                  style={inputStyle}
-                />
-                <button type="button" className="press" onClick={addStation} style={{
-                  flex: '0 0 auto', padding: '0 18px', borderRadius: 12, border: '1px solid var(--line-strong)',
-                  background: 'var(--bg-elev)', color: 'var(--text)', font: 'inherit',
-                  fontSize: '0.86rem', fontWeight: 700, cursor: 'pointer',
-                }}>
-                  {t('add')}
-                </button>
-              </div>
+              <StationCatalog settings={draft} onChange={patch} />
             </>
           )}
 
@@ -322,19 +249,6 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
       </div>
     </ModalPortal>
   )
-
-  function addStation() {
-    const name = newStation.trim()
-    if (!name) return
-    patch({
-      stations: [...draft.stations, {
-        id: `station-${Date.now().toString(36)}`,
-        name: { he: name, en: name, ar: name },
-        emoji: '📍',
-      }],
-    })
-    setNewStation('')
-  }
 }
 
 function FeatureRow({ label, hint, on, onToggle }: {
@@ -366,9 +280,3 @@ const rowStyle = (on: boolean) => ({
   background: on ? 'rgba(255,94,58,0.07)' : 'var(--bg-elev)',
   color: 'var(--text)',
 })
-
-const inputStyle = {
-  flex: 1, minWidth: 0, padding: '12px 13px', borderRadius: 12,
-  border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
-  color: 'var(--text)', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none',
-} as const

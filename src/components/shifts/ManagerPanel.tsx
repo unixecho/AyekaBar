@@ -4,9 +4,12 @@ import { useState } from 'react'
 import Switch from '@/components/Switch'
 import TimeWheel from '@/components/TimeWheel'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
+import { PresetCatalog, RoleCatalog, StationCatalog } from '@/components/shifts/CatalogEditor'
 import NumberSlider from '@/components/shifts/NumberSlider'
+import RosterPanel from '@/components/shifts/RosterPanel'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
 import { SAFETY_BOUNDS } from '@/lib/shifts/config'
+import { WARNING_LABELS } from '@/lib/shifts/i18n'
 import { dayName } from '@/lib/shifts/time'
 import type { SafetyRules } from '@/lib/shifts/types'
 
@@ -19,7 +22,7 @@ import type { SafetyRules } from '@/lib/shifts/types'
 // meaningful, and each change is its own audit line.
 
 export default function ManagerPanel({ onRerunSetup }: { onRerunSetup: () => void }) {
-  const { db, t, tri, lang, dispatch, viewer, isMock, resetDemo } = useShifts()
+  const { db, t, tri, lang, dispatch, isMock, resetDemo } = useShifts()
   const { settings } = db
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
 
@@ -147,31 +150,22 @@ export default function ManagerPanel({ onRerunSetup }: { onRerunSetup: () => voi
         </div>
       </section>
 
-      {/* ---- presets ---- */}
+      {/* ---- shift types ---- */}
       <section className="sh-panel">
         <SectionHead title={t('stepPresets')} hint={t('stepPresetsHint')} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {settings.presets.map((p) => (
-            <div key={p.id} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-              borderRadius: 12, border: '1px solid var(--line)', background: 'var(--bg-elev-2)',
-            }}>
-              <span aria-hidden style={{ width: 10, height: 10, borderRadius: 999, background: p.color, flex: '0 0 auto' }} />
-              <span className="sh-label" style={{ flex: 1 }}>{tri(p.name)}</span>
-              <span className="sh-time" style={{ color: 'var(--text-dim)' }}>{p.start}–{p.end}</span>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-faint)' }}>
-                {p.requirements.reduce((n, r) => n + r.min, 0)} 👤
-              </span>
-            </div>
-          ))}
-          <p className="sh-sub" style={{ margin: 0 }}>
-            {tri({
-              he: 'לשינוי שעות התבנית — דרך ההקמה מחדש, למטה.',
-              en: 'To change preset times, re-run setup below.',
-              ar: 'لتغيير أوقات القوالب، أعد الإعداد أدناه.',
-            })}
-          </p>
-        </div>
+        <PresetCatalog settings={settings} onChange={(patch) => dispatch({ type: 'settings.update', patch })} />
+      </section>
+
+      {/* ---- roles ---- */}
+      <section className="sh-panel">
+        <SectionHead title={t('stepRoles')} hint={t('stepRolesHint')} />
+        <RoleCatalog settings={settings} onChange={(patch) => dispatch({ type: 'settings.update', patch })} />
+      </section>
+
+      {/* ---- stations ---- */}
+      <section className="sh-panel">
+        <SectionHead title={t('stepStations')} hint={t('stepStationsHint')} />
+        <StationCatalog settings={settings} onChange={(patch) => dispatch({ type: 'settings.update', patch })} />
       </section>
 
       {/* ---- safety ---- */}
@@ -197,6 +191,34 @@ export default function ManagerPanel({ onRerunSetup }: { onRerunSetup: () => voi
           {...SAFETY_BOUNDS.maxConsecutiveDays} unit={t('daysUnit')}
           onChange={(v) => setSafety({ maxConsecutiveDays: v })}
         />
+      </section>
+
+      {/* ---- warning sensitivity (decision D11) ---- */}
+      <section className="sh-panel">
+        <SectionHead title={t('warningSensitivity')} hint={t('warningSensitivityHint')} />
+        {Object.entries(WARNING_LABELS).map(([code, label]) => {
+          const silenced = settings.ruleSeverity?.[code] === 'off'
+          return (
+            <button
+              key={code} type="button" role="switch" aria-checked={!silenced} className="press"
+              onClick={() => dispatch({
+                type: 'settings.update',
+                patch: {
+                  ruleSeverity: { ...settings.ruleSeverity, [code]: silenced ? undefined : 'off' },
+                },
+              })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                padding: '9px 2px', borderBottom: '1px solid var(--line)',
+                background: 'none', border: 'none', font: 'inherit',
+                cursor: 'pointer', textAlign: 'start', color: 'var(--text)',
+              }}
+            >
+              <span style={{ flex: 1, fontSize: '0.85rem' }}>{tri(label)}</span>
+              <Switch on={!silenced} small />
+            </button>
+          )
+        })}
       </section>
 
       {/* ---- feature flags ---- */}
@@ -227,49 +249,8 @@ export default function ManagerPanel({ onRerunSetup }: { onRerunSetup: () => voi
         />
       </section>
 
-      {/* ---- delegation ---- */}
-      {viewer.canDelegate && (
-        <section className="sh-panel">
-          <SectionHead title={t('delegation')} hint={t('delegationHint')} />
-          {db.staff.filter((s) => s.active).map((person) => {
-            // OP and the general manager hold it by role; the switch is shown
-            // on but locked, so the list answers "who can do this?" completely
-            // rather than only listing the exceptions.
-            const byRole = person.badge === 'owner' || person.badge === 'general_manager' || person.role === 'owner'
-            const granted = settings.scheduleManagers.includes(person.id)
-            return (
-              <button
-                key={person.id} type="button" role="switch"
-                aria-checked={byRole || granted} disabled={byRole} className={byRole ? undefined : 'press'}
-                onClick={() => !byRole && dispatch({
-                  type: 'settings.update',
-                  patch: {
-                    scheduleManagers: granted
-                      ? settings.scheduleManagers.filter((id) => id !== person.id)
-                      : [...settings.scheduleManagers, person.id],
-                  },
-                })}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                  padding: '11px 2px', borderBottom: '1px solid var(--line)',
-                  background: 'none', border: 'none', borderRadius: 0,
-                  font: 'inherit', cursor: byRole ? 'default' : 'pointer', textAlign: 'start',
-                  color: 'var(--text)', opacity: byRole ? 0.75 : 1,
-                }}
-              >
-                <span className="sh-dot" style={{ background: person.colour ?? 'var(--line-strong)' }} aria-hidden>
-                  {person.initial ?? person.name[0]}
-                </span>
-                <span style={{ flex: 1 }}>
-                  <span style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600 }}>{person.name}</span>
-                  {byRole && <span className="sh-sub" style={{ display: 'block' }}>{t('byRole')}</span>}
-                </span>
-                <Switch on={byRole || granted} small />
-              </button>
-            )
-          })}
-        </section>
-      )}
+      {/* ---- roster: who's schedulable, and who runs the schedule ---- */}
+      <RosterPanel />
 
       {/* ---- maintenance ---- */}
       <section className="sh-panel" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
