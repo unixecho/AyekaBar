@@ -46,6 +46,12 @@ export const OP_ONLY_PREFIXES = [
   '/owner/customers',
   '/owner/rewards',
   '/owner/audit',
+  // Split out of the dashboard 2026-08-29. Each was OP-gated as a card ON
+  // that page, so each stays OP-gated as a page — moving a control to its own
+  // route must not be the thing that widens who can reach it.
+  '/owner/staff',
+  '/owner/loyalty',
+  '/owner/links',
 ]
 
 export const MENU_EDITOR_PREFIX = '/owner/editor'

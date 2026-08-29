@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { OVERALL_VIEW_URL } from '@/lib/settings/keys'
 
 // The dashboard's entry to the Overall view — the operational birds-eye deck
@@ -49,6 +49,22 @@ export default function OverallViewCard({ initialDemoMode }: { initialDemoMode: 
   const [demo, setDemo] = useState(initialDemoMode)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Re-seed when the server says something different.
+  //
+  // 2026-08-29: the dashboard's signal stack gained its own "turn demo off"
+  // button, which PATCHes and then calls router.refresh(). refresh() re-runs
+  // the server page and hands this component a new `initialDemoMode` — but it
+  // deliberately PRESERVES client state, so `demo` stayed true and this card
+  // went on insisting demo was live during service after it had been turned
+  // off. Worse, the switch then read inverted: tapping it to "turn demo on"
+  // computed `next = !demo` = false and re-sent OFF, so it took two taps to
+  // enable and the first one appeared to do the opposite of what it said.
+  //
+  // Only fires when the prop actually changes, so it never fights this card's
+  // own optimistic update — that path already reconciles against the server's
+  // response.
+  useEffect(() => { setDemo(initialDemoMode) }, [initialDemoMode])
 
   async function toggle() {
     const next = !demo

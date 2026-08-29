@@ -4,12 +4,36 @@ import Link from 'next/link'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { splitName } from '@/lib/staff/name'
 import OwnerHeader from '@/components/OwnerHeader'
-import StaffManager from '@/components/StaffManager'
-import LoyaltyToggle from '@/components/LoyaltyToggle'
-import PortalLinksEditor from '@/components/PortalLinksEditor'
 import OverallViewCard from '@/components/OverallViewCard'
+import SignalStack from '@/components/SignalStack'
+import StatStrip from '@/components/StatStrip'
 import SignOutButton from '@/components/SignOutButton'
-import { getLoyaltyEnabled, getLoyaltyVisible, getPortalLinks, getOverallDemoMode } from '@/lib/settings/server'
+import { getOverallDemoMode } from '@/lib/settings/server'
+import { readDashboardSignals } from '@/lib/owner/signals'
+
+// ── The dashboard, rebuilt 2026-08-29 ─────────────────────────────────
+// "the main dashboard will now become the beating heart for the business."
+//
+// What changed: this page used to BE the back office — the staff roster, the
+// portal link fields and the loyalty switches all lived here as cards, with
+// the roster growing longer with every hire. Configuration crowded out
+// situational awareness, so the screen the owner opens first was the screen
+// that told them least about right now.
+//
+// Those three moved to /owner/staff, /owner/links and /owner/loyalty. What
+// stayed is what only this page can do: say what needs attention, and hand
+// over to the place that fixes it. The order below is deliberate —
+//
+//   1. numbers   — the pulse, always four, never more
+//   2. signals   — only what is true; absent entirely on a quiet night
+//   3. תצוגת על  — the one card that watches the live shift
+//   4. tiles     — everything else, one tap away
+//
+// Nothing was deleted in the move. The only tile that left is צפייה בתפריט,
+// which already exists inside the editor (MenuEditor.tsx) — it was a second
+// door to a room the first door opens into.
+
+export const dynamic = 'force-dynamic'
 
 export default async function OwnerDashboardPage() {
   const supabase = createClient()
@@ -26,6 +50,10 @@ export default async function OwnerDashboardPage() {
 
   // Self-heal: a manually-seeded owner row has no name/email — backfill it from
   // the owner's own Google profile so the roster shows them properly.
+  //
+  // Deliberately left HERE and not moved to /owner/staff with the roster it
+  // fixes: this is the page the owner actually opens, and a repair that only
+  // runs on a page they may never visit is a repair that never runs.
   if (!me.email || !me.first_name) {
     const { first, last } = splitName(user)
     await createServiceClient()
@@ -34,10 +62,8 @@ export default async function OwnerDashboardPage() {
       .eq('auth_user_id', user.id)
   }
 
-  const [loyaltyEnabled, loyaltyVisible, portalLinks, overallDemoMode] = await Promise.all([
-    getLoyaltyEnabled(),
-    getLoyaltyVisible(),
-    getPortalLinks(),
+  const [{ stats, signals }, overallDemoMode] = await Promise.all([
+    readDashboardSignals(),
     getOverallDemoMode(),
   ])
 
@@ -50,62 +76,54 @@ export default async function OwnerDashboardPage() {
         </div>
       } />
 
-      {/* The operational birds-eye deck (ayeka-staff) + its demo switch.
-          First on the page on purpose: everything below it is back-office
-          configuration, while this is the only card here that looks at the
-          shift happening right now. */}
+      {/* 1. The pulse. */}
+      <StatStrip stats={stats} />
+
+      {/* 2. Only what is true right now. Renders nothing when nothing is. */}
+      <SignalStack signals={signals} />
+
+      {/* 3. The operational birds-eye deck (ayeka-staff) + its demo switch.
+             Sits directly under the signals because it is the only card here
+             that looks at the shift happening now — everything below it is
+             navigation. */}
       <div style={{ marginBottom: 16 }}>
         <OverallViewCard initialDemoMode={overallDemoMode} />
       </div>
 
-      {/* Loyalty club on/off */}
-      <div style={{ marginBottom: 16 }}>
-        <LoyaltyToggle initialEnabled={loyaltyEnabled} initialVisible={loyaltyVisible} />
-      </div>
-
-      {/* Portal button destinations */}
-      <div className="rise" style={{ marginBottom: 16, animationDelay: '100ms' }}>
-        <PortalLinksEditor initialLinks={portalLinks} />
-      </div>
-
-      {/* Quick links */}
-      <div className="rise" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20, animationDelay: '140ms' }}>
-        <Link href="/owner/customers" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }}>👥</span>
-          <span>לקוחות ונקודות</span>
-        </Link>
-        <Link href="/owner/rewards" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }}>🎁</span>
-          <span>קטלוג פרסים</span>
-        </Link>
+      {/* 4. Everything else. Eight tiles before this rebuild, eight after. */}
+      <div className="rise" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, animationDelay: '140ms' }}>
         <Link href="/owner/editor" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }}>📝</span>
-          <span>עריכת תפריט</span>
-        </Link>
-        <Link href="/menu" target="_blank" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }}>🍽️</span>
-          <span>צפייה בתפריט</span>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>🍽️</span>
+          <span>תפריט</span>
         </Link>
         <Link href="/owner/schedule" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }}>🗓️</span>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>🗓️</span>
           <span>סידור עבודה</span>
         </Link>
         <Link href="/owner/floor" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }}>🗺️</span>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>🗺️</span>
           <span>מפת השולחנות</span>
         </Link>
-        <Link href="/owner/audit" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }}>🧾</span>
-          <span>יומן שינויים</span>
+        <Link href="/owner/staff" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>👥</span>
+          <span>ניהול צוות</span>
+        </Link>
+        <Link href="/owner/loyalty" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>🎁</span>
+          <span>מועדון נאמנות</span>
+        </Link>
+        <Link href="/owner/links" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>🔗</span>
+          <span>קישורי פורטל</span>
         </Link>
         <Link href="/owner/reports" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }}>🧮</span>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>🧮</span>
           <span>קבלות ומשמרות</span>
         </Link>
-      </div>
-
-      <div className="rise" style={{ animationDelay: '210ms' }}>
-        <StaffManager currentUserId={user.id} />
+        <Link href="/owner/audit" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>🧾</span>
+          <span>יומן שינויים</span>
+        </Link>
       </div>
     </main>
   )

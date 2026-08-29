@@ -7,7 +7,7 @@
 
 export type BadgeKey =
   | 'owner' | 'general_manager' | 'manager'
-  | 'bartender' | 'waiter' | 'cook' | 'receptionist'
+  | 'bartender' | 'waiter' | 'cook' | 'busboy' | 'receptionist'
 
 export interface BadgeMeta {
   key: string
@@ -26,6 +26,7 @@ export const BADGES: Record<BadgeKey, BadgeMeta> = {
   bartender:       { key: 'bartender',       he: 'ברמן/ית',        en: 'Bartender',       ar: 'نادل/ة بار',      emoji: '🍸', color: '#c084fc' },
   waiter:          { key: 'waiter',          he: 'מלצר/ית',        en: 'Waiter',          ar: 'نادل/ة',          emoji: '🍽️', color: '#60a5fa' },
   cook:            { key: 'cook',            he: 'טבח/ית',         en: 'Cook',            ar: 'طاهٍ/طاهية',      emoji: '👨‍🍳', color: '#fbbf24' },
+  busboy:          { key: 'busboy',          he: 'עוזר/ת טבח',     en: 'Busboy',          ar: 'مساعد/ة طاهٍ',    emoji: '🔪', color: '#a3e635' },
   receptionist:    { key: 'receptionist',    he: 'מארח/ת',         en: 'Host',            ar: 'مضيف/ة',          emoji: '🛎️', color: '#2dd4bf' },
 }
 
@@ -35,8 +36,18 @@ export const BADGES: Record<BadgeKey, BadgeMeta> = {
  *  and is shown separately as "הרשאות". */
 export const BADGE_OPTIONS: BadgeMeta[] = [
   BADGES.owner, BADGES.general_manager, BADGES.manager, BADGES.bartender,
-  BADGES.waiter, BADGES.cook, BADGES.receptionist,
+  BADGES.waiter, BADGES.cook, BADGES.busboy, BADGES.receptionist,
 ]
+
+/** The job titles that make someone part of הנהלה rather than עובדים. Used by
+ *  the roster split on /owner/staff — a group that changes once a year sitting
+ *  above the group that changes every month.
+ *
+ *  Deliberately about the JOB TITLE, not the access level: a shift manager
+ *  runs the floor on a Friday night whether or not anyone ever handed them
+ *  admin rights, and an owner who never signs in is still management. Access
+ *  is a separate axis and keeps its own chip on every row. */
+export const MANAGEMENT_BADGES: BadgeKey[] = ['owner', 'general_manager', 'manager']
 
 /** The admin-access chip. Distinct from the `owner` job title above: someone
  *  can hold admin rights without being an owner of the business (a general
@@ -44,6 +55,19 @@ export const BADGE_OPTIONS: BadgeMeta[] = [
 export const PERMISSION_META: BadgeMeta = {
   key: 'permissions', he: 'הרשאות', en: 'Admin', ar: 'صلاحيات',
   emoji: '🔑', color: '#ff8a5c',
+}
+
+/** Which half of the roster someone belongs in. NOT an authorization check —
+ *  never gate anything on this; `isOp`/`canEditMenu` in lib/staff/access.ts are
+ *  the only things that decide what a person may do. This exists so the roster
+ *  can be read in two passes instead of one long list.
+ *
+ *  `role === 'owner'` counts too: someone holding admin rights with no job
+ *  title set is, in practice, management — filing them under עובדים would put
+ *  the most powerful account in the list nobody scrolls to the bottom of. */
+export function isManagement(row: { role?: string | null; badge?: string | null }): boolean {
+  if (row.role === 'owner') return true
+  return !!row.badge && (MANAGEMENT_BADGES as string[]).includes(row.badge)
 }
 
 function freeText(badge: string): BadgeMeta {

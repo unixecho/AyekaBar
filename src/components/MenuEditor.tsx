@@ -9,7 +9,11 @@ import MenuVersionBar from '@/components/MenuVersionBar'
 import HappyHourCard from '@/components/HappyHourCard'
 
 const T = {
-  title: 'עורך התפריט',
+  // "עריכת התפריט" → "תפריט" on the dashboard tile (2026-08-29): versions,
+  // Happy Hour, temp menus, stock and the public view all live behind this
+  // one door, so naming it after only the editing is naming a third of it.
+  // The heading here stays explicit about what the screen is.
+  title: 'תפריט',
   loading: 'טוען תפריט…',
   loadErr: 'טעינת התפריט נכשלה.',
   save: 'שמירת טיוטה', saving: 'שומר…', saved: 'נשמר ✓',
@@ -186,7 +190,12 @@ export default function MenuEditor() {
           box would be exactly the kind of ambient clutter this page
           already avoids (see cats.length===0 right below, same posture). */}
       {outOfStock.length > 0 && (
-        <div style={outOfStockCard}>
+        // `id` is a link target, not decoration: the dashboard's stock signal
+        // deep-links to /owner/editor#out-of-stock, and without it the owner
+        // lands at the top of a long page and has to hunt for the panel the
+        // alert just told them about. scroll-margin keeps the heading clear of
+        // the sticky save/publish bar.
+        <div id="out-of-stock" style={{ ...outOfStockCard, scrollMarginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: '1.05rem' }}>⚠️</span>
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>{T.outOfStockTitle}</h3>

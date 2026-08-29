@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { BADGE_OPTIONS, badgeMeta } from '@/lib/staff/badges'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { BADGE_OPTIONS, badgeMeta, isManagement } from '@/lib/staff/badges'
 import { accessLabel } from '@/lib/staff/access'
 import RolePicker from '@/components/RolePicker'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
@@ -28,7 +28,27 @@ interface Member {
 
 const T = {
   title: 'ניהול צוות',
-  subtitle: 'הוסף/י אנשי צוות לפי אימייל — גם לפני שנכנסו לראשונה. בכניסה עם Google הם יזוהו אוטומטית ויקבלו גישה לחלון הצוות.',
+  subtitle: 'הוסף/י אנשי צוות לפי אימייל — גם לפני שנכנסו לראשונה. בכניסה עם Google הם יזוהו אוטומטית ויקבלו גישה לחלון הצוות. מי שלא צריך/ה גישה למערכת אפשר להוסיף בלי אימייל, לשיבוץ בסידור העבודה בלבד.',
+
+  // ── Two roster sections (2026-08-29) ──────────────────────────────
+  management: 'הנהלה',
+  managementHint: 'בעלים, מנהל/ת כללי/ת ואחראי/ת משמרת. משתנה לעיתים רחוקות.',
+  employees: 'עובדים',
+  employeesHint: 'שאר הצוות — הרשימה שמתעדכנת באמת.',
+  emptyGroup: 'אין אף אחד בקבוצה הזו.',
+
+  // ── Add-form modes ────────────────────────────────────────────────
+  modeAccount: 'עם חשבון',
+  modeAccountHint: 'כניסה עם Google, גישה לחלון הצוות ולסידור.',
+  modeOffline: 'בלי חשבון',
+  modeOfflineHint: 'מופיע/ה בסידור העבודה בלבד. אין כניסה למערכת ואין צורך באימייל.',
+  firstNamePh: 'שם פרטי',
+  lastNamePh: 'שם משפחה (לא חובה)',
+  addedOffline: 'נוסף/ה לצוות לצורכי סידור עבודה. אין למנוי הזה כניסה למערכת.',
+  offlineChip: 'לסידור בלבד',
+  offlineNote: 'אין חשבון מקושר — אי אפשר להיכנס למערכת ולא להופיע בעמוד הצוות באתר. אפשר לשבץ בסידור העבודה.',
+  realNameLabel: 'שם',
+  realNameHint: 'השם שיופיע בסידור העבודה.',
   levels: '🔑 הרשאות מלאות = גישה לכל אזור הניהול. תפקיד "בעלים" מקבל זאת אוטומטית. "מנהל/ת כללי/ת" יכול/ה לערוך את התפריט גם בלי הרשאות מלאות. כל השאר — חלון הצוות בלבד (קוד QR).',
   addTitle: 'הוספת איש/אשת צוות',
   emailPh: 'האימייל של איש הצוות (Google)',
@@ -65,7 +85,12 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
   const [members, setMembers] = useState<Member[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // 'account' = the original flow, authorized by Google address.
+  // 'offline'  = a roster entry with a name and no way in. See the POST route.
+  const [mode, setMode] = useState<'account' | 'offline'>('account')
   const [email, setEmail] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [badge, setBadge] = useState(BADGE_OPTIONS[0].key)
   const [asOwner, setAsOwner] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -131,19 +156,30 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
     e.preventDefault()
     setAdding(true); setNotice(null)
     try {
+      const payload = mode === 'offline'
+        ? { firstName, lastName, badge }
+        : { email, badge, role: asOwner ? 'owner' : 'staff' }
+
       const res = await fetch('/api/owner/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, badge, role: asOwner ? 'owner' : 'staff' }),
+        body: JSON.stringify(payload),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'שמירה נכשלה')
-      setEmail(''); setAsOwner(false)
+      setEmail(''); setFirstName(''); setLastName(''); setAsOwner(false)
       setNotice({
         kind: 'ok',
-        text: json.updated ? T.updated : json.pending ? T.addedPending : T.addedActive,
+        text: json.offline ? T.addedOffline
+          : json.updated ? T.updated
+          : json.pending ? T.addedPending
+          : T.addedActive,
       })
       await load()
+      // A new offline row exists to be scheduled, so its schedulable state is
+      // the next thing the owner will look at — refresh it with the roster
+      // rather than leaving the switch reading a stale default.
+      await loadSchedulable()
     } catch (err) {
       setNotice({ kind: 'err', text: err instanceof Error ? err.message : 'שמירה נכשלה' })
     } finally {
@@ -156,6 +192,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
     patch: {
       badge?: string; role?: 'staff' | 'owner'
       showOnSite?: boolean; displayName?: string | null
+      firstName?: string; lastName?: string
     },
   ) {
     setBusyId(id)
@@ -176,7 +213,10 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
   }
 
   function askRemove(m: Member) {
-    const pending = !m.auth_user_id
+    // Only a real invite gets the "revoke" wording. An offline row was never
+    // an invitation to anything, so "cancel the invite?" would describe an
+    // action that never happened.
+    const pending = !m.auth_user_id && !!m.email
     setConfirmReq({
       title: pending ? T.confirmRevoke : T.confirmRemove,
       body: pending ? T.confirmRevokeBody : T.confirmRemoveBody,
@@ -218,11 +258,57 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       {/* Add form */}
       <form onSubmit={addMember} className="rise" style={{ ...cardStyle, animationDelay: '60ms' }}>
         <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)' }}>{T.addTitle}</div>
-        <input
-          type="email" required dir="ltr" value={email}
-          onChange={(e) => setEmail(e.target.value)} placeholder={T.emailPh}
-          style={inputStyle}
-        />
+
+        {/* Which kind of person this is. Not a checkbox buried under the
+            field it changes — it decides what the form even asks for, so it
+            comes first and reads as two doors rather than one door with an
+            option on it. */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {([
+            { key: 'account' as const, label: T.modeAccount },
+            { key: 'offline' as const, label: T.modeOffline },
+          ]).map((m) => {
+            const active = mode === m.key
+            return (
+              <button
+                type="button" key={m.key} className="press"
+                onClick={() => { setMode(m.key); setNotice(null) }}
+                aria-pressed={active}
+                style={{
+                  flex: 1, padding: '9px 8px', borderRadius: 11,
+                  border: `1px solid ${active ? 'var(--neon-soft)' : 'var(--line-strong)'}`,
+                  background: active ? 'rgba(255,138,92,0.11)' : 'transparent',
+                  color: active ? 'var(--neon-soft)' : 'var(--text-dim)',
+                  fontSize: '0.85rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
+                }}
+              >{m.label}</button>
+            )
+          })}
+        </div>
+        <p style={{ fontSize: '0.74rem', color: 'var(--text-faint)', margin: '-4px 0 0', lineHeight: 1.5 }}>
+          {mode === 'offline' ? T.modeOfflineHint : T.modeAccountHint}
+        </p>
+
+        {mode === 'account' ? (
+          <input
+            type="email" required dir="ltr" value={email}
+            onChange={(e) => setEmail(e.target.value)} placeholder={T.emailPh}
+            style={inputStyle}
+          />
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text" required value={firstName} maxLength={60}
+              onChange={(e) => setFirstName(e.target.value)} placeholder={T.firstNamePh}
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <input
+              type="text" value={lastName} maxLength={60}
+              onChange={(e) => setLastName(e.target.value)} placeholder={T.lastNamePh}
+              style={{ ...inputStyle, flex: 1 }}
+            />
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {BADGE_OPTIONS.map((b) => {
             const active = badge === b.key
@@ -243,22 +329,35 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
             )
           })}
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={asOwner} onChange={(e) => setAsOwner(e.target.checked)} />
-          {T.ownerGrant} ⭐
-        </label>
+        {/* Admin rights on a row that can never authenticate grant nothing —
+            the API refuses it, so the control is not offered either. */}
+        {mode === 'account' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={asOwner} onChange={(e) => setAsOwner(e.target.checked)} />
+            {T.ownerGrant} ⭐
+          </label>
+        )}
         {notice && (
           <p style={{
             color: notice.kind === 'err' ? '#ff6b6b' : 'var(--neon-soft)',
             fontSize: '0.82rem', margin: 0, lineHeight: 1.5,
           }}>{notice.text}</p>
         )}
-        <button type="submit" disabled={adding || !email} className="press" style={addBtnStyle}>
+        <button
+          type="submit"
+          disabled={adding || (mode === 'account' ? !email : !firstName.trim())}
+          className="press" style={addBtnStyle}
+        >
           {adding ? T.adding : T.addBtn}
         </button>
       </form>
 
-      {/* Roster */}
+      {/* Roster — two sections, not one list.
+          "staff should be divided by הנהלה and עובדים so that they are two
+          distinct parts and only one changes often." The split is on the JOB
+          TITLE (isManagement), never on access level: a shift manager runs the
+          floor whether or not anyone handed them admin rights, and access
+          keeps its own chip on every row. */}
       <div>
         <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 12px' }}>{T.roster}</h3>
 
@@ -271,21 +370,51 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
         ) : members.length === 0 ? (
           <p style={{ color: 'var(--text-faint)', fontSize: '0.85rem', textAlign: 'center', padding: '18px 0' }}>{T.empty}</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {members.map((m, i) => (
-              <MemberRow
-                key={m.id}
-                m={m}
-                delay={Math.min(i, 8) * 40}
-                isSelf={!!m.auth_user_id && m.auth_user_id === currentUserId}
-                busy={busyId === m.id}
-                schedulable={schedulable[m.id] ?? false}
-                onBadge={(badge) => patchMember(m.id, { badge })}
-                onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
-                onDisplayName={(displayName) => patchMember(m.id, { displayName })}
-                onToggleSchedulable={() => toggleSchedulable(m.id, !(schedulable[m.id] ?? false))}
-                onRemove={() => askRemove(m)}
-              />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+            {([
+              { key: 'mgmt', title: T.management, hint: T.managementHint, rows: members.filter(isManagement) },
+              { key: 'staff', title: T.employees, hint: T.employeesHint, rows: members.filter((m) => !isManagement(m)) },
+            ]).map((group, gi) => (
+              <div key={group.key}>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+                      {group.title}
+                    </h4>
+                    <span style={{
+                      borderRadius: 999, padding: '1px 8px', fontSize: '0.7rem', fontWeight: 700,
+                      color: 'var(--text-faint)', border: '1px solid var(--line-strong)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>{group.rows.length}</span>
+                  </div>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '3px 0 0', lineHeight: 1.5 }}>
+                    {group.hint}
+                  </p>
+                </div>
+
+                {group.rows.length === 0 ? (
+                  <p style={{ color: 'var(--text-faint)', fontSize: '0.8rem', padding: '10px 0' }}>{T.emptyGroup}</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {group.rows.map((m, i) => (
+                      <MemberRow
+                        key={m.id}
+                        m={m}
+                        delay={Math.min(gi * 2 + i, 8) * 40}
+                        isSelf={!!m.auth_user_id && m.auth_user_id === currentUserId}
+                        busy={busyId === m.id}
+                        schedulable={schedulable[m.id] ?? false}
+                        onBadge={(badge) => patchMember(m.id, { badge })}
+                        onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
+                        onDisplayName={(displayName) => patchMember(m.id, { displayName })}
+                        onRealName={(first, last) => patchMember(m.id, { firstName: first, lastName: last })}
+                        onToggleSchedulable={() => toggleSchedulable(m.id, !(schedulable[m.id] ?? false))}
+                        onRemove={() => askRemove(m)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -297,12 +426,13 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 }
 
 function MemberRow({
-  m, delay, isSelf, busy, schedulable, onBadge, onToggleOwner, onDisplayName, onToggleSchedulable, onRemove,
+  m, delay, isSelf, busy, schedulable, onBadge, onToggleOwner, onDisplayName, onRealName, onToggleSchedulable, onRemove,
 }: {
   m: Member; delay: number; isSelf: boolean; busy: boolean; schedulable: boolean
   onBadge: (badge: string) => void
   onToggleOwner: () => void
   onDisplayName: (name: string | null) => void
+  onRealName: (first: string, last: string) => void
   onToggleSchedulable: () => void
   onRemove: () => void
 }) {
@@ -311,7 +441,12 @@ function MemberRow({
   // The owner badge already grants everything, so offering a separate
   // "give admin rights" toggle for that person is meaningless.
   const opImplied = m.badge === 'owner'
-  const pending = !m.auth_user_id
+  // Three states, not two. `pending` means "authorized, hasn't signed in yet";
+  // `offline` means "will never sign in, exists to be scheduled". They look
+  // similar in the data (auth_user_id null) and mean opposite things to the
+  // owner — one is waiting on somebody, the other is finished.
+  const offline = !m.auth_user_id && !m.email
+  const pending = !m.auth_user_id && !offline
   // The roster always identifies people by their REAL name + email — this is
   // where the owner works out who someone is. The display name is a separate,
   // clearly-labelled field below that only affects the public page.
@@ -324,6 +459,8 @@ function MemberRow({
     <div className="rise" style={{
       background: 'var(--bg-elev)',
       border: `1px solid ${pending ? 'rgba(255,255,255,0.09)' : 'var(--line)'}`,
+      // Dashed = still waiting on a person. An offline row is not waiting on
+      // anybody — it is complete — so it reads as solid like a linked account.
       borderStyle: pending ? 'dashed' : 'solid',
       borderRadius: 14,
       padding: '13px 14px', display: 'flex', flexDirection: 'column', gap: 10,
@@ -347,9 +484,18 @@ function MemberRow({
                 ⏳ {T.pending}
               </span>
             )}
+            {offline && (
+              <span style={{ ...chipStyle, color: '#a3e635', borderColor: 'rgba(163,230,53,0.35)' }}>
+                📋 {T.offlineChip}
+              </span>
+            )}
           </div>
-          <div dir="ltr" style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
-          {!pending && (
+          {/* No address, no line. An empty row where the email lives reads as
+              a failed load rather than as a deliberate absence. */}
+          {!offline && (
+            <div dir="ltr" style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
+          )}
+          {!!m.auth_user_id && (
             <div dir="ltr" style={{ fontSize: '0.62rem', color: 'var(--text-faint)', textAlign: 'start', fontFamily: 'monospace', marginTop: 2 }}>{m.auth_user_id}</div>
           )}
         </div>
@@ -383,8 +529,37 @@ function MemberRow({
         </p>
       )}
 
-      {/* Display name — public only, so it sits with the site controls. */}
-      {!pending && (
+      {offline && (
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-faint)', margin: 0, lineHeight: 1.5 }}>
+          {T.offlineNote}
+        </p>
+      )}
+
+      {/* Real name — offline rows ONLY. For everyone else first/last are a
+          snapshot of the Google profile that claim_staff_invite() rewrites on
+          sign-in, so an edit there would silently revert. An offline row has
+          no profile behind it: this is the only name it will ever have, and a
+          typo in it has to be fixable. The API enforces the same rule. */}
+      {offline && (
+        <div>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 5 }}>
+            {T.realNameLabel}
+          </label>
+          <RealNameFields
+            first={m.first_name ?? ''}
+            last={m.last_name ?? ''}
+            disabled={busy}
+            onCommit={onRealName}
+          />
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', margin: '5px 0 0', lineHeight: 1.5 }}>
+            {T.realNameHint}
+          </p>
+        </div>
+      )}
+
+      {/* Display name — public only, so it sits with the site controls. Not
+          offered to a row that cannot appear on the public page at all. */}
+      {!pending && !offline && (
         <div>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 5 }}>
             {T.displayNameLabel}
@@ -431,7 +606,9 @@ function MemberRow({
 
         {!isSelf && (
           <>
-            {!opImplied && (
+            {/* Admin rights need an account to attach to — the API refuses
+                this for an offline row, so it isn't offered here either. */}
+            {!opImplied && !offline && (
               <button type="button" onClick={onToggleOwner} disabled={busy} className="press" style={ghostBtn}>
                 {m.role === 'owner' ? T.removeOwner : T.makeOwner}
               </button>
@@ -443,6 +620,95 @@ function MemberRow({
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+/** First + last for an offline roster entry.
+ *
+ *  ── Commits on GROUP blur, not field blur ───────────────────────────
+ *  Both inputs carry `disabled={busy}`, and committing sets `busyId`
+ *  synchronously. Committing on individual field blur therefore disabled the
+ *  field the owner was moving INTO: correcting the first name and clicking
+ *  the surname box fired focusout → PATCH → disabled, the click landed on a
+ *  disabled input, and everything typed for the next few hundred ms went to
+ *  document.body and was lost with no feedback. Tab did the same, skipping
+ *  the disabled field entirely.
+ *
+ *  Checking `relatedTarget` against the wrapper means moving between the two
+ *  fields is not a commit at all — the PATCH fires once, when focus leaves
+ *  the pair, by which point disabling nothing the owner is using.
+ *
+ *  The two also commit TOGETHER because the server validates a non-empty
+ *  first name: sending a lone surname edit while the first-name box sat empty
+ *  mid-edit would be refused for a reason the owner never caused. */
+function RealNameFields({ first, last, disabled, onCommit }: {
+  first: string; last: string; disabled: boolean
+  onCommit: (first: string, last: string) => void
+}) {
+  const [draftFirst, setDraftFirst] = useState(first)
+  const [draftLast, setDraftLast] = useState(last)
+  useEffect(() => { setDraftFirst(first) }, [first])
+  useEffect(() => { setDraftLast(last) }, [last])
+
+  // Escape reverts and then blurs, and that blur fires SYNCHRONOUSLY — before
+  // React re-renders with the reverted values — so the group's blur handler
+  // would close over the pre-revert drafts and save the edit the owner just
+  // discarded. A ref, not state, for the same reason: it has to be visible to
+  // the handler in this same tick.
+  const skipCommit = useRef(false)
+
+  const commit = () => {
+    const f = draftFirst.trim()
+    const l = draftLast.trim()
+    // An empty first name is not a deletion request — the row would have no
+    // name at all, and the API refuses it. Restore rather than reject.
+    if (!f) { setDraftFirst(first); setDraftLast(last); return }
+    if (f === first.trim() && l === last.trim()) return
+    onCommit(f, l)
+  }
+
+  const field: React.CSSProperties = {
+    width: '100%', padding: '10px 12px', borderRadius: 11,
+    border: '1px solid var(--line-strong)', background: 'var(--bg-elev-2)',
+    color: 'var(--text)', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none',
+  }
+
+  const revert = () => {
+    skipCommit.current = true
+    setDraftFirst(first); setDraftLast(last)
+  }
+
+  return (
+    <div
+      style={{ display: 'flex', gap: 8 }}
+      onBlur={(e) => {
+        // Focus moving to the sibling input stays inside the group — not a
+        // commit. `relatedTarget` is null when focus leaves the document
+        // entirely (tab away, window blur), which does count.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+        if (skipCommit.current) { skipCommit.current = false; return }
+        commit()
+      }}
+    >
+      <input
+        value={draftFirst} disabled={disabled} maxLength={60} placeholder={T.firstNamePh}
+        onChange={(e) => setDraftFirst(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') { revert(); e.currentTarget.blur() }
+        }}
+        style={{ ...field, flex: 1 }}
+      />
+      <input
+        value={draftLast} disabled={disabled} maxLength={60} placeholder={T.lastNamePh}
+        onChange={(e) => setDraftLast(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') { revert(); e.currentTarget.blur() }
+        }}
+        style={{ ...field, flex: 1 }}
+      />
     </div>
   )
 }

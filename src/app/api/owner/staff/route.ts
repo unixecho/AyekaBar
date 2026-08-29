@@ -43,11 +43,17 @@ async function findAuthUserByEmail(service: Service, email: string): Promise<Use
 async function loadRow(service: Service, id: string) {
   const { data } = await service
     .from('staff')
-    .select('id, auth_user_id, role')
+    .select('id, auth_user_id, role, email')
     .eq('id', id)
     .maybeSingle()
-  return data as { id: string; auth_user_id: string | null; role: string } | null
+  return data as
+    { id: string; auth_user_id: string | null; role: string; email: string | null } | null
 }
+
+/** An "offline" roster entry: no account, no address, exists to be scheduled.
+ *  The only rows whose name this API will rewrite — see PATCH. */
+const isOffline = (row: { auth_user_id: string | null; email: string | null }) =>
+  !row.auth_user_id && !row.email
 
 // ---- GET: list the roster (claimed + pending invites) ----
 export async function GET() {
@@ -64,21 +70,60 @@ export async function GET() {
   return NextResponse.json({ staff: data ?? [] })
 }
 
-// ---- POST: authorize a person by email ----
-// The person does NOT have to have signed in yet. If we can already match the
-// email to an auth user we link it right away; otherwise the row is stored as a
-// pending invite (auth_user_id null) and `claim_staff_invite()` links it the
-// first time that Google account signs in.
+// ---- POST: put a person on the roster ----
+//
+// Two shapes, because a bar has two kinds of staff:
+//
+//   WITH an email — the person gets an account. They do NOT have to have
+//   signed in yet: if we can already match the email to an auth user we link
+//   it right away; otherwise the row is a pending invite (auth_user_id null)
+//   and `claim_staff_invite()` links it the first time that Google account
+//   signs in.
+//
+//   WITHOUT an email ("offline", 2026-08-29) — the person exists only to be
+//   scheduled. A busboy who works Fridays and has no reason to hold an
+//   account still has to appear in the shift builder, and requiring a Google
+//   address to roster them meant either inventing a fake one or leaving them
+//   off the schedule entirely. The row carries a name and a badge and nothing
+//   else; it can never sign in, and `claim_staff_invite()` cannot match it,
+//   both by construction rather than by a flag someone could flip.
+//
+// The schema already permitted this — migration 006 made auth_user_id
+// nullable and scoped the unique email index to `where email is not null` —
+// so this is a route-level restriction being lifted, not a data change.
 export async function POST(request: NextRequest) {
   const auth = await requireOwner()
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { email?: string; badge?: string; role?: string } | null
+    { email?: string; badge?: string; role?: string; firstName?: string; lastName?: string } | null
   const email = body?.email?.trim().toLowerCase()
   const badge = body?.badge?.trim() || null
   const role = body?.role === 'owner' ? 'owner' : 'staff'
-  if (!email) return NextResponse.json({ error: 'חסר אימייל' }, { status: 400 })
+
+  if (!email) {
+    const first = body?.firstName?.trim()
+    const last = body?.lastName?.trim() || null
+    if (!first) return NextResponse.json({ error: 'חסר שם או אימייל' }, { status: 400 })
+    if (first.length > 60 || (last && last.length > 60)) {
+      return NextResponse.json({ error: 'השם ארוך מדי' }, { status: 400 })
+    }
+    // Admin rights are meaningless on a row that can never authenticate, and
+    // storing role='owner' here would inflate the "last owner" guard in DELETE
+    // with an account nobody can sign into. Forced to 'staff'.
+    const { data, error } = await auth.service
+      .from('staff')
+      .insert({
+        auth_user_id: null, role: 'staff', badge,
+        first_name: first, last_name: last,
+        email: null, claimed_at: null,
+      })
+      .select(COLS)
+      .single()
+
+    if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
+    return NextResponse.json({ member: data, offline: true })
+  }
 
   // Already on the roster (claimed or pending)? Update instead of failing on
   // the unique email index.
@@ -135,6 +180,32 @@ export async function PATCH(request: NextRequest) {
   const patch: Record<string, unknown> = {}
   if (body && 'badge' in body) patch.badge = body.badge?.trim() || null
 
+  // Real name, editable for offline rows ONLY. For everyone else first/last
+  // are a snapshot of their Google profile and `claim_staff_invite()` writes
+  // them on first sign-in — letting the owner edit those would produce a name
+  // that silently reverts, which is worse than not offering the field. An
+  // offline row has no profile to snapshot and no claim path, so its name is
+  // the only name it will ever have, and a typo in it must be fixable.
+  if (body && ('firstName' in body || 'lastName' in body)) {
+    if (!isOffline(row)) {
+      return NextResponse.json(
+        { error: 'אפשר לערוך שם רק לאיש/אשת צוות ללא חשבון' },
+        { status: 400 }
+      )
+    }
+    if ('firstName' in body) {
+      const first = typeof body.firstName === 'string' ? body.firstName.trim() : ''
+      if (!first) return NextResponse.json({ error: 'חסר שם' }, { status: 400 })
+      if (first.length > 60) return NextResponse.json({ error: 'השם ארוך מדי' }, { status: 400 })
+      patch.first_name = first
+    }
+    if ('lastName' in body) {
+      const last = typeof body.lastName === 'string' ? body.lastName.trim() : ''
+      if (last.length > 60) return NextResponse.json({ error: 'השם ארוך מדי' }, { status: 400 })
+      patch.last_name = last || null
+    }
+  }
+
   // Publish/unpublish on the public team page.
   if (body && 'showOnSite' in body) {
     if (typeof body.showOnSite !== 'boolean') {
@@ -180,6 +251,15 @@ export async function PATCH(request: NextRequest) {
     // Don't let an owner strip their own owner access.
     if (row.auth_user_id === auth.userId && body.role !== 'owner') {
       return NextResponse.json({ error: 'אי אפשר לשנות את התפקיד של עצמך' }, { status: 400 })
+    }
+    // Granting admin to a row that cannot authenticate grants nothing, and it
+    // would let a never-signable row count toward the "at least one owner"
+    // guard in DELETE — which is how a bar locks itself out of its own panel.
+    if (body.role === 'owner' && isOffline(row)) {
+      return NextResponse.json(
+        { error: 'אי אפשר לתת הרשאות לאיש/אשת צוות ללא חשבון' },
+        { status: 400 }
+      )
     }
     patch.role = body.role
   }

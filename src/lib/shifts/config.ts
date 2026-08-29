@@ -26,12 +26,23 @@ export const AYEKA_VENUE: Venue = {
 // already exists, so assigning someone to a shift can suggest the role they
 // actually hold. `shift_leader` is the exception: it maps to the `manager`
 // badge (אחראי/ת משמרת), which is that badge's literal meaning.
+//
+// SEEDING ONLY — read the file header again before editing this list. A venue
+// that already exists carries its own roles in `shift_settings.roles`, and
+// that row is what every live surface renders; changing an entry here does
+// NOT rename anything for Ayeka Bar. Bringing a live venue in line is either
+// a Manager Panel edit (Catalog → תפקידים) or a deliberate data update.
+//
+// `id` is a foreign key in all but name: `shift_assignments.role_id` and
+// every `requirements[].roleId` point at it. Rename the `name`, never the
+// `id` — an id change orphans existing assignments silently.
 
 export const DEFAULT_ROLES: ShiftRole[] = [
   { id: 'shift_leader', name: { he: 'אחראי/ת משמרת', en: 'Shift Leader', ar: 'مسؤول/ة الوردية' }, emoji: '🗂️', color: '#f472b6', badge: 'manager' },
   { id: 'bartender',    name: { he: 'ברמן/ית',        en: 'Bartender',    ar: 'نادل/ة بار' },      emoji: '🍸', color: '#c084fc', badge: 'bartender' },
   { id: 'waiter',       name: { he: 'מלצר/ית',        en: 'Waiter',       ar: 'نادل/ة' },          emoji: '🍽️', color: '#60a5fa', badge: 'waiter' },
-  { id: 'kitchen',      name: { he: 'מטבח',           en: 'Kitchen',      ar: 'مطبخ' },            emoji: '👨‍🍳', color: '#fbbf24', badge: 'cook' },
+  { id: 'kitchen',      name: { he: 'טבח/ית',         en: 'Cook',         ar: 'طاهٍ/طاهية' },      emoji: '👨‍🍳', color: '#fbbf24', badge: 'cook' },
+  { id: 'busboy',       name: { he: 'עוזר/ת טבח',     en: 'Busboy',       ar: 'مساعد/ة طاهٍ' },    emoji: '🔪', color: '#a3e635', badge: 'busboy' },
   { id: 'host',         name: { he: 'מארח/ת',         en: 'Host',         ar: 'مضيف/ة' },          emoji: '🛎️', color: '#2dd4bf', badge: 'receptionist' },
 ]
 
