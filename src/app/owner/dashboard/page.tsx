@@ -7,8 +7,9 @@ import OwnerHeader from '@/components/OwnerHeader'
 import StaffManager from '@/components/StaffManager'
 import LoyaltyToggle from '@/components/LoyaltyToggle'
 import PortalLinksEditor from '@/components/PortalLinksEditor'
+import OverallViewCard from '@/components/OverallViewCard'
 import SignOutButton from '@/components/SignOutButton'
-import { getLoyaltyEnabled, getLoyaltyVisible, getPortalLinks } from '@/lib/settings/server'
+import { getLoyaltyEnabled, getLoyaltyVisible, getPortalLinks, getOverallDemoMode } from '@/lib/settings/server'
 
 export default async function OwnerDashboardPage() {
   const supabase = createClient()
@@ -33,10 +34,11 @@ export default async function OwnerDashboardPage() {
       .eq('auth_user_id', user.id)
   }
 
-  const [loyaltyEnabled, loyaltyVisible, portalLinks] = await Promise.all([
+  const [loyaltyEnabled, loyaltyVisible, portalLinks, overallDemoMode] = await Promise.all([
     getLoyaltyEnabled(),
     getLoyaltyVisible(),
     getPortalLinks(),
+    getOverallDemoMode(),
   ])
 
   return (
@@ -47,6 +49,14 @@ export default async function OwnerDashboardPage() {
           <SignOutButton />
         </div>
       } />
+
+      {/* The operational birds-eye deck (ayeka-staff) + its demo switch.
+          First on the page on purpose: everything below it is back-office
+          configuration, while this is the only card here that looks at the
+          shift happening right now. */}
+      <div style={{ marginBottom: 16 }}>
+        <OverallViewCard initialDemoMode={overallDemoMode} />
+      </div>
 
       {/* Loyalty club on/off */}
       <div style={{ marginBottom: 16 }}>

@@ -1,10 +1,12 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import SheetShell, { sheetPrimary, sheetSecondary } from '@/components/shifts/SheetShell'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import TimeWheel from '@/components/TimeWheel'
+import { haptic } from '@/lib/haptics'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
+import { isOptimisticId } from '@/lib/shifts/store'
 import { crossesMidnight, durationMinutes, fmtDuration } from '@/lib/shifts/time'
 import type { ISODate, RoleRequirement, Shift } from '@/lib/shifts/types'
 
@@ -17,6 +19,19 @@ import type { ISODate, RoleRequirement, Shift } from '@/lib/shifts/types'
 // half-typed time is meaningless, while "put Dana on this shift" is a complete
 // thought on its own, and making it wait behind a Save button is how you end
 // up with a manager who assigns five people and loses all five.
+//
+// NOTHING HERE WAITS FOR THE NETWORK. Every write goes through the provider's
+// optimistic dispatch (see ShiftsProvider's header), which has already applied
+// the change locally by the time it returns — so Save closes the sheet at once
+// and taking someone off a shift happens under the finger. A write the server
+// refuses rolls itself back and says so; that is the provider's job, not this
+// file's.
+//
+// Removing a person is NOT behind a confirmation. It was, and it was wrong:
+// one tap put them there and one tap puts them back, so a modal asking "are
+// you sure" bought nothing and cost the manager a second gesture on the
+// action they perform most while juggling a week. Deleting the whole shift —
+// which loses its times, its staffing levels and everyone on it — still asks.
 
 export type ShiftSheetMode =
   | { type: 'create'; date: ISODate }
@@ -47,11 +62,31 @@ export default function ShiftSheet({
     editing?.requirements ?? basePreset?.requirements.map((r) => ({ ...r })) ?? [])
   const [openRole, setOpenRole] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
-  const [busy, setBusy] = useState(false)
 
   const assignments = useMemo(
     () => (editing ? db.assignments.filter((a) => a.shiftId === editing.id) : []),
     [db.assignments, editing])
+
+  // This shift was created moments ago and Postgres has not answered yet, so
+  // it still carries a client-minted id (see OPTIMISTIC_ID_PREFIX in store.ts).
+  // Anything that addresses the shift BY id would be sent with an id the
+  // server has never seen, so those actions are withheld. Belt to the braces
+  // in ScheduleWorkspace, which declines to open the sheet for such a shift in
+  // the first place — this cannot be reached through that route, and the
+  // effect below guarantees it could not stick if it somehow were.
+  const unsaved = !!editing && isOptimisticId(editing.id)
+  const locked = readOnly || unsaved
+
+  // `mode.shift` is a SNAPSHOT taken when the card was tapped, so this sheet
+  // cannot notice the row changing underneath it. If the row is gone from the
+  // live db, there is nothing left to edit and every write from here would
+  // address a dead id: close instead. Covers a colleague deleting the shift
+  // mid-edit, "clear week" running elsewhere, and an optimistic row being
+  // replaced by the server's real one.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const gone = !!editing && !db.shifts.some((s) => s.id === editing.id)
+  useEffect(() => { if (gone) onCloseRef.current() }, [gone])
 
   /** Switching preset re-seeds the whole shift, including any staffing levels
    *  you had already tuned. Only offered while creating, for that reason. */
@@ -79,6 +114,7 @@ export default function ShiftSheet({
   }
 
   function setMin(roleId: string, delta: number) {
+    haptic('tick')
     setRequirements((prev) => {
       const found = prev.find((r) => r.roleId === roleId)
       if (!found) return delta > 0 ? [...prev, { roleId, min: 1 }] : prev
@@ -89,20 +125,19 @@ export default function ShiftSheet({
     })
   }
 
-  async function save() {
-    setBusy(true)
+  function save() {
+    haptic('select')
     if (editing) {
-      await dispatch({
+      void dispatch({
         type: 'shift.update', shiftId: editing.id,
         patch: { start, end, stationId, note, requirements, presetId },
       })
     } else {
-      await dispatch({
+      void dispatch({
         type: 'shift.create', weekStart, date, presetId,
         start, end, stationId, requirements,
       })
     }
-    setBusy(false)
     onClose()
   }
 
@@ -124,10 +159,10 @@ export default function ShiftSheet({
               {t('cancel')}
             </button>
             <button
-              type="button" className="press" style={sheetPrimary(!busy)}
-              disabled={busy} onClick={save}
+              type="button" className="press" style={sheetPrimary(!unsaved)}
+              disabled={unsaved} onClick={save}
             >
-              {busy ? t('saving') : t('save')}
+              {unsaved ? t('saving') : t('save')}
             </button>
           </>
         )}
@@ -219,28 +254,27 @@ export default function ShiftSheet({
                     return (
                       <button
                         key={a.id} type="button" className="press"
-                        disabled={readOnly}
-                        onClick={() => setConfirm({
-                          title: `${t('remove')} ${person?.name ?? ''}`,
-                          body: `${tri(role.name)} · ${start}–${end}`,
-                          confirmLabel: t('remove'),
-                          onConfirm: () => { void dispatch({ type: 'assignment.delete', assignmentId: a.id }) },
-                        })}
+                        disabled={locked}
+                        aria-label={`${t('remove')} ${person?.name ?? ''}`}
+                        onClick={() => {
+                          haptic('impact')
+                          void dispatch({ type: 'assignment.delete', assignmentId: a.id })
+                        }}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: 6,
                           padding: '5px 10px', borderRadius: 999, font: 'inherit',
-                          fontSize: '0.78rem', fontWeight: 600, cursor: readOnly ? 'default' : 'pointer',
+                          fontSize: '0.78rem', fontWeight: 600, cursor: locked ? 'default' : 'pointer',
                           border: `1px solid ${person?.colour ?? 'var(--line-strong)'}55`,
                           background: `${person?.colour ?? '#666'}14`, color: 'var(--text)',
                         }}
                       >
                         {person?.name ?? '—'}
-                        {!readOnly && <span aria-hidden style={{ opacity: 0.6 }}>✕</span>}
+                        {!locked && <span aria-hidden style={{ opacity: 0.6 }}>✕</span>}
                       </button>
                     )
                   })}
 
-                  {!readOnly && editing && (
+                  {!locked && editing && (
                     <button
                       type="button" className="press"
                       onClick={() => setOpenRole(openRole === role.id ? null : role.id)}
@@ -261,8 +295,9 @@ export default function ShiftSheet({
                     {candidates.length ? candidates.map((person) => (
                       <button
                         key={person.id} type="button" className="press"
-                        onClick={async () => {
-                          await dispatch({
+                        onClick={() => {
+                          haptic('select')
+                          void dispatch({
                             type: 'assignment.create', shiftId: editing.id,
                             staffId: person.id, roleId: role.id,
                           })
@@ -309,23 +344,22 @@ export default function ShiftSheet({
                     return (
                       <button
                         key={a.id} type="button" className="press"
-                        disabled={readOnly}
-                        onClick={() => setConfirm({
-                          title: `${t('remove')} ${person?.name ?? a.staffId ?? ''}`,
-                          body: t('removedRole'),
-                          confirmLabel: t('remove'),
-                          onConfirm: () => { void dispatch({ type: 'assignment.delete', assignmentId: a.id }) },
-                        })}
+                        disabled={locked}
+                        aria-label={`${t('remove')} ${person?.name ?? a.staffId ?? ''}`}
+                        onClick={() => {
+                          haptic('impact')
+                          void dispatch({ type: 'assignment.delete', assignmentId: a.id })
+                        }}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: 6,
                           padding: '5px 10px', borderRadius: 999, font: 'inherit',
-                          fontSize: '0.78rem', fontWeight: 600, cursor: readOnly ? 'default' : 'pointer',
+                          fontSize: '0.78rem', fontWeight: 600, cursor: locked ? 'default' : 'pointer',
                           border: '1px dashed var(--line-strong)', background: 'var(--bg-elev-2)',
                           color: 'var(--text-faint)',
                         }}
                       >
                         {person?.name ?? '—'}
-                        {!readOnly && <span aria-hidden style={{ opacity: 0.6 }}>✕</span>}
+                        {!locked && <span aria-hidden style={{ opacity: 0.6 }}>✕</span>}
                       </button>
                     )
                   })}
@@ -348,14 +382,18 @@ export default function ShiftSheet({
           />
         </Section>
 
-        {editing && !readOnly && (
+        {editing && !locked && (
           <button
             type="button" className="press"
             onClick={() => setConfirm({
               title: t('deleteShift'),
               body: t('deleteShiftBody'),
               confirmLabel: t('remove'),
-              onConfirm: () => { void dispatch({ type: 'shift.delete', shiftId: editing.id }).then(onClose) },
+              onConfirm: () => {
+                haptic('impact')
+                void dispatch({ type: 'shift.delete', shiftId: editing.id })
+                onClose()
+              },
             })}
             style={{
               width: '100%', marginTop: 14, padding: '12px 0', borderRadius: 14,
@@ -393,7 +431,7 @@ function Pill({ active, color, label, onClick }: {
 }) {
   return (
     <button
-      type="button" className="press" onClick={onClick}
+      type="button" className="press" onClick={() => { haptic('tick'); onClick() }}
       style={{
         padding: '7px 12px', borderRadius: 999, font: 'inherit',
         fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',

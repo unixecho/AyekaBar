@@ -3,6 +3,7 @@ import {
   LOYALTY_VISIBLE, LOYALTY_VISIBLE_DEFAULT,
   PORTAL_LINKS, PORTAL_LINKS_DEFAULT, type PortalLinkKey,
   PORTAL_REVIEWS,
+  OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT,
   SETTINGS_TAG,
 } from './keys'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
@@ -46,6 +47,12 @@ export function getLoyaltyEnabled(): Promise<boolean> {
 /** Does the loyalty entry show on the portal at all? Independent of access. */
 export function getLoyaltyVisible(): Promise<boolean> {
   return readSetting<boolean>(LOYALTY_VISIBLE, LOYALTY_VISIBLE_DEFAULT)
+}
+
+/** Is the Overall view's demo mode on? See OMS_OVERALL_DEMO_MODE — false
+ *  means the deck observes a live service and cannot write. */
+export function getOverallDemoMode(): Promise<boolean> {
+  return readSetting<boolean>(OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT)
 }
 
 /** The portal's external link destinations (Instagram, Facebook, review, navigate). */

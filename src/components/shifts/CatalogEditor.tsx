@@ -4,6 +4,7 @@ import { useState } from 'react'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import TimeWheel from '@/components/TimeWheel'
 import TriField from '@/components/shifts/TriField'
+import { haptic } from '@/lib/haptics'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
 import { ACCENTS } from '@/lib/shifts/config'
 import { BADGE_OPTIONS } from '@/lib/staff/badges'
@@ -77,11 +78,11 @@ function Stepper({ value, onChange, disabled }: { value: number; onChange: (delt
       display: 'inline-flex', alignItems: 'center', gap: 2, direction: 'ltr',
       border: '1px solid var(--line-strong)', borderRadius: 999, padding: 2, flex: '0 0 auto',
     }}>
-      <StepButton label="−" onClick={() => onChange(-1)} disabled={disabled || value === 0} />
+      <StepButton label="−" onClick={() => { haptic('tick'); onChange(-1) }} disabled={disabled || value === 0} />
       <span style={{ minWidth: 18, textAlign: 'center', fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </span>
-      <StepButton label="＋" onClick={() => onChange(1)} disabled={disabled} />
+      <StepButton label="＋" onClick={() => { haptic('tick'); onChange(1) }} disabled={disabled} />
     </span>
   )
 }
@@ -214,7 +215,12 @@ export function PresetCatalog({ settings, onChange }: CatalogProps) {
           </div>
 
           <div>
-            <p className="sh-sub" style={{ margin: '0 0 4px' }}>{t('defaultStation')}</p>
+            <p className="sh-sub" style={{ margin: '0 0 2px' }}>{t('defaultStation')}</p>
+            {/* The field answered "what is this for?" with nothing at all,
+                which is how it read as a staffing control it is not. */}
+            <p className="sh-sub" style={{ margin: '0 0 6px', color: 'var(--text-faint)' }}>
+              {t('defaultStationHint')}
+            </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               <Pill
                 active={!preset.stationId} label={t('noStation')}

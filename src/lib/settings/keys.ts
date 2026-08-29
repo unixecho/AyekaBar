@@ -46,6 +46,32 @@ export const PORTAL_REVIEWS = 'portal_reviews'
 export const OMS_NOTIFY_ALL_WAITERS = 'oms_notify_all_waiters'
 export const OMS_NOTIFY_ALL_WAITERS_DEFAULT = true
 
+/** Demo mode for the Overall view (`staff.ayeka.bar/?demo=1`) — the
+ *  operational birds-eye deck showing waiter, bar and kitchen at once.
+ *  2026-08-27: "leave a setting in the new portion for this view in the
+ *  dashboard to toggle Demo on and off."
+ *
+ *  false (default) = PRODUCTION. The deck observes and cannot write: every
+ *  non-GET is refused inside ayeka-staff's own transport, so the view can't
+ *  nudge a live service no matter what gets tapped.
+ *  true = the three panes are fully interactive, and whoever opened the deck
+ *  acts as waiter, bar and cook at once for testing alongside a real waiter.
+ *
+ *  Defaults to false, and ayeka-staff also treats a missing/unreadable row
+ *  as false — this is the one switch where guessing wrong during real
+ *  service costs an actual order, so it fails CLOSED at every layer.
+ *
+ *  Public read (is_public=true), same as OMS_NOTIFY_ALL_WAITERS above and
+ *  for the same reason: ayeka-staff has no other read path into
+ *  app_settings. */
+export const OMS_OVERALL_DEMO_MODE = 'oms_overall_demo_mode'
+export const OMS_OVERALL_DEMO_MODE_DEFAULT = false
+
+/** Where the Overall view lives. Its own constant so the dashboard link and
+ *  any future reference can't drift; `?demo=1` rather than `/demo` because
+ *  the query form needs no rewrite to resolve on any host. */
+export const OVERALL_VIEW_URL = 'https://staff.ayeka.bar/?demo=1'
+
 export type PortalLinkKey = 'instagram' | 'facebook' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {

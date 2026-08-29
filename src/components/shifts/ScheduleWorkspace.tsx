@@ -15,7 +15,7 @@ import RequestsPanel from '@/components/shifts/RequestsPanel'
 import AuditTrail from '@/components/shifts/AuditTrail'
 import OnboardingFlow from '@/components/shifts/OnboardingFlow'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
-import { draftWeek, neighbouringOf, weekSignature, weekStartFor } from '@/lib/shifts/store'
+import { draftWeek, isOptimisticId, neighbouringOf, weekSignature, weekStartFor } from '@/lib/shifts/store'
 import { evaluate, summarize } from '@/lib/shifts/rules'
 import { addDays, durationMinutes, fmtDuration, weekLabel } from '@/lib/shifts/time'
 import type { ISODate } from '@/lib/shifts/types'
@@ -41,13 +41,26 @@ export default function ScheduleWorkspace() {
 
   // A week row is created lazily, the first time someone looks at that week.
   // Creating all 52 up front would fill the audit log with weeks nobody opened.
+  //
+  // Gated on canManage: `week.ensure` is a manager-only write (ACTION_ROUTES),
+  // so for anyone else it can only ever be refused — and since a refusal rolls
+  // the optimistic week back out, this effect would immediately fire again and
+  // loop, one rejected request and one error toast per turn.
   useEffect(() => {
+    if (!viewer.canManage) return
     if (!db.weeks.some((w) => w.weekStart === weekStart)) {
       void dispatch({ type: 'week.ensure', weekStart })
     }
-  }, [weekStart, db.weeks, dispatch])
+  }, [weekStart, db.weeks, dispatch, viewer.canManage])
 
-  const bundle = draftWeek(db, weekStart)
+  // MEMOISED, and the memo below depends on it. `draftWeek()` builds a fresh
+  // object every call, so calling it in the render body handed `warnings` a
+  // dependency that was never equal to last render's — which meant the entire
+  // rules engine re-ran on every state change on this screen, opening a sheet
+  // and switching a tab included. That synchronous re-evaluation, not the
+  // sheet itself, was most of the delay between tapping ＋ and seeing it.
+  const bundle = useMemo(() => draftWeek(db, weekStart), [db, weekStart])
+  const neighbouring = useMemo(() => neighbouringOf(db, weekStart), [db, weekStart])
   const published = db.published[weekStart] ?? null
 
   const warnings = useMemo(() => {
@@ -60,20 +73,22 @@ export default function ScheduleWorkspace() {
       assignments: bundle.assignments,
       staff: db.staff,
       availability: db.availability,
-      neighbouring: neighbouringOf(db, weekStart),
+      neighbouring,
     })
-  }, [db, bundle, weekStart])
+  }, [db.venue, db.settings, db.staff, db.availability, bundle, neighbouring])
 
   const counts = summarize(warnings)
   const dirty = !!published && weekSignature(bundle) !== weekSignature(published)
   const isPublished = bundle?.week.status === 'published'
 
   const hoursByStaff = useMemo(() => {
+    const minutesOf = new Map<string, number>()
+    for (const s of bundle?.shifts ?? []) minutesOf.set(s.id, durationMinutes(s.start, s.end))
     const map = new Map<string, number>()
     for (const a of bundle?.assignments ?? []) {
-      const shift = bundle?.shifts.find((s) => s.id === a.shiftId)
-      if (!shift) continue
-      map.set(a.staffId, (map.get(a.staffId) ?? 0) + durationMinutes(shift.start, shift.end))
+      const minutes = minutesOf.get(a.shiftId)
+      if (minutes === undefined) continue
+      map.set(a.staffId, (map.get(a.staffId) ?? 0) + minutes)
     }
     return map
   }, [bundle])
@@ -232,7 +247,14 @@ export default function ScheduleWorkspace() {
               assignments={bundle.assignments}
               dayNotes={bundle.week.dayNotes}
               warnings={warnings}
-              onShiftClick={viewer.canManage ? (shift) => setSheet({ type: 'edit', shift }) : undefined}
+              // A shift whose id is still client-minted has not reached
+              // Postgres yet (see OPTIMISTIC_ID_PREFIX in store.ts), so
+              // nothing inside the sheet could address it. Sub-second, and
+              // only after a create or a "copy last week"; the tap simply
+              // does nothing until the real row lands.
+              onShiftClick={viewer.canManage
+                ? (shift) => { if (!isOptimisticId(shift.id)) setSheet({ type: 'edit', shift }) }
+                : undefined}
               onAddShift={viewer.canManage ? (date) => setSheet({ type: 'create', date }) : undefined}
               onDayNote={viewer.canManage ? setNoteDate : undefined}
             />
@@ -274,7 +296,14 @@ export default function ScheduleWorkspace() {
             warnings={warnings}
             shifts={bundle?.shifts ?? []}
             dismissedWarnings={bundle?.week.dismissedWarnings ?? []}
-            onOpenShift={viewer.canManage ? (shift) => { setTab('week'); setSheet({ type: 'edit', shift }) } : undefined}
+            onOpenShift={viewer.canManage
+              ? (shift) => {
+                  setTab('week')
+                  // Same reason as onShiftClick above — a brand-new shift
+                  // warns ("unstaffed") before the server has answered for it.
+                  if (!isOptimisticId(shift.id)) setSheet({ type: 'edit', shift })
+                }
+              : undefined}
             onDismiss={(warningId, dismissed) => { void dispatch({ type: 'warning.dismiss', weekStart, warningId, dismissed }) }}
           />
         )}
@@ -300,8 +329,11 @@ export default function ScheduleWorkspace() {
           date={noteDate}
           initial={bundle.week.dayNotes[noteDate] ?? ''}
           onClose={() => setNoteDate(null)}
-          onSave={async (note) => {
-            await dispatch({ type: 'note.day', weekStart, date: noteDate, note })
+          onSave={(note) => {
+            // Not awaited: dispatch() has already applied the note locally by
+            // the time it returns its promise, so holding the sheet open for
+            // the round trip would only add the delay back.
+            void dispatch({ type: 'note.day', weekStart, date: noteDate, note })
             setNoteDate(null)
           }}
         />

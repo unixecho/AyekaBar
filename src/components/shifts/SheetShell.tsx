@@ -47,20 +47,32 @@ export default function SheetShell({
         onClick={onClose}
         style={{
           position: 'fixed', inset: 0, zIndex: 150,
-          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
+          // THE BLUR SITS HERE, ON AN ELEMENT THAT NEVER ANIMATES.
+          // A `backdrop-filter` costs a full-viewport readback and re-blur on
+          // every frame the element it lives on is animated. Fading the blur
+          // in meant paying that ~13 times for a 220ms fade, which on a phone
+          // is most of the "the sheet takes a moment to open" delay. The
+          // material now appears in one composite — the way iOS does it — and
+          // only the dim below fades.
+          backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
           display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          animation: 'fade-in .22s var(--ease)',
         }}
       >
+        <div aria-hidden style={{
+          position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)',
+          animation: 'fade-in .22s var(--ease)',
+        }} />
         <div
           onClick={(e) => e.stopPropagation()}
           style={{
+            position: 'relative',
             width: '100%', maxWidth: wide ? 720 : 460,
             background: 'var(--bg-elev-2)',
             borderTopLeftRadius: 22, borderTopRightRadius: 22,
             border: '1px solid var(--line-strong)', borderBottom: 'none',
             maxHeight: '88dvh', display: 'flex', flexDirection: 'column',
             animation: 'sheet-up .34s var(--ease)',
+            willChange: 'transform',
           }}
         >
           <div style={{ padding: '14px 16px 10px', flex: '0 0 auto' }}>
@@ -78,6 +90,9 @@ export default function SheetShell({
 
           <div style={{
             flex: '1 1 auto', overflowY: 'auto',
+            // Nothing inside a sheet should be able to scroll the page behind
+            // it once it runs out of its own scroll — the sheet is modal.
+            overscrollBehavior: 'contain',
             padding: `4px 16px ${footer ? '10px' : 'calc(env(safe-area-inset-bottom) + 16px)'}`,
           }}>
             {children}

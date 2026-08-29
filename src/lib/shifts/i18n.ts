@@ -25,6 +25,7 @@ export const S = {
   remove:           { he: 'הסרה',               en: 'Remove',              ar: 'إزالة' },
   edit:             { he: 'עריכה',              en: 'Edit',                ar: 'تعديل' },
   optional:         { he: 'לא חובה',            en: 'Optional',            ar: 'اختياري' },
+  saveFailed:       { he: 'השינוי לא נשמר — הוחזר למצב הקודם', en: 'That change did not save — reverted', ar: 'لم يُحفظ التغيير — تمت الإعادة' },
 
   // ── tabs ──
   tabWeek:          { he: 'שבוע',               en: 'Week',                ar: 'أسبوع' },
@@ -122,6 +123,7 @@ export const S = {
   addStation:       { he: 'הוספת עמדה',         en: 'Add a station',       ar: 'إضافة محطة' },
   color:            { he: 'צבע',                en: 'Colour',              ar: 'اللون' },
   defaultStation:   { he: 'עמדת ברירת מחדל',    en: 'Default station',     ar: 'المحطة الافتراضية' },
+  defaultStationHint:{ he: 'איפה עומדים במשמרת הזו. תווית בלבד — מופיעה על כרטיס המשמרת ובדף ההדפסה, ולא קובעת מי משובץ. כמה אנשים צריך — ב״תקן איוש״ למטה.', en: 'Where people stand on this shift. A label only — it shows on the shift card and the printed sheet, and does not decide who gets assigned. How many people you need is "Staffing needed" below.', ar: 'أين يقف الطاقم في هذه الوردية. تسمية فقط — تظهر على بطاقة الوردية وورقة الطباعة، ولا تحدد من يُسنَد. عدد الأشخاص المطلوب في «التوظيف المطلوب» أدناه.' },
   staffingNeeded:   { he: 'תקן איוש',           en: 'Staffing needed',     ar: 'التوظيف المطلوب' },
   noRolesYet:       { he: 'אין עדיין תפקידים מוגדרים — הוסיפו למטה תחת "תפקידים".', en: 'No roles defined yet — add some under "Roles" below.', ar: 'لا توجد أدوار بعد — أضف تحت "الأدوار" أدناه.' },
   linkedBadge:      { he: 'תפקיד מקושר בצוות',  en: 'Linked staff title',  ar: 'اللقب المرتبط بالطاقم' },
@@ -204,6 +206,13 @@ export const S = {
   // ── audit ──
   auditTitle:       { he: 'יומן שינויים',       en: 'Change log',          ar: 'سجل التغييرات' },
   noAudit:          { he: 'עוד לא נרשמו שינויים.', en: 'Nothing logged yet.', ar: 'لا تغييرات مسجلة.' },
+  auditWas:         { he: 'היה',                en: 'Was',                 ar: 'كان' },
+  auditNow:         { he: 'עכשיו',              en: 'Now',                 ar: 'الآن' },
+  auditNoDetail:    { he: 'אין פרטים נוספים.',  en: 'No further detail.',  ar: 'لا تفاصيل إضافية.' },
+  auditRaw:         { he: 'נתונים גולמיים',     en: 'Raw data',            ar: 'بيانات خام' },
+  auditEmptyValue:  { he: '(ריק)',              en: '(empty)',             ar: '(فارغ)' },
+  yes:              { he: 'כן',                 en: 'Yes',                 ar: 'نعم' },
+  no:               { he: 'לא',                 en: 'No',                  ar: 'لا' },
 
   // ── print ──
   print:            { he: 'הדפסה / PDF',        en: 'Print / PDF',         ar: 'طباعة / PDF' },
@@ -230,6 +239,12 @@ export const AUDIT_LABELS: Record<AuditAction, Tri> = {
   'settings.update':      { he: 'עדכון הגדרות',        en: 'Settings updated',     ar: 'تحديث الإعدادات' },
   'onboarding.complete':  { he: 'סיום הקמה',           en: 'Setup completed',      ar: 'اكتمل الإعداد' },
   'week.create':          { he: 'פתיחת שבוע',          en: 'Week created',         ar: 'إنشاء أسبوع' },
+  // Written by copy_schedule_week()/clear_schedule_week() in migration 027.
+  // The mock reducer logs these two as 'week.create'/'shift.delete' instead —
+  // which is why they were missing here until 2026-08-29, and why the live
+  // log showed a bare `week.copy` where every other row had a Hebrew label.
+  'week.copy':            { he: 'העתקת שבוע',          en: 'Week copied',          ar: 'نسخ أسبوع' },
+  'week.clear':           { he: 'ניקוי שבוע',          en: 'Week cleared',         ar: 'مسح أسبوع' },
   'week.publish':         { he: 'פרסום סידור',         en: 'Schedule published',   ar: 'نشر الجدول' },
   'week.unpublish':       { he: 'החזרה לטיוטה',        en: 'Returned to draft',    ar: 'إرجاع لمسودة' },
   'member.update':        { he: 'עדכון סידור צוות',    en: 'Roster updated',       ar: 'تحديث الجدولة' },
@@ -246,6 +261,114 @@ export const AUDIT_LABELS: Record<AuditAction, Tri> = {
   'swap.approve':         { he: 'אישור החלפה',         en: 'Swap approved',        ar: 'اعتماد التبديل' },
   'swap.reject':          { he: 'דחיית החלפה',         en: 'Swap rejected',        ar: 'رفض التبديل' },
   'swap.cancel':          { he: 'ביטול בקשה',          en: 'Request cancelled',    ar: 'إلغاء الطلب' },
+}
+
+/**
+ * Field names, for the readable change log (see audit-view.ts).
+ *
+ * Keyed by BOTH spellings on purpose: the reducer writes camelCase domain
+ * fields and Postgres writes snake_case columns, and the log shows entries
+ * from both. A key with no entry here still renders — de-cased from its own
+ * name — so a column added later is unlabelled, never invisible.
+ */
+export const AUDIT_FIELD_LABELS: Record<string, Tri> = {
+  // generic
+  value:            { he: 'ערך',                en: 'Value',               ar: 'قيمة' },
+  note:             { he: 'הערה',               en: 'Note',                ar: 'ملاحظة' },
+  date:             { he: 'תאריך',              en: 'Date',                ar: 'تاريخ' },
+  weekStart:        { he: 'שבוע',               en: 'Week',                ar: 'أسبوع' },
+  week_start:       { he: 'שבוע',               en: 'Week',                ar: 'أسبوع' },
+  from:             { he: 'מהשבוע',             en: 'From week',           ar: 'من أسبوع' },
+  to:               { he: 'לשבוע',              en: 'To week',             ar: 'إلى أسبوع' },
+  version:          { he: 'גרסה',               en: 'Version',             ar: 'إصدار' },
+  status:           { he: 'מצב',                en: 'Status',              ar: 'حالة' },
+  removed:          { he: 'נמחקו',              en: 'Removed',             ar: 'حُذف' },
+  shifts:           { he: 'משמרות',             en: 'Shifts',              ar: 'ورديات' },
+  assignments:      { he: 'שיבוצים',            en: 'Assignments',         ar: 'إسنادات' },
+  entries:          { he: 'ימים שסומנו',        en: 'Days marked',         ar: 'أيام محددة' },
+  dismissed:        { he: 'הוסתרה',             en: 'Hidden',              ar: 'مخفي' },
+  // people, shifts
+  staffId:          { he: 'עובד/ת',             en: 'Person',              ar: 'موظف/ة' },
+  staff_id:         { he: 'עובד/ת',             en: 'Person',              ar: 'موظف/ة' },
+  staffName:        { he: 'שם',                 en: 'Name',                ar: 'اسم' },
+  staff_name:       { he: 'שם',                 en: 'Name',                ar: 'اسم' },
+  fromStaffId:      { he: 'מבקש/ת',             en: 'Requested by',        ar: 'مقدّم الطلب' },
+  toStaffId:        { he: 'מחליף/ה',            en: 'Taken by',            ar: 'المستبدل' },
+  roleId:           { he: 'תפקיד',              en: 'Role',                ar: 'دور' },
+  role_id:          { he: 'תפקיד',              en: 'Role',                ar: 'دور' },
+  stationId:        { he: 'עמדה',               en: 'Station',             ar: 'محطة' },
+  station_id:       { he: 'עמדה',               en: 'Station',             ar: 'محطة' },
+  presetId:         { he: 'סוג משמרת',          en: 'Shift type',          ar: 'نوع الوردية' },
+  preset_id:        { he: 'סוג משמרת',          en: 'Shift type',          ar: 'نوع الوردية' },
+  start:            { he: 'התחלה',              en: 'Start',               ar: 'بداية' },
+  end:              { he: 'סיום',               en: 'End',                 ar: 'نهاية' },
+  start_time:       { he: 'התחלה',              en: 'Start',               ar: 'بداية' },
+  end_time:         { he: 'סיום',               en: 'End',                 ar: 'نهاية' },
+  shift_date:       { he: 'תאריך',              en: 'Date',                ar: 'تاريخ' },
+  requirements:     { he: 'תקן משמרת',          en: 'Required roles',      ar: 'الأدوار المطلوبة' },
+  reason:           { he: 'סיבה',               en: 'Reason',              ar: 'سبب' },
+  // roster / schedule_members columns
+  schedulable:      { he: 'בסידור',             en: 'On the schedule',     ar: 'ضمن الجدول' },
+  defaultRoleId:    { he: 'תפקיד ברירת מחדל',   en: 'Default role',        ar: 'الدور الافتراضي' },
+  default_role_id:  { he: 'תפקיד ברירת מחדל',   en: 'Default role',        ar: 'الدور الافتراضي' },
+  maxWeeklyHours:   { he: 'מקסימום שעות שבועיות', en: 'Max weekly hours',  ar: 'أقصى ساعات أسبوعية' },
+  max_weekly_hours: { he: 'מקסימום שעות שבועיות', en: 'Max weekly hours',  ar: 'أقصى ساعات أسبوعية' },
+  employmentType:   { he: 'סוג העסקה',          en: 'Employment type',     ar: 'نوع التوظيف' },
+  employment_type:  { he: 'סוג העסקה',          en: 'Employment type',     ar: 'نوع التوظيف' },
+  sortOrder:        { he: 'סדר',                en: 'Order',               ar: 'ترتيب' },
+  sort_order:       { he: 'סדר',                en: 'Order',               ar: 'ترتيب' },
+  // settings
+  workingDays:      { he: 'ימי פעילות',         en: 'Working days',        ar: 'أيام العمل' },
+  working_days:     { he: 'ימי פעילות',         en: 'Working days',        ar: 'أيام العمل' },
+  openTime:         { he: 'שעת פתיחה',          en: 'Opening time',        ar: 'وقت الفتح' },
+  open_time:        { he: 'שעת פתיחה',          en: 'Opening time',        ar: 'وقت الفتح' },
+  closeTime:        { he: 'שעת סגירה',          en: 'Closing time',        ar: 'وقت الإغلاق' },
+  close_time:       { he: 'שעת סגירה',          en: 'Closing time',        ar: 'وقت الإغلاق' },
+  dayHours:         { he: 'שעות לפי יום',       en: 'Hours per day',       ar: 'ساعات لكل يوم' },
+  day_hours:        { he: 'שעות לפי יום',       en: 'Hours per day',       ar: 'ساعات لكل يوم' },
+  presets:          { he: 'סוגי משמרת',         en: 'Shift types',         ar: 'أنواع الورديات' },
+  roles:            { he: 'תפקידים',            en: 'Roles',               ar: 'الأدوار' },
+  stations:         { he: 'עמדות',              en: 'Stations',            ar: 'المحطات' },
+  safety:           { he: 'כללי בטיחות',        en: 'Safety rules',        ar: 'قواعد السلامة' },
+  features:         { he: 'יכולות',             en: 'Features',            ar: 'الميزات' },
+  scheduleManagers: { he: 'מנהלי סידור',        en: 'Schedule managers',   ar: 'مديرو الجدول' },
+  schedule_managers:{ he: 'מנהלי סידור',        en: 'Schedule managers',   ar: 'مديرو الجدول' },
+  ruleSeverity:     { he: 'חומרת התראות',       en: 'Warning severity',    ar: 'شدة التنبيهات' },
+  rule_severity:    { he: 'חומרת התראות',       en: 'Warning severity',    ar: 'شدة التنبيهات' },
+  onboardedAt:      { he: 'הקמה הושלמה',        en: 'Setup completed',     ar: 'اكتمل الإعداد' },
+  onboarded_at:     { he: 'הקמה הושלמה',        en: 'Setup completed',     ar: 'اكتمل الإعداد' },
+  // safety-rule and feature leaves — reached by audit-view's one level of
+  // recursion into `safety` / `features`. (`maxWeeklyHours` is deliberately
+  // not repeated: the safety rule and the per-person cap above are the same
+  // words for the same thing.)
+  minRestHours:     { he: 'מנוחה מינימלית (שעות)', en: 'Minimum rest (hours)', ar: 'حد أدنى للراحة (ساعات)' },
+  maxDailyHours:    { he: 'מקסימום שעות ליום',  en: 'Max hours per day',   ar: 'أقصى ساعات يوميًا' },
+  maxConsecutiveDays:{ he: 'מקסימום ימים רצופים', en: 'Max consecutive days', ar: 'أقصى أيام متتالية' },
+  ENABLE_AVAILABILITY_SUBMISSIONS: { he: 'הגשת זמינות', en: 'Availability submissions', ar: 'إرسال التوفر' },
+  ENABLE_SHIFT_SWAPS:{ he: 'החלפות משמרת',      en: 'Shift swaps',         ar: 'تبديل الورديات' },
+}
+
+/**
+ * Enum VALUES that reach the log as bare strings. Every `status` column in
+ * this module plus `employment_type`, in one flat map because they do not
+ * collide — a log row saying `assigned` in the middle of otherwise-Hebrew
+ * text is exactly the kind of leak that made the log look like a data dump.
+ * An unknown value falls through to itself.
+ */
+export const AUDIT_VALUE_LABELS: Record<string, Tri> = {
+  draft:         { he: 'טיוטה',        en: 'Draft',            ar: 'مسودة' },
+  published:     { he: 'פורסם',        en: 'Published',        ar: 'منشور' },
+  assigned:      { he: 'משובץ/ת',      en: 'Assigned',         ar: 'مُسنَد' },
+  swap_pending:  { he: 'ממתין להחלפה', en: 'Swap pending',     ar: 'بانتظار التبديل' },
+  submitted:     { he: 'הוגש',         en: 'Submitted',        ar: 'مُرسَل' },
+  open:          { he: 'פתוח',         en: 'Open',             ar: 'مفتوح' },
+  peer_accepted: { he: 'עמית/ה לקח/ה', en: 'Taken by a peer',  ar: 'أخذها زميل' },
+  approved:      { he: 'אושר',         en: 'Approved',         ar: 'مُعتمد' },
+  rejected:      { he: 'נדחה',         en: 'Rejected',         ar: 'مرفوض' },
+  cancelled:     { he: 'בוטל',         en: 'Cancelled',        ar: 'مُلغى' },
+  hourly:        { he: 'שעתי',         en: 'Hourly',           ar: 'بالساعة' },
+  monthly:       { he: 'חודשי',        en: 'Monthly',          ar: 'شهري' },
+  student:       { he: 'סטודנט/ית',    en: 'Student',          ar: 'طالب/ة' },
 }
 
 /** Generic per-code labels — for the warnings panel's group headers and the

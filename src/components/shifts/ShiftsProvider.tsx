@@ -9,8 +9,9 @@ import { MockShiftsSource, clearPersisted } from '@/lib/shifts/mock'
 import { SupabaseShiftsSource } from '@/lib/shifts/supabase-source'
 import { t as translate, type StringKey } from '@/lib/shifts/i18n'
 import { todayIn, weekStartOf } from '@/lib/shifts/time'
+import { OPTIMISTIC_ID_PREFIX, reduce } from '@/lib/shifts/store'
 import type { ShiftsDataSource } from '@/lib/shifts/adapter'
-import type { ScheduleAction, ShiftsDB } from '@/lib/shifts/store'
+import type { ActionContext, ScheduleAction, ShiftsDB } from '@/lib/shifts/store'
 import type { ISODate, Lang, Tri } from '@/lib/shifts/types'
 
 // The module carries its own stylesheet rather than appending to globals.css.
@@ -29,6 +30,30 @@ import '@/components/shifts/shifts.css'
 // hydration mismatch — a confusing error whose actual cause is three files
 // away. Rendering a skeleton until the effect has run is also just what the
 // rest of this app does while it waits for data.
+//
+// WRITES ARE OPTIMISTIC. `dispatch()` runs the action through the SAME pure
+// reducer the mock and the server-side writer agree on, paints that instantly,
+// and only then sends it. When the server's own re-read comes back it REPLACES
+// the optimistic state wholesale — the server is still the only authority, and
+// the route still answers with a fresh read of what actually landed rather
+// than an optimistic merge (see api/shifts/dispatch/route.ts). All that
+// changed is who waits: the manager doesn't.
+//
+// Three details make that safe rather than merely fast:
+//
+//   1. `pending` — every action still in flight, in order. A server response
+//      that arrives while later edits are outstanding is not the final word,
+//      so those later actions are re-applied on top of it. Without this, the
+//      response to "remove Dana" would erase the "add Yossi" that came after.
+//   2. `chain` — the network calls are serialised. `shift.create` followed by
+//      an edit to that shift must reach Postgres in that order, and HTTP makes
+//      no such promise on its own.
+//   3. `confirmed` — the last state the server actually vouched for. A failed
+//      write rolls back to it (plus whatever is still pending), so a rejected
+//      edit disappears rather than lingering as a lie on screen.
+//
+// A write that fails surfaces as a toast. Silently reverting would be worse
+// than the old blocking behaviour, not better.
 
 export interface Viewer {
   /** `staff.id`, or null for someone signed in who is not on the roster. */
@@ -50,6 +75,10 @@ interface ShiftsContext {
   /** Prototype-only: pretend to be a different member of the demo roster. */
   setViewerStaffId: (staffId: string) => void
   dispatch: (action: ScheduleAction) => Promise<void>
+  /** How many writes are still in flight. Zero almost always, because the
+   *  screen no longer waits for them — exposed so a surface that wants to
+   *  say "still saving" on a bad connection can. */
+  pending: number
   /** Re-read the currently loaded window without an action — the roster
    *  panel's live-updating poll uses this, not dispatch(). */
   refresh: () => Promise<void>
@@ -82,6 +111,35 @@ export default function ShiftsProvider({
   const [lang, setLangState] = useState<Lang>('he')
   const [viewAs, setViewAs] = useState<string | null>(null)
 
+  // ---- optimistic write plumbing (see the header) --------------------------
+  /** Actions sent but not yet answered, oldest first. */
+  const pendingRef = useRef<ScheduleAction[]>([])
+  const [pending, setPending] = useState(0)
+  /** The newest state the server itself produced — what a failure rolls back to. */
+  const confirmedRef = useRef<ShiftsDB | null>(null)
+  /** Serialises the network calls so Postgres sees them in the order they were made. */
+  const chainRef = useRef<Promise<void>>(Promise.resolve())
+  const optimisticSeq = useRef(0)
+  const [writeError, setWriteError] = useState<string | null>(null)
+
+  /** Ids and a clock for the LOCAL preview only. Every one of these is thrown
+   *  away the moment the server answers with the real row, which is why a
+   *  counter is enough and a uuid would be theatre — but the PREFIX matters:
+   *  see `OPTIMISTIC_ID_PREFIX` in store.ts for what reads it and why. */
+  const localContext = useCallback((): ActionContext => ({
+    actorId: access.id ?? null,
+    actorName,
+    now: new Date().toISOString(),
+    id: () => `${OPTIMISTIC_ID_PREFIX}${(optimisticSeq.current += 1).toString(36)}`,
+  }), [access.id, actorName])
+
+  /** Fold the still-outstanding actions back on top of a server state. */
+  const replay = useCallback((base: ShiftsDB, actions: ScheduleAction[]): ShiftsDB => {
+    let next = base
+    for (const action of actions) next = reduce(next, action, localContext()).db
+    return next
+  }, [localContext])
+
   useEffect(() => {
     // ?demo=1 forces the localStorage prototype even when real data is
     // available — kept for demos so nobody has to roster the live team just
@@ -100,7 +158,10 @@ export default function ShiftsProvider({
     // `week.ensure` navigation effect if this guess was ever a week off.
     const now = new Date()
     const todayGuess: ISODate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    source.load(weekStartOf(todayGuess, 0)).then(setDb)
+    source.load(weekStartOf(todayGuess, 0)).then((loaded) => {
+      confirmedRef.current = loaded
+      setDb(loaded)
+    })
 
     // The language choice is shared with the rest of the app — the portal and
     // the menu already persist it under this key, and a manager who set the
@@ -131,20 +192,56 @@ export default function ShiftsProvider({
   const dispatch = useCallback(async (action: ScheduleAction) => {
     const source = sourceRef.current
     if (!source) return
-    setDb(await source.dispatch(action))
-  }, [])
+
+    // 1. Paint it now. A no-op action (the reducer's own early returns) leaves
+    //    `db` untouched, exactly as it did when this waited for the server.
+    pendingRef.current = [...pendingRef.current, action]
+    setPending(pendingRef.current.length)
+    setDb((prev) => (prev ? reduce(prev, action, localContext()).db : prev))
+
+    // 2. Send it, behind everything already sent.
+    const run = chainRef.current.then(async () => {
+      // Identity, not equality: the same object reference was pushed above, so
+      // two identical-looking actions never clear each other's slot.
+      const settle = () => {
+        pendingRef.current = pendingRef.current.filter((a) => a !== action)
+        setPending(pendingRef.current.length)
+      }
+      try {
+        const server = await source.dispatch(action)
+        confirmedRef.current = server
+        settle()
+        setDb(replay(server, pendingRef.current))
+      } catch (err) {
+        settle()
+        const base = confirmedRef.current
+        if (base) setDb(replay(base, pendingRef.current))
+        setWriteError(err instanceof Error ? err.message : String(err))
+      }
+    })
+    chainRef.current = run
+    return run
+  }, [localContext, replay])
 
   const refresh = useCallback(async () => {
     const source = sourceRef.current
     if (!source) return
-    setDb(await source.refresh())
-  }, [])
+    const server = await source.refresh()
+    confirmedRef.current = server
+    // A poll must not undo an edit made a half-second ago that the server has
+    // not answered for yet.
+    setDb(replay(server, pendingRef.current))
+  }, [replay])
 
   const resetDemo = useCallback(async () => {
     const source = sourceRef.current
     if (!source || !(source instanceof MockShiftsSource)) return
     clearPersisted()
-    setDb(await source.reset())
+    pendingRef.current = []
+    setPending(0)
+    const fresh = await source.reset()
+    confirmedRef.current = fresh
+    setDb(fresh)
   }, [])
 
   const viewer = useMemo<Viewer>(() => {
@@ -165,15 +262,74 @@ export default function ShiftsProvider({
       tri: (value) => value[lang] || value.he || value.en,
       viewer,
       setViewerStaffId: setViewAs,
-      dispatch, refresh, resetDemo,
+      dispatch, refresh, resetDemo, pending,
       isMock: sourceRef.current?.isMock ?? true,
       today: todayIn(db.venue.timezone),
     }
-  }, [db, lang, setLang, viewer, dispatch, refresh, resetDemo])
+  }, [db, lang, setLang, viewer, dispatch, refresh, resetDemo, pending])
 
   if (!value) return <ScheduleSkeleton />
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      <WriteErrorToast
+        message={writeError}
+        label={translate('saveFailed', lang)}
+        dismiss={translate('close', lang)}
+        onClose={() => setWriteError(null)}
+      />
+    </Ctx.Provider>
+  )
+}
+
+/** A write that the server refused. The optimistic edit has already been
+ *  rolled back by the time this appears — this exists so the rollback is
+ *  explained rather than mysterious. Not auto-dismissed: a schedule edit that
+ *  silently did not happen is exactly the thing worth reading. */
+function WriteErrorToast({ message, label, dismiss, onClose }: {
+  message: string | null
+  label: string
+  dismiss: string
+  onClose: () => void
+}) {
+  if (!message) return null
+  return (
+    <div
+      role="alert"
+      style={{
+        position: 'fixed', insetInline: 12, bottom: 'calc(env(safe-area-inset-bottom) + 14px)',
+        zIndex: 300, maxWidth: 460, marginInline: 'auto',
+        display: 'flex', alignItems: 'flex-start', gap: 10,
+        padding: '11px 13px', borderRadius: 14,
+        border: '1px solid rgba(255,107,107,0.4)', background: 'rgba(38,18,18,0.96)',
+        backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+        boxShadow: '0 12px 34px rgba(0,0,0,0.45)',
+        animation: 'sheet-up .28s var(--ease)',
+      }}
+    >
+      <span aria-hidden>⚠️</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <strong style={{ display: 'block', fontSize: '0.85rem', color: '#ff9b9b' }}>{label}</strong>
+        <span style={{
+          display: 'block', marginTop: 2, fontSize: '0.72rem', lineHeight: 1.5,
+          color: 'var(--text-dim)', overflowWrap: 'anywhere',
+        }}>
+          {message}
+        </span>
+      </span>
+      <button
+        type="button" onClick={onClose} aria-label={dismiss} className="press"
+        style={{
+          flex: '0 0 auto', width: 26, height: 26, borderRadius: 999, border: 'none',
+          background: 'rgba(255,255,255,0.08)', color: 'var(--text-dim)',
+          font: 'inherit', cursor: 'pointer', lineHeight: 1,
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  )
 }
 
 /** Matches the shape of the loaded week so the swap is not a layout jump —

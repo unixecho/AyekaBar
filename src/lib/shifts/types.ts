@@ -295,6 +295,12 @@ export type AuditAction =
   | 'settings.update'
   | 'onboarding.complete'
   | 'week.create'
+  /** SQL-only: copy_schedule_week()/clear_schedule_week() write these. The
+   *  reducer's own copy/clear cases log 'week.create'/'shift.delete', so the
+   *  live log and the prototype's log genuinely differ here — both are
+   *  rendered, neither is wrong. */
+  | 'week.copy'
+  | 'week.clear'
   | 'week.publish'
   | 'week.unpublish'
   | 'member.update'

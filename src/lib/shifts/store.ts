@@ -73,6 +73,21 @@ export type ScheduleAction =
   | { type: 'swap.decide'; swapId: string; approve: boolean; note: string }
   | { type: 'swap.cancel'; swapId: string }
 
+/**
+ * Prefix for ids minted by an optimistic client-side apply (ShiftsProvider's
+ * `localContext`). Such a row exists on screen but not yet in Postgres, so any
+ * action ADDRESSING it by id — assigning to a shift that was created a moment
+ * ago, editing it, deleting it — would reach the server with an id the server
+ * has never seen. The window is sub-second and the failure is loud rather than
+ * silent (the write is refused and rolled back), but "loud" is not "fine", so
+ * the UI simply declines to offer those actions until the real id arrives.
+ *
+ * Lives here rather than in the provider because both the minter and the
+ * checker need it and neither should own the other.
+ */
+export const OPTIMISTIC_ID_PREFIX = 'opt-'
+export const isOptimisticId = (id: string): boolean => id.startsWith(OPTIMISTIC_ID_PREFIX)
+
 export interface ReduceResult {
   db: ShiftsDB
   /** Null when the action was a no-op — an audit line for "nothing happened"

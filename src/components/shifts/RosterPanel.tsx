@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import Switch from '@/components/Switch'
+import { haptic } from '@/lib/haptics'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
 
 // Who is on the schedule, and who runs it — one list, two independent
@@ -49,10 +50,12 @@ export default function RosterPanel() {
   }, [isMock, refresh])
 
   const toggleSchedulable = (staffId: string, next: boolean) => {
+    haptic('select')
     void dispatch({ type: 'member.update', staffId, patch: { schedulable: next } })
   }
 
   const toggleDelegate = (staffId: string, granted: boolean) => {
+    haptic('select')
     void dispatch({
       type: 'settings.update',
       patch: {

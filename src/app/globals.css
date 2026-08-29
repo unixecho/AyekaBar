@@ -452,6 +452,14 @@ html[dir="ltr"] .menu-back svg { transform: scaleX(-1); }
 .wheel-scroll {
   height: 100%; overflow-y: auto; scroll-snap-type: y mandatory;
   scrollbar-width: none; -webkit-overflow-scrolling: touch; outline: none;
+  /* UP AND DOWN, AND NOTHING ELSE. A wheel lives inside a scrolling sheet, so
+     without these two the gesture leaks: `pan-y` stops a slightly-diagonal
+     drag from being read as a horizontal swipe and abandoning the dial
+     mid-turn, and `contain` stops a flick that reaches 00 or 23 from chaining
+     into the sheet body and scrolling the whole form out from under the
+     finger. Both were the actual feel of "the dial moves in directions it
+     shouldn't". */
+  touch-action: pan-y; overscroll-behavior: contain;
   /* Grabbable: on a mouse the wheel is dragged, not flicked. Selection is off
      so a drag across the numbers doesn't highlight them like text. */
   cursor: grab; user-select: none; -webkit-user-select: none;
