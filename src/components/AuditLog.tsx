@@ -1,9 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 
 // Who changed the menu, what they changed, and when. Read-only by design —
 // the log is append-only in the database and there is no edit affordance here.
+//
+// 2026-08-30: "the updates need to be collapsible just like in the OMS with
+// large orders sent to the kitchen... a drop down will show... what was
+// edited, changed etc, fit every event to their use case." Mirrors
+// ayeka-staff's EventFeed rule exactly: a row is collapsible ONLY when its
+// `detail` actually carries something beyond the one-line summary already
+// shown (a lone ready-mark stays a plain line there; a bare `{categories: 4}`
+// count stays a plain line here) — expandDetailFor() below returns null for
+// exactly those, and the row renders with no chevron at all rather than a
+// dropdown that opens onto nothing. Every action gets its OWN rendering,
+// shaped to what that action's detail actually carries — a save/publish's
+// counts read differently from Happy Hour's rule list or a temp variant's
+// expiry, which is the "fit every event to their use case" part.
 
 interface Entry {
   id: number
@@ -23,6 +36,19 @@ const T = {
   loadErr: 'טעינת היומן נכשלה.',
   unknown: 'לא ידוע',
   more: 'הצג/י עוד',
+  fieldEnabled: 'מצב',
+  on: 'פעיל',
+  off: 'כבוי',
+  fieldWindow: 'שעות',
+  fieldDiscount: 'הנחה',
+  fieldItems: 'פריטים',
+  fieldCategories: 'קטגוריות',
+  fieldHidden: 'פריטים מוסתרים בגרסה זו',
+  fieldRenamedFrom: 'שם קודם',
+  fieldTempUntil: 'זמנית עד',
+  fieldExpireAction: 'בתום הזמן',
+  expireBack: 'חוזר לתפריט הראשי',
+  expireArchive: 'עובר לארכיון',
 }
 
 const ACTION_META: Record<string, { label: string; emoji: string; color: string }> = {
@@ -32,6 +58,7 @@ const ACTION_META: Record<string, { label: string; emoji: string; color: string 
   'variant.update': { label: 'עדכון גרסה', emoji: '✏️', color: '#60a5fa' },
   'variant.delete': { label: 'מחיקת גרסה', emoji: '🗑️', color: '#ff6b6b' },
   'variant.activate': { label: 'החלפת תפריט מוצג', emoji: '🔀', color: '#2dd4bf' },
+  'variant.default': { label: 'הגדרת תפריט ראשי', emoji: '⭐', color: '#fbbf24' },
   'happy_hour.update': { label: 'Happy Hour', emoji: '🍹', color: '#f472b6' },
 }
 
@@ -68,11 +95,100 @@ function detailLine(e: Entry): string {
   return bits.join(' · ')
 }
 
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: '0.78rem' }}>
+      <span style={{ color: 'var(--text-faint)' }}>{label}</span>
+      <span style={{ color: 'var(--text-dim)', textAlign: 'end' }}>{children}</span>
+    </div>
+  )
+}
+
+function Chips({ items }: { items: string[] }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, justifyContent: 'flex-end' }}>
+      {items.map((c, i) => (
+        <span key={i} style={{
+          fontSize: '0.72rem', color: 'var(--text-dim)', background: 'var(--bg-elev-2)',
+          border: '1px solid var(--line)', borderRadius: 999, padding: '2px 8px',
+        }}>{c}</span>
+      ))}
+    </div>
+  )
+}
+
+/** Everything worth showing beyond the one-liner detailLine() already put
+ *  inline — or null when there genuinely isn't more (a bare `{categories:
+ *  N}` count on a save/publish, a delete that only ever recorded a name).
+ *  Returning null is what keeps THOSE rows plain and un-chevroned, exactly
+ *  the OMS EventFeed rule for a non-collapsible line. */
+function expandDetailFor(e: Entry): ReactNode | null {
+  const d = e.detail ?? {}
+
+  if (e.action === 'happy_hour.update') {
+    if (d.enabled !== true) return null // "כיבה/תה" already says everything there is to say
+    const rows: ReactNode[] = [
+      <Field key="enabled" label={T.fieldEnabled}>{T.on}</Field>,
+    ]
+    if (typeof d.start === 'string' && typeof d.end === 'string') {
+      rows.push(<Field key="window" label={T.fieldWindow}><span dir="ltr">{d.start}–{d.end}</span></Field>)
+    }
+    if (Array.isArray(d.percents) && d.percents.length) {
+      rows.push(<Field key="discount" label={T.fieldDiscount}>{(d.percents as number[]).join('/')}%</Field>)
+    }
+    if (typeof d.itemCount === 'number') {
+      rows.push(<Field key="items" label={T.fieldItems}>{d.itemCount}</Field>)
+    }
+    if (Array.isArray(d.categories) && d.categories.length) {
+      rows.push(
+        <div key="cats" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-faint)' }}>{T.fieldCategories}</span>
+          <Chips items={d.categories as string[]} />
+        </div>
+      )
+    }
+    return rows
+  }
+
+  if (e.action === 'variant.create' || e.action === 'variant.update') {
+    const rows: ReactNode[] = []
+    if (typeof d.renamedFrom === 'string') {
+      rows.push(<Field key="renamed" label={T.fieldRenamedFrom}>{d.renamedFrom}</Field>)
+    }
+    if (typeof d.hiddenItems === 'number' && d.hiddenItems > 0) {
+      rows.push(<Field key="hidden" label={T.fieldHidden}>{d.hiddenItems}</Field>)
+    }
+    if (typeof d.until === 'string') {
+      rows.push(<Field key="until" label={T.fieldTempUntil}>{new Date(d.until).toLocaleString('he-IL')}</Field>)
+      rows.push(
+        <Field key="expire" label={T.fieldExpireAction}>
+          {d.expireAction === 'archive' ? T.expireArchive : T.expireBack}
+        </Field>
+      )
+    }
+    return rows.length ? rows : null
+  }
+
+  if (e.action === 'variant.activate' && typeof d.until === 'string') {
+    return [
+      <Field key="until" label={T.fieldTempUntil}>{new Date(d.until).toLocaleString('he-IL')}</Field>,
+      <Field key="expire" label={T.fieldExpireAction}>
+        {d.expireAction === 'archive' ? T.expireArchive : T.expireBack}
+      </Field>,
+    ]
+  }
+
+  return null
+}
+
 export default function AuditLog() {
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [pending, setPending] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [limit, setLimit] = useState(20)
+  const [open, setOpen] = useState<Set<number>>(new Set())
+  const toggle = (id: number) =>
+    setOpen((cur) => { const n = new Set(cur); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const load = useCallback(async (n: number) => {
     try {
@@ -115,13 +231,11 @@ export default function AuditLog() {
             {entries.map((e, i) => {
               const meta = ACTION_META[e.action] ?? fallbackMeta
               const extra = detailLine(e)
-              return (
-                <div key={e.id} className="rise" style={{
-                  background: 'var(--bg-elev)', border: '1px solid var(--line)',
-                  borderRadius: 14, padding: '12px 13px',
-                  display: 'flex', alignItems: 'flex-start', gap: 11,
-                  animationDelay: `${Math.min(i, 8) * 35}ms`,
-                }}>
+              const expanded = expandDetailFor(e)
+              const isOpen = open.has(e.id)
+
+              const head = (
+                <>
                   <span aria-hidden style={{
                     flex: '0 0 auto', width: 34, height: 34, borderRadius: 10,
                     display: 'grid', placeItems: 'center', fontSize: '1rem',
@@ -157,6 +271,47 @@ export default function AuditLog() {
                       {new Date(e.created_at).toLocaleString('he-IL')}
                     </p>
                   </div>
+
+                  {expanded && (
+                    <span aria-hidden style={{
+                      flex: '0 0 auto', alignSelf: 'center', color: 'var(--text-faint)', fontSize: '0.8rem',
+                      transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s var(--ease)',
+                    }}>▾</span>
+                  )}
+                </>
+              )
+
+              const rowStyle: CSSProperties = {
+                background: 'var(--bg-elev)', border: '1px solid var(--line)',
+                borderRadius: 14, animationDelay: `${Math.min(i, 8) * 35}ms`,
+              }
+
+              return (
+                <div key={e.id} className="rise" style={rowStyle}>
+                  {expanded ? (
+                    <button
+                      type="button" className="press" onClick={() => toggle(e.id)} aria-expanded={isOpen}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'flex-start', gap: 11,
+                        padding: '12px 13px', background: 'none', border: 'none', font: 'inherit',
+                        color: 'inherit', textAlign: 'start', cursor: 'pointer',
+                      }}
+                    >
+                      {head}
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '12px 13px' }}>
+                      {head}
+                    </div>
+                  )}
+                  {expanded && isOpen && (
+                    <div className="rise" style={{
+                      display: 'flex', flexDirection: 'column', gap: 6,
+                      margin: '0 13px 12px', paddingTop: 10, borderTop: '1px solid var(--line)',
+                    }}>
+                      {expanded}
+                    </div>
+                  )}
                 </div>
               )
             })}

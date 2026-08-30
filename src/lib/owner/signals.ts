@@ -34,7 +34,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { MENU_SLUG, type MenuCategory } from '@/lib/menu/types'
 import { OMS_OVERALL_DEMO_MODE } from '@/lib/settings/keys'
 import { AYEKA_VENUE, DEFAULT_ROLES } from '@/lib/shifts/config'
-import { todayIn, addDays } from '@/lib/shifts/time'
+import { todayIn, addDays, dayIndex, intervalOf, nowMinutesIn } from '@/lib/shifts/time'
 
 // ── Tunables ──────────────────────────────────────────────────────────
 // Named, because every one of them is a judgement call somebody will want to
@@ -300,6 +300,77 @@ async function readStuckItems(service: Service): Promise<{
   }
 }
 
+/** How long before a scheduled shift starts this signal starts mentioning
+ *  it — "give a reminder on the dashboard 30 minutes before the shift
+ *  should start," 2026-08-30. */
+export const SHIFT_REMINDER_MINUTES = 30
+
+/** "The dashboard should prompt the user to start the shift" — two distinct
+ *  moments, not one signal reused: a reminder ahead of time (warning — there
+ *  is still time to act) and a "you're already late" alert once the planned
+ *  start has passed with nobody having opened (critical — actively wrong
+ *  right now). Silent whenever a session is already active — a schedule
+ *  that says 19:00 and a shift that opened at 18:50 needs no comment at all.
+ *  Silent again once the shift's whole planned WINDOW has elapsed, so this
+ *  never nags about a shift the day has already moved past. */
+async function readShiftReminder(service: Service): Promise<DashboardSignal | null> {
+  try {
+    const { data: active } = await service
+      .from('waiter_shift_sessions').select('id').eq('status', 'active').maybeSingle()
+    if (active) return null
+
+    const { today, shifts, known } = await readTodayShifts(service)
+    if (!known) return null
+
+    const tz = AYEKA_VENUE.timezone
+    const nowAbs = dayIndex(today) * 1440 + nowMinutesIn(tz)
+
+    // The earliest TODAY shift whose planned window hasn't fully elapsed yet.
+    let earliest: { start: string; startAbs: number; endAbs: number } | null = null
+    for (const s of shifts) {
+      if (s.date !== today || !s.start) continue
+      const interval = intervalOf(s.date, s.start, s.end || s.start)
+      if (interval.end <= nowAbs) continue
+      if (earliest && interval.start >= earliest.startAbs) continue
+      earliest = { start: s.start, startAbs: interval.start, endAbs: interval.end }
+    }
+    if (!earliest) return null
+
+    const minutesUntil = earliest.startAbs - nowAbs
+    if (minutesUntil > SHIFT_REMINDER_MINUTES) return null
+
+    if (minutesUntil > 0) {
+      return {
+        id: 'shift-starting-soon',
+        severity: 'warning',
+        rank: 65,
+        icon: '⏰',
+        title: `המשמרת מתחילה בעוד ${minutesUntil} דק׳`,
+        detail: `שעת פתיחה מתוכננת: ${earliest.start} — לא נשכח לפתוח`,
+        href: '/owner/reports',
+        actionLabel: 'לפתיחת משמרת',
+        kind: 'link',
+      }
+    }
+
+    // Past the planned start, still inside the planned window, nobody's
+    // opened it — this is the loud one.
+    return {
+      id: 'shift-not-started',
+      severity: 'critical',
+      rank: 90,
+      icon: '🚨',
+      title: 'המשמרת הייתה אמורה להתחיל ולא נפתחה',
+      detail: `שעת פתיחה מתוכננת: ${earliest.start}`,
+      href: '/owner/reports',
+      actionLabel: 'לפתיחת משמרת',
+      kind: 'link',
+    }
+  } catch {
+    return null
+  }
+}
+
 /** A shift session someone forgot to end. */
 async function readShiftSession(service: Service): Promise<DashboardSignal | null> {
   try {
@@ -553,11 +624,12 @@ export async function readDashboardSignals(): Promise<DashboardSignals> {
     return { stats: EMPTY_STATS, signals: [] }
   }
 
-  const [menu, floor, stuck, session, demo, schedule] = await Promise.all([
+  const [menu, floor, stuck, session, reminder, demo, schedule] = await Promise.all([
     readMenu(service),
     readFloor(service),
     readStuckItems(service),
     readShiftSession(service),
+    readShiftReminder(service),
     readDemoMode(service),
     readSchedule(service),
   ])
@@ -566,6 +638,7 @@ export async function readDashboardSignals(): Promise<DashboardSignals> {
     ...menu,
     stuck.signal,
     session,
+    reminder,
     demo,
     schedule.signal,
   ].filter((s): s is DashboardSignal => s !== null)

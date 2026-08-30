@@ -75,6 +75,25 @@ export function todayIn(timezone: string): ISODate {
   }
 }
 
+/** Minutes into the current day, in the venue's zone — pairs with todayIn()
+ *  to place "right now" on the same absolute-minutes line intervalOf() uses
+ *  (dayIndex(todayIn(tz)) * MINUTES_PER_DAY + nowMinutesIn(tz)). The other
+ *  place (besides todayIn) that consults a real clock — used for "is it time
+ *  to open the shift yet", never for anything that gets stored. */
+export function nowMinutesIn(timezone: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date())
+    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? '0')
+    const m = Number(parts.find((p) => p.type === 'minute')?.value ?? '0')
+    return h * 60 + m
+  } catch {
+    const d = new Date()
+    return d.getHours() * 60 + d.getMinutes()
+  }
+}
+
 export interface Interval {
   /** Absolute minutes since the epoch. */
   start: number

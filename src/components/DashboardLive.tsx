@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { DashboardSignal, DashboardStats } from '@/lib/owner/signals'
 import type { DashboardDetails } from '@/lib/owner/signal-details'
+import type { ShiftStatusData } from '@/lib/owner/shift-status'
 import StatStrip, { type StatKey } from '@/components/StatStrip'
 import SignalStack from '@/components/SignalStack'
 import OverallViewCard from '@/components/OverallViewCard'
+import ShiftStatusCard from '@/components/ShiftStatusCard'
 
 // What keeps the dashboard current without the owner ever hitting reload —
 // "everything on the dashboard needs to update without refreshing," 2026-08-30.
@@ -30,26 +32,31 @@ import OverallViewCard from '@/components/OverallViewCard'
 const POLL_MS = 30_000
 
 export default function DashboardLive({
-  initialStats, initialSignals, initialDetails, initialOverallDemoMode,
+  initialStats, initialSignals, initialDetails, initialOverallDemoMode, initialShiftStatus,
 }: {
   initialStats: DashboardStats
   initialSignals: DashboardSignal[]
   initialDetails: DashboardDetails
   initialOverallDemoMode: boolean
+  initialShiftStatus: ShiftStatusData
 }) {
   const [stats, setStats] = useState(initialStats)
   const [signals, setSignals] = useState(initialSignals)
   const [details, setDetails] = useState(initialDetails)
+  const [shiftStatus, setShiftStatus] = useState(initialShiftStatus)
   const [expandedStat, setExpandedStat] = useState<StatKey | null>(null)
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/owner/dashboard', { cache: 'no-store' })
       if (!res.ok) return
-      const json = await res.json() as { stats: DashboardStats; signals: DashboardSignal[]; details: DashboardDetails }
+      const json = await res.json() as {
+        stats: DashboardStats; signals: DashboardSignal[]; details: DashboardDetails; shiftStatus: ShiftStatusData
+      }
       setStats(json.stats)
       setSignals(json.signals)
       setDetails(json.details)
+      setShiftStatus(json.shiftStatus)
     } catch {
       // Offline for a beat — keep showing the last good read rather than a
       // blank or an error state; the next tick (or the tab regaining focus)
@@ -82,6 +89,15 @@ export default function DashboardLive({
           into a polled client component) is what makes the row disappear
           immediately instead of waiting for the next 30s tick. */}
       <SignalStack signals={signals} details={details} onDemoToggled={refresh} />
+
+      {/* "a container for shift that gives stats on last shift and notifies
+          you when the new shift will start" — sits right under the alerts,
+          since shift-starting-soon/shift-not-started (SignalStack, above)
+          and this card read the exact same schedule + session data and
+          belong next to each other. Purely a status readout — see
+          ShiftStatusCard's own header for why the actual open/close action
+          stays on /owner/reports and isn't duplicated here. */}
+      <ShiftStatusCard status={shiftStatus} />
 
       {/* 3. The operational birds-eye deck + its demo switch — moved in here
           2026-08-30 so ITS toggle can reach the signal stack's "מצב הדגמה

@@ -9,6 +9,7 @@ import SignOutButton from '@/components/SignOutButton'
 import { getOverallDemoMode } from '@/lib/settings/server'
 import { readDashboardSignals } from '@/lib/owner/signals'
 import { readDashboardDetails } from '@/lib/owner/signal-details'
+import { readShiftStatus } from '@/lib/owner/shift-status'
 
 // ── The dashboard, rebuilt 2026-08-29 ─────────────────────────────────
 // "the main dashboard will now become the beating heart for the business."
@@ -61,10 +62,11 @@ export default async function OwnerDashboardPage() {
       .eq('auth_user_id', user.id)
   }
 
-  const [{ stats, signals }, details, overallDemoMode] = await Promise.all([
+  const [{ stats, signals }, details, overallDemoMode, shiftStatus] = await Promise.all([
     readDashboardSignals(),
     readDashboardDetails(),
     getOverallDemoMode(),
+    readShiftStatus(),
   ])
 
   return (
@@ -90,7 +92,7 @@ export default async function OwnerDashboardPage() {
           OverallViewCard.tsx and DashboardLive's own refresh() prop. */}
       <DashboardLive
         initialStats={stats} initialSignals={signals} initialDetails={details}
-        initialOverallDemoMode={overallDemoMode}
+        initialOverallDemoMode={overallDemoMode} initialShiftStatus={shiftStatus}
       />
 
       {/* 4. Everything else. Eight tiles before this rebuild, eight after. */}

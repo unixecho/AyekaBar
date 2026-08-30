@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOwner } from '@/lib/owner/guard'
+import { IN_FLIGHT_ITEM_STATUSES, OPEN_TAB_STATUSES } from '@/lib/owner/signals'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Shift sessions for the owner dashboard (PLAN_OMS_V2.md item 13).
@@ -108,6 +109,36 @@ export async function POST(request: Request) {
       .eq('status', 'active')
       .maybeSingle()
     if (!active) return NextResponse.json({ error: 'אין משמרת פעילה' }, { status: 409 })
+
+    // "make sure that you can't stop a shift with open tables or stuck
+    // items" — 2026-08-30. Same statuses the dashboard's own stat/signal
+    // read (OPEN_TAB_STATUSES, IN_FLIGHT_ITEM_STATUSES — imported, not
+    // re-typed, so this gate can never silently disagree with what the
+    // dashboard is showing at the moment someone tries to close). No time
+    // threshold on the item check, unlike the dashboard's 12-minute "stuck"
+    // ALERT — closing the books on a table with a drink still sitting at
+    // the bar thirty seconds from now is wrong regardless of how long it's
+    // been sitting; the threshold exists to decide when to interrupt
+    // someone, not whether the work is actually done.
+    const [{ count: openTabs }, { count: inFlightItems }] = await Promise.all([
+      service.from('waiter_orders').select('id', { count: 'exact', head: true }).in('status', OPEN_TAB_STATUSES),
+      service.from('waiter_order_items').select('id', { count: 'exact', head: true })
+        .in('status', IN_FLIGHT_ITEM_STATUSES).is('ready_at', null),
+    ])
+    if ((openTabs ?? 0) > 0) {
+      return NextResponse.json({
+        error: openTabs === 1
+          ? 'אי אפשר לסגור משמרת — יש חשבון פתוח אחד. סגרו אותו קודם.'
+          : `אי אפשר לסגור משמרת — יש ${openTabs} חשבונות פתוחים. סגרו אותם קודם.`,
+      }, { status: 409 })
+    }
+    if ((inFlightItems ?? 0) > 0) {
+      return NextResponse.json({
+        error: inFlightItems === 1
+          ? 'אי אפשר לסגור משמרת — יש פריט אחד שעדיין לא הוגש.'
+          : `אי אפשר לסגור משמרת — יש ${inFlightItems} פריטים שעדיין לא הוגשו.`,
+      }, { status: 409 })
+    }
 
     const { data, error } = await service
       .from('waiter_shift_sessions')

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireOwner } from '@/lib/owner/guard'
 import { readDashboardSignals } from '@/lib/owner/signals'
 import { readDashboardDetails } from '@/lib/owner/signal-details'
+import { readShiftStatus } from '@/lib/owner/shift-status'
 
 // The one endpoint that keeps /owner/dashboard live without a page refresh.
 // DashboardLive polls this on an interval and swaps its state in place —
@@ -15,14 +16,16 @@ export async function GET() {
   const auth = await requireOwner()
   if (!auth.ok) return auth.res
 
-  const [signals, details] = await Promise.all([
+  const [signals, details, shiftStatus] = await Promise.all([
     readDashboardSignals(),
     readDashboardDetails(),
+    readShiftStatus(),
   ])
 
   return NextResponse.json({
     stats: signals.stats,
     signals: signals.signals,
     details,
+    shiftStatus,
   })
 }
