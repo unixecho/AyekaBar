@@ -404,6 +404,13 @@ async function readShiftSession(service: Service): Promise<DashboardSignal | nul
   }
 }
 
+/** Exported so callers can tell "is the Overall-view demo mode on" straight
+ *  from a signals array (`signals.some(s => s.id === OVERALL_DEMO_SIGNAL_ID)`)
+ *  instead of a second, separate read — see page.tsx and DashboardLive.tsx,
+ *  2026-08-30. Guarantees the switch and the alert can never read two
+ *  different answers, since there is only ever the one read. */
+export const OVERALL_DEMO_SIGNAL_ID = 'oms-demo-mode'
+
 /** Demo mode on the Overall view. Read straight rather than through
  *  getOverallDemoMode() so a stale 60s cache entry can't tell the owner the
  *  deck is safe while it is live — this is the one switch where guessing
@@ -418,7 +425,7 @@ async function readDemoMode(service: Service): Promise<DashboardSignal | null> {
     if (error || data?.value !== true) return null
 
     return {
-      id: 'oms-demo-mode',
+      id: OVERALL_DEMO_SIGNAL_ID,
       severity: 'critical',
       rank: 100,
       icon: '🎭',

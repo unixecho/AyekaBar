@@ -6,8 +6,7 @@ import { splitName } from '@/lib/staff/name'
 import OwnerHeader from '@/components/OwnerHeader'
 import DashboardLive from '@/components/DashboardLive'
 import SignOutButton from '@/components/SignOutButton'
-import { getOverallDemoMode } from '@/lib/settings/server'
-import { readDashboardSignals } from '@/lib/owner/signals'
+import { readDashboardSignals, OVERALL_DEMO_SIGNAL_ID } from '@/lib/owner/signals'
 import { readDashboardDetails } from '@/lib/owner/signal-details'
 import { readShiftStatus } from '@/lib/owner/shift-status'
 
@@ -62,12 +61,17 @@ export default async function OwnerDashboardPage() {
       .eq('auth_user_id', user.id)
   }
 
-  const [{ stats, signals }, details, overallDemoMode, shiftStatus] = await Promise.all([
+  const [{ stats, signals }, details, shiftStatus] = await Promise.all([
     readDashboardSignals(),
     readDashboardDetails(),
-    getOverallDemoMode(),
     readShiftStatus(),
   ])
+  // Derived from the SAME signals read, not a second call to
+  // getOverallDemoMode() — that read has its own 60s cache, and a switch
+  // reading one answer while the alert above it reads another (during the
+  // exact window that matters most, right after someone flips it) is the
+  // bug this replaced. See OVERALL_DEMO_SIGNAL_ID's own comment.
+  const overallDemoMode = signals.some((s) => s.id === OVERALL_DEMO_SIGNAL_ID)
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>

@@ -86,6 +86,14 @@ const T = {
   reactivated: 'המנוי שוחזר לצוות.',
   restoredNotice: 'שוחזר/ה לצוות.',
   restoreFailed: 'השחזור נכשל',
+  addEmail: '+ הוספת אימייל',
+  addEmailHint: 'מוסיף/ה כניסה עם Google — יוכל/תוכל להיכנס לחלון הצוות ולסידור העבודה, ולמערכת ה-OMS אם תינתן לו/ה הרשאה.',
+  addEmailPh: 'name@gmail.com',
+  addEmailBtn: 'קישור',
+  addEmailCancel: 'ביטול',
+  addEmailInvalid: 'כתובת אימייל לא תקינה',
+  emailLinked: 'האימייל קושר — הגישה פעילה מיד.',
+  emailPending: 'האימייל נוסף. ההרשאה תופעל בכניסה הראשונה עם Google מהאימייל הזה.',
   schedulable: 'זמין/ה לסידור עבודה',
   schedulableHint: 'מופיע/ה כמי שאפשר לשבץ במסך סידור העבודה (owner/schedule).',
 }
@@ -208,6 +216,10 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       /** Restore only — the API refuses `false` here; use removeMember for
        *  that (it carries the self-lockout / last-owner guards this doesn't). */
       active?: true
+      /** Offline rows only — turns "no account" into a pending invite or an
+       *  immediately-linked one. See the API's own comment for why this is
+       *  add-only, never a repoint of an existing email. */
+      email?: string
     },
   ) {
     setBusyId(id)
@@ -221,6 +233,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       if (!res.ok) throw new Error(json.error)
       setMembers((cur) => cur?.map((m) => m.id === id ? json.member : m) ?? cur)
       if (patch.active) setNotice({ kind: 'ok', text: T.restoredNotice })
+      else if (patch.email) setNotice({ kind: 'ok', text: json.member.auth_user_id ? T.emailLinked : T.emailPending })
     } catch (err) {
       setNotice({ kind: 'err', text: err instanceof Error ? err.message : (patch.active ? T.restoreFailed : 'עדכון נכשל') })
     } finally {
@@ -446,6 +459,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                         onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
                         onDisplayName={(displayName) => patchMember(m.id, { displayName })}
                         onRealName={(first, last) => patchMember(m.id, { firstName: first, lastName: last })}
+                        onAddEmail={(email) => patchMember(m.id, { email })}
                         onToggleSchedulable={() => toggleSchedulable(m.id, !(schedulable[m.id] ?? false))}
                         onRemove={() => askRemove(m)}
                       />
@@ -497,13 +511,15 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 }
 
 function MemberRow({
-  m, delay, isSelf, busy, schedulable, onBadge, onToggleOwner, onDisplayName, onRealName, onToggleSchedulable, onRemove,
+  m, delay, isSelf, busy, schedulable, onBadge, onToggleOwner, onDisplayName, onRealName, onAddEmail, onToggleSchedulable, onRemove,
 }: {
   m: Member; delay: number; isSelf: boolean; busy: boolean; schedulable: boolean
   onBadge: (badge: string) => void
   onToggleOwner: () => void
   onDisplayName: (name: string | null) => void
   onRealName: (first: string, last: string) => void
+  /** Offline rows only — see AddEmailField's own comment. */
+  onAddEmail: (email: string) => void
   onToggleSchedulable: () => void
   onRemove: () => void
 }) {
@@ -633,6 +649,15 @@ function MemberRow({
             {T.realNameHint}
           </p>
         </div>
+      )}
+
+      {/* "add a Gmail to staff so they can later log in and watch the
+          scheduler or enter the OMS if permitted and required," 2026-08-30
+          — the one way out of "offline." Offline rows only: a linked or
+          pending row's email is what claim_staff_invite() matches on, and
+          this is add-only, never a repoint (see the API's own comment). */}
+      {offline && (
+        <AddEmailField disabled={busy} onCommit={onAddEmail} />
       )}
 
       {/* Display name — public only, so it sits with the site controls. Not
@@ -872,6 +897,78 @@ function DisplayNameField({ value, placeholder, disabled, onCommit }: {
         color: 'var(--text)', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none',
       }}
     />
+  )
+}
+
+/** The one way out of "offline" — "add a Gmail to staff so they can later
+ *  log in and watch the scheduler or enter the OMS if permitted," 2026-08-30.
+ *  Starts collapsed to a single chip rather than an always-open input: most
+ *  offline rows (a busboy scheduled Fridays, say) never need this, and an
+ *  empty email field sitting open on every one of them would read as a
+ *  missing/required field rather than an optional upgrade. Local validation
+ *  is a light sanity check only — the API is the real gate (uniqueness,
+ *  the offline-only restriction) and its error surfaces the same way any
+ *  other patchMember failure does. */
+function AddEmailField({ disabled, onCommit }: { disabled: boolean; onCommit: (email: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [invalid, setInvalid] = useState(false)
+
+  if (!open) {
+    return (
+      <button
+        type="button" className="press" disabled={disabled}
+        onClick={() => setOpen(true)}
+        style={{ ...ghostBtn, alignSelf: 'flex-start' }}
+      >
+        {T.addEmail}
+      </button>
+    )
+  }
+
+  const commit = () => {
+    const email = draft.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setInvalid(true); return }
+    onCommit(email)
+    setOpen(false); setDraft(''); setInvalid(false)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', margin: 0, lineHeight: 1.5 }}>
+        {T.addEmailHint}
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="email" dir="ltr" autoFocus value={draft} disabled={disabled}
+          placeholder={T.addEmailPh}
+          onChange={(e) => { setDraft(e.target.value); setInvalid(false) }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit()
+            if (e.key === 'Escape') { setOpen(false); setDraft(''); setInvalid(false) }
+          }}
+          style={{
+            flex: 1, padding: '9px 11px', borderRadius: 10,
+            border: `1px solid ${invalid ? '#ff6b6b' : 'var(--line-strong)'}`,
+            background: 'var(--bg-elev-2)', color: 'var(--text)',
+            fontSize: '0.85rem', fontFamily: 'inherit', outline: 'none',
+          }}
+        />
+        <button type="button" className="press" disabled={disabled || !draft.trim()} onClick={commit} style={ghostBtn}>
+          {T.addEmailBtn}
+        </button>
+        <button
+          type="button" className="press" disabled={disabled}
+          onClick={() => { setOpen(false); setDraft(''); setInvalid(false) }}
+          style={{ ...ghostBtn, color: 'var(--text-faint)' }}
+        >
+          {T.addEmailCancel}
+        </button>
+      </div>
+      {invalid && (
+        <p style={{ fontSize: '0.72rem', color: '#ff6b6b', margin: 0 }}>{T.addEmailInvalid}</p>
+      )}
+    </div>
   )
 }
 

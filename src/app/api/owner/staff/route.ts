@@ -193,6 +193,44 @@ export async function PATCH(request: NextRequest) {
     patch.active = true
   }
 
+  // Turn an "offline" row into a real account — "add a Gmail to staff so
+  // they can later log in and watch the scheduler or enter the OMS if
+  // permitted," 2026-08-30. An offline row has no email/auth_user_id by
+  // construction (see POST's own comment on why); this is the one way out
+  // of that, producing exactly what POST's email branch would have created
+  // had the owner typed the address from the start — pending if nobody's
+  // signed in with it yet, linked immediately if they already have.
+  // Restricted to offline rows the same way the name fields above are:
+  // a LINKED or PENDING row's email is what claim_staff_invite() matches
+  // on, and silently repointing it here (instead of revoke + re-invite,
+  // which is a deliberate, visible two-step action) risks detaching
+  // history from the person it's actually about with no confirmation at all.
+  // Deliberately does NOT touch first_name/last_name — an offline row's
+  // name was typed by the owner on purpose; claim_staff_invite() itself
+  // only ever fills a NULL name from the Google profile, never overwrites
+  // an existing one, and this follows the same rule.
+  if (body && 'email' in body) {
+    if (!isOffline(row)) {
+      return NextResponse.json(
+        { error: 'אפשר להוסיף אימייל רק לאיש/אשת צוות שנוסף/ה בלי חשבון' },
+        { status: 400 }
+      )
+    }
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: 'אימייל לא תקין' }, { status: 400 })
+    }
+    const { data: existingEmail } = await auth.service
+      .from('staff').select('id').ilike('email', likeExact(email)).maybeSingle()
+    if (existingEmail) {
+      return NextResponse.json({ error: 'האימייל הזה כבר משויך לאיש/אשת צוות אחר/ת' }, { status: 400 })
+    }
+    const user = await findAuthUserByEmail(auth.service, email)
+    patch.email = user?.email ?? email
+    patch.auth_user_id = user?.id ?? null
+    patch.claimed_at = user ? new Date().toISOString() : null
+  }
+
   // Real name, editable for offline rows ONLY. For everyone else first/last
   // are a snapshot of their Google profile and `claim_staff_invite()` writes
   // them on first sign-in — letting the owner edit those would produce a name

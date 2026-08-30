@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireOwner } from '@/lib/owner/guard'
-import { readDashboardSignals } from '@/lib/owner/signals'
+import { readDashboardSignals, OVERALL_DEMO_SIGNAL_ID } from '@/lib/owner/signals'
 import { readDashboardDetails } from '@/lib/owner/signal-details'
 import { readShiftStatus } from '@/lib/owner/shift-status'
 
@@ -27,5 +27,10 @@ export async function GET() {
     signals: signals.signals,
     details,
     shiftStatus,
+    // Same signals read, not a second app_settings query — see
+    // OVERALL_DEMO_SIGNAL_ID's own comment for why that matters here
+    // specifically (a stale second answer during the window right after
+    // someone flips the switch is the exact bug this replaced).
+    overallDemoMode: signals.signals.some((s) => s.id === OVERALL_DEMO_SIGNAL_ID),
   })
 }

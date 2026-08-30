@@ -44,6 +44,12 @@ export default function DashboardLive({
   const [signals, setSignals] = useState(initialSignals)
   const [details, setDetails] = useState(initialDetails)
   const [shiftStatus, setShiftStatus] = useState(initialShiftStatus)
+  // Held here, not just passed through as a static prop — OverallViewCard's
+  // switch needs to move on its own when SignalStack's "כיבוי" changes the
+  // SAME setting from the other control (2026-08-30: it moved the alert
+  // instantly already, but the switch itself kept showing "on" until a full
+  // reload, since it only ever re-syncs when the PROP it's given changes).
+  const [overallDemoMode, setOverallDemoMode] = useState(initialOverallDemoMode)
   const [expandedStat, setExpandedStat] = useState<StatKey | null>(null)
 
   const refresh = useCallback(async () => {
@@ -51,12 +57,14 @@ export default function DashboardLive({
       const res = await fetch('/api/owner/dashboard', { cache: 'no-store' })
       if (!res.ok) return
       const json = await res.json() as {
-        stats: DashboardStats; signals: DashboardSignal[]; details: DashboardDetails; shiftStatus: ShiftStatusData
+        stats: DashboardStats; signals: DashboardSignal[]; details: DashboardDetails
+        shiftStatus: ShiftStatusData; overallDemoMode: boolean
       }
       setStats(json.stats)
       setSignals(json.signals)
       setDetails(json.details)
       setShiftStatus(json.shiftStatus)
+      setOverallDemoMode(json.overallDemoMode)
     } catch {
       // Offline for a beat — keep showing the last good read rather than a
       // blank or an error state; the next tick (or the tab regaining focus)
@@ -101,9 +109,11 @@ export default function DashboardLive({
 
       {/* 3. The operational birds-eye deck + its demo switch — moved in here
           2026-08-30 so ITS toggle can reach the signal stack's "מצב הדגמה
-          פעיל" alert the same instant way, not just the direction above. */}
+          פעיל" alert the same instant way, and so a toggle FROM the signal
+          stack reaches back to move this switch (via the live overallDemoMode
+          state above, not the one-time initial prop). */}
       <div style={{ marginBottom: 16 }}>
-        <OverallViewCard initialDemoMode={initialOverallDemoMode} onToggled={refresh} />
+        <OverallViewCard initialDemoMode={overallDemoMode} onToggled={refresh} />
       </div>
     </>
   )
