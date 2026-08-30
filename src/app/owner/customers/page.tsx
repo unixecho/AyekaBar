@@ -1,6 +1,5 @@
 import { isOp } from '@/lib/staff/access'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import CustomerManager from '@/components/CustomerManager'
@@ -20,12 +19,9 @@ export default async function OwnerCustomersPage() {
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <OwnerHeader right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link href="/owner/dashboard" style={{ textDecoration: 'none', fontSize: '0.82rem', color: 'var(--text-faint)' }}>← ניהול</Link>
-          <SignOutButton />
-        </div>
-      } />
+      {/* Parent is /owner/loyalty (see rewards/page.tsx's own note) — reached
+          through the loyalty screen's tile grid, not the dashboard directly. */}
+      <OwnerHeader backHref="/owner/loyalty" right={<SignOutButton />} />
       <div className="rise" style={{ animationDelay: '140ms' }}>
         <CustomerManager />
       </div>

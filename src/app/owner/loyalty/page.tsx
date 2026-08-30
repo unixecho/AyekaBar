@@ -69,12 +69,7 @@ export default async function OwnerLoyaltyPage() {
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <OwnerHeader right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link href="/owner/dashboard" style={backLink}>← ניהול</Link>
-          <SignOutButton />
-        </div>
-      } />
+      <OwnerHeader backHref="/owner/dashboard" right={<SignOutButton />} />
 
       {/* The switch first: it decides whether anything below it is live. */}
       <div style={{ marginBottom: 16 }}>
@@ -127,9 +122,6 @@ function Stat({ value, label }: { value: number | null; label: string }) {
   )
 }
 
-const backLink: React.CSSProperties = {
-  textDecoration: 'none', fontSize: '0.82rem', color: 'var(--text-faint)',
-}
 const statsCard: React.CSSProperties = {
   background: 'var(--bg-elev)', border: '1px solid var(--line)',
   borderRadius: 16, padding: 16, marginBottom: 16,

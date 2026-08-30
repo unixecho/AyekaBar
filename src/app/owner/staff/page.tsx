@@ -1,6 +1,5 @@
 import { isOp } from '@/lib/staff/access'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import StaffManager from '@/components/StaffManager'
@@ -25,20 +24,11 @@ export default async function OwnerStaffPage() {
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <OwnerHeader right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link href="/owner/dashboard" style={backLink}>← ניהול</Link>
-          <SignOutButton />
-        </div>
-      } />
+      <OwnerHeader backHref="/owner/dashboard" right={<SignOutButton />} />
 
       <div className="rise" style={{ animationDelay: '140ms' }}>
         <StaffManager currentUserId={user.id} />
       </div>
     </main>
   )
-}
-
-const backLink: React.CSSProperties = {
-  textDecoration: 'none', fontSize: '0.82rem', color: 'var(--text-faint)',
 }

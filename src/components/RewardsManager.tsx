@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
+import Switch from '@/components/Switch'
 
 interface Reward {
   id: string; reward_name: string | null; reward_name_he: string | null
@@ -99,9 +100,13 @@ export default function RewardsManager() {
                 <span style={{ color: 'var(--neon-soft)', fontWeight: 700, fontSize: '0.85rem' }}>✦</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={r.active} onChange={(e) => patch(r.id, { active: e.target.checked })} /> פעיל
-                </label>
+                <button
+                  type="button" role="switch" aria-checked={r.active} className="press"
+                  onClick={() => patch(r.id, { active: !r.active })}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'var(--text-dim)', cursor: 'pointer', background: 'none', border: 'none', padding: 0, font: 'inherit' }}
+                >
+                  פעיל <Switch on={r.active} small />
+                </button>
                 <button onClick={() => askRemove(r)} className="press" style={{ ...ghost, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto' }}>מחיקה</button>
               </div>
             </div>

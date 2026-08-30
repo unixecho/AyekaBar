@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { canManageFloor } from '@/lib/waiter/access'
 import OwnerHeader from '@/components/OwnerHeader'
@@ -35,17 +34,7 @@ export default async function OwnerFloorPage() {
 
   return (
     <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 1100, margin: '0 auto' }}>
-      <OwnerHeader right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link
-            href="/owner/dashboard"
-            style={{ textDecoration: 'none', fontSize: '0.82rem', color: 'var(--text-faint)' }}
-          >
-            ← ניהול
-          </Link>
-          <SignOutButton />
-        </div>
-      } />
+      <OwnerHeader backHref="/owner/dashboard" right={<SignOutButton />} />
 
       <div className="rise" style={{ animationDelay: '80ms', marginBottom: 16 }}>
         {/* h2, not h1 — OwnerHeader already renders the page's h1 ("אייכה בר"),

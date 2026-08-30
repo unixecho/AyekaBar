@@ -354,10 +354,14 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
         {/* Admin rights on a row that can never authenticate grant nothing —
             the API refuses it, so the control is not offered either. */}
         {mode === 'account' && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={asOwner} onChange={(e) => setAsOwner(e.target.checked)} />
-            {T.ownerGrant} ⭐
-          </label>
+          <button
+            type="button" role="switch" aria-checked={asOwner} className="press"
+            onClick={() => setAsOwner((v) => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: 0, border: 'none', background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'start' }}
+          >
+            <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-dim)' }}>{T.ownerGrant} ⭐</span>
+            <Switch on={asOwner} small />
+          </button>
         )}
         {notice && (
           <p style={{

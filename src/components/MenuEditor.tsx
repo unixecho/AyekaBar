@@ -7,6 +7,7 @@ import { MENU_SLUG, loc, type MenuCategory, type MenuItem, type MenuOptionGroup,
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import MenuVersionBar from '@/components/MenuVersionBar'
 import HappyHourCard from '@/components/HappyHourCard'
+import Switch from '@/components/Switch'
 
 const T = {
   // "עריכת התפריט" → "תפריט" on the dashboard tile (2026-08-29): versions,
@@ -334,9 +335,18 @@ function ItemEditor({ item, onChange, onDelete, onUp, onDown }: {
           <LangRow label={T.name} value={item as Localized} onChange={(v) => onChange({ he: v.he, en: v.en, ar: v.ar })} skipHe />
           <LangRow label={T.note} value={item.note} onChange={(v) => onChange({ note: v })} />
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={chk}><input type="checkbox" checked={badges.includes('mustTry')} onChange={() => toggleBadge('mustTry')} /> {T.mustTry}</label>
-            <label style={chk}><input type="checkbox" checked={badges.includes('new')} onChange={() => toggleBadge('new')} /> {T.badgeNew}</label>
-            <label style={chk}><input type="checkbox" checked={item.available === false} onChange={(e) => onChange({ available: e.target.checked ? false : undefined })} /> {T.sold}</label>
+            <button type="button" role="switch" aria-checked={badges.includes('mustTry')} className="press" style={chkBtn} onClick={() => toggleBadge('mustTry')}>
+              {T.mustTry} <Switch on={badges.includes('mustTry')} small />
+            </button>
+            <button type="button" role="switch" aria-checked={badges.includes('new')} className="press" style={chkBtn} onClick={() => toggleBadge('new')}>
+              {T.badgeNew} <Switch on={badges.includes('new')} small />
+            </button>
+            <button
+              type="button" role="switch" aria-checked={item.available === false} className="press" style={chkBtn}
+              onClick={() => onChange({ available: item.available === false ? undefined : false })}
+            >
+              {T.sold} <Switch on={item.available === false} small />
+            </button>
             <button onClick={onDelete} className="press" style={{ ...ghost, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto', padding: '5px 10px' }}>{T.del}</button>
           </div>
 
@@ -395,4 +405,7 @@ const iconBtn: CSSProperties = { width: 32, height: 32, flex: '0 0 auto', border
 const ghost: CSSProperties = { padding: '8px 13px', borderRadius: 10, border: '1px solid var(--line-strong)', background: 'transparent', color: 'var(--text-dim)', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', textDecoration: 'none', display: 'inline-block' }
 const primary: CSSProperties = { padding: '8px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))', boxShadow: 'var(--glow)', color: '#fff', fontSize: '0.9rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }
 const chk: CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--text-dim)', cursor: 'pointer' }
+// Same look as `chk`, as a <button role="switch"> instead of a <label>+checkbox
+// — the iOS-style Switch replaces every native checkbox in the owner surface.
+const chkBtn: CSSProperties = { ...chk, background: 'none', border: 'none', padding: 0, font: 'inherit' }
 const bar: CSSProperties = { position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 60, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px calc(env(safe-area-inset-bottom) + 12px)', background: 'linear-gradient(to top, var(--bg) 60%, transparent)', maxWidth: 560, margin: '0 auto' }

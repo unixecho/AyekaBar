@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import Link from 'next/link'
 import WeekGrid from '@/components/shifts/WeekGrid'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
 import { draftWeek, publishedWeek } from '@/lib/shifts/store'
@@ -38,7 +39,17 @@ export default function PrintView({ weekStart }: { weekStart: ISODate }) {
 
   return (
     <main className="sh-print" style={{ padding: '20px 16px 40px', maxWidth: 1400, margin: '0 auto' }}>
-      <div className="sh-noprint" style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="sh-noprint" style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* 2026-08-30: this screen had no way back at all — this is a print
+            sheet, viewed on-screen before committing it to paper, and printed
+            hard copies obviously have no use for a nav link, hence .sh-noprint. */}
+        <Link href="/owner/schedule" className="press" style={{
+          display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none',
+          fontSize: '0.8rem', color: 'var(--text-dim)', padding: '6px 11px',
+          borderRadius: 999, border: '1px solid var(--line)',
+        }}>
+          ← {t('back')}
+        </Link>
         <button
           type="button" className="press"
           onClick={() => window.print()}
