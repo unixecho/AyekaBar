@@ -45,7 +45,14 @@ const T = {
   failed: 'שינוי המצב נכשל. נסה/י שוב.',
 }
 
-export default function OverallViewCard({ initialDemoMode }: { initialDemoMode: boolean }) {
+export default function OverallViewCard({ initialDemoMode, onToggled }: {
+  initialDemoMode: boolean
+  /** 2026-08-30: called after a successful toggle — the dashboard's own
+   *  "מצב הדגמה פעיל" alert (SignalStack) describes this exact same
+   *  app_settings row, and needs an immediate re-poll to reflect a flip made
+   *  HERE rather than waiting up to 30s. See DashboardLive.tsx. */
+  onToggled?: () => void
+}) {
   const [demo, setDemo] = useState(initialDemoMode)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,6 +86,7 @@ export default function OverallViewCard({ initialDemoMode }: { initialDemoMode: 
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? T.failed)
       setDemo(json.omsOverallDemoMode)
+      onToggled?.()
     } catch (err) {
       setDemo(!next) // roll back
       setError(err instanceof Error ? err.message : T.failed)

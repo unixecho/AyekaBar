@@ -4,12 +4,11 @@ import Link from 'next/link'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { splitName } from '@/lib/staff/name'
 import OwnerHeader from '@/components/OwnerHeader'
-import OverallViewCard from '@/components/OverallViewCard'
-import SignalStack from '@/components/SignalStack'
-import StatStrip from '@/components/StatStrip'
+import DashboardLive from '@/components/DashboardLive'
 import SignOutButton from '@/components/SignOutButton'
 import { getOverallDemoMode } from '@/lib/settings/server'
 import { readDashboardSignals } from '@/lib/owner/signals'
+import { readDashboardDetails } from '@/lib/owner/signal-details'
 
 // ── The dashboard, rebuilt 2026-08-29 ─────────────────────────────────
 // "the main dashboard will now become the beating heart for the business."
@@ -62,8 +61,9 @@ export default async function OwnerDashboardPage() {
       .eq('auth_user_id', user.id)
   }
 
-  const [{ stats, signals }, overallDemoMode] = await Promise.all([
+  const [{ stats, signals }, details, overallDemoMode] = await Promise.all([
     readDashboardSignals(),
+    readDashboardDetails(),
     getOverallDemoMode(),
   ])
 
@@ -76,19 +76,22 @@ export default async function OwnerDashboardPage() {
         </div>
       } />
 
-      {/* 1. The pulse. */}
-      <StatStrip stats={stats} />
-
-      {/* 2. Only what is true right now. Renders nothing when nothing is. */}
-      <SignalStack signals={signals} />
-
-      {/* 3. The operational birds-eye deck (ayeka-staff) + its demo switch.
-             Sits directly under the signals because it is the only card here
-             that looks at the shift happening now — everything below it is
-             navigation. */}
-      <div style={{ marginBottom: 16 }}>
-        <OverallViewCard initialDemoMode={overallDemoMode} />
-      </div>
+      {/* 1. The pulse. 2. Only what is true right now, renders nothing when
+          nothing is. 3. The operational birds-eye deck + its demo switch.
+          All three live in DashboardLive now (2026-08-30): it polls
+          /api/owner/dashboard so none of them ever need a page refresh to
+          stay current, and owns the tap-to-expand state behind each
+          number/alert. Moved the Overall-view card in here too — its demo
+          switch and the signal stack's own "מצב הדגמה פעיל" alert both
+          describe the SAME app_settings row, and toggling one used to only
+          reach the other on the next 30s poll (or never, once
+          router.refresh() stopped reaching a client component that owns its
+          own polled state) — see StatStrip.tsx/SignalStack.tsx/
+          OverallViewCard.tsx and DashboardLive's own refresh() prop. */}
+      <DashboardLive
+        initialStats={stats} initialSignals={signals} initialDetails={details}
+        initialOverallDemoMode={overallDemoMode}
+      />
 
       {/* 4. Everything else. Eight tiles before this rebuild, eight after. */}
       <div className="rise" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, animationDelay: '140ms' }}>

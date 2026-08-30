@@ -83,6 +83,52 @@ ok('an out-of-bounds drop is clamped inside',
 ok('an unplaced object is detected', !G.isPlaced({ pos_x: null, pos_y: null }))
 ok('a placed one at the origin still counts', G.isPlaced({ pos_x: 0, pos_y: 0 }))
 
+/* ── hasRoomFor: the auto-grow trigger ────────────────────────────── */
+ok('an empty canvas has room for a 2x2', G.hasRoomFor({ grid_w: 2, grid_h: 2, rotation: 0 }, canvas, []))
+{
+  // Pack every cell of a small canvas with 1x1s, leaving none free.
+  const tiny = { w: G.MAGNET.w * 2, h: G.MAGNET.h * 2, configured: true }
+  const { cols: tc, rows: tr } = G.gridDims(tiny)
+  const full = []
+  for (let c = 0; c < tc; c++)
+    for (let r = 0; r < tr; r++) {
+      const center = G.centerOf(c, r, { w: 1, h: 1 }, tiny)
+      full.push({ pos_x: center.x, pos_y: center.y, grid_w: 1, grid_h: 1, rotation: 0 })
+    }
+  ok('a fully packed canvas has no room left', !G.hasRoomFor({ grid_w: 1, grid_h: 1, rotation: 0 }, tiny, full))
+  ok('growing that canvas by one row makes room again',
+     G.hasRoomFor({ grid_w: 1, grid_h: 1, rotation: 0 }, { ...tiny, h: tiny.h + G.MAGNET.h }, full))
+}
+
+/* ── growHeightToFit: the auto-grow amount, reasoned in cell space ─── */
+{
+  const tiny = { w: G.MAGNET.w * 2, h: G.MAGNET.h * 2, configured: true }
+  const { cols: tc, rows: tr } = G.gridDims(tiny)
+  const full = []
+  for (let c = 0; c < tc; c++)
+    for (let r = 0; r < tr; r++) {
+      const center = G.centerOf(c, r, { w: 1, h: 1 }, tiny)
+      full.push({ pos_x: center.x, pos_y: center.y, grid_w: 1, grid_h: 1, rotation: 0 })
+    }
+  const grownCanvas = G.growHeightToFit({ grid_w: 1, grid_h: 1, rotation: 0 }, tiny, full)
+  eq('growHeightToFit adds exactly one row to a packed 2x2',
+     grownCanvas, { ...tiny, h: tiny.h + G.MAGNET.h })
+  ok('an already-roomy canvas is returned unchanged',
+     G.growHeightToFit({ grid_w: 1, grid_h: 1, rotation: 0 }, canvas, []).h === canvas.h)
+}
+
+/* ── reanchorAll: growing the room must not drift existing furniture ─ */
+{
+  const center = G.centerOf(2, 3, { w: 1, h: 1 }, canvas)
+  const obj = { pos_x: center.x, pos_y: center.y, grid_w: 1, grid_h: 1, rotation: 0 }
+  const grown = { ...canvas, h: canvas.h + G.MAGNET.h }
+  const [reanchored] = G.reanchorAll([obj], canvas, grown)
+  eq('reanchored object keeps the same anchor cell after growth',
+     G.anchorOf(reanchored.pos_x, reanchored.pos_y, { w: 1, h: 1 }, grown), { c: 2, r: 3 })
+  ok('an unplaced object passes through reanchorAll untouched',
+     G.reanchorAll([{ pos_x: null, pos_y: null, grid_w: 1, grid_h: 1, rotation: 0 }], canvas, grown)[0].pos_x === null)
+}
+
 /* ── THE CONTRACT WITH ayeka-staff/src/grid.ts ────────────────────── */
 // These are the values that must not drift between the two copies. A change
 // here silently moves every existing layout the other app reads.

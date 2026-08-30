@@ -6,7 +6,7 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 type Service = SupabaseClient
 
-const COLS = 'id, auth_user_id, role, badge, first_name, last_name, email, created_at, invited_at, claimed_at, show_on_site, display_order, display_name'
+const COLS = 'id, auth_user_id, role, badge, first_name, last_name, email, created_at, invited_at, claimed_at, show_on_site, display_order, display_name, active'
 
 /** `ilike` is our case-insensitive equality check, but `%` and `_` are legal in
  *  the local part of an address and would act as LIKE wildcards. */
@@ -43,11 +43,11 @@ async function findAuthUserByEmail(service: Service, email: string): Promise<Use
 async function loadRow(service: Service, id: string) {
   const { data } = await service
     .from('staff')
-    .select('id, auth_user_id, role, email')
+    .select('id, auth_user_id, role, email, active')
     .eq('id', id)
     .maybeSingle()
   return data as
-    { id: string; auth_user_id: string | null; role: string; email: string | null } | null
+    { id: string; auth_user_id: string | null; role: string; email: string | null; active: boolean } | null
 }
 
 /** An "offline" roster entry: no account, no address, exists to be scheduled.
@@ -125,19 +125,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ member: data, offline: true })
   }
 
-  // Already on the roster (claimed or pending)? Update instead of failing on
-  // the unique email index.
+  // Already on the roster (claimed, pending, OR previously removed)? Update
+  // instead of failing on the unique email index — and a removed row comes
+  // back to life rather than staying invisible, the same "re-invite ==
+  // restore" shortcut reactivateTable() gives the floor plan.
   const { data: existing } = await auth.service
-    .from('staff').select('id').ilike('email', likeExact(email)).maybeSingle()
+    .from('staff').select('id, active').ilike('email', likeExact(email)).maybeSingle()
   if (existing) {
     const { data, error } = await auth.service
       .from('staff')
-      .update({ role, badge })
+      .update({ role, badge, active: true })
       .eq('id', existing.id)
       .select(COLS)
       .single()
     if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
-    return NextResponse.json({ member: data, updated: true })
+    return NextResponse.json({ member: data, updated: true, reactivated: !existing.active })
   }
 
   const user = await findAuthUserByEmail(auth.service, email)
@@ -168,7 +170,7 @@ export async function PATCH(request: NextRequest) {
 
   const body = await request.json().catch(() => null) as
     {
-      id?: string; badge?: string | null; role?: string
+      id?: string; badge?: string | null; role?: string; active?: unknown
       showOnSite?: unknown; displayOrder?: unknown; displayName?: unknown
     } | null
   const id = body?.id
@@ -179,6 +181,17 @@ export async function PATCH(request: NextRequest) {
 
   const patch: Record<string, unknown> = {}
   if (body && 'badge' in body) patch.badge = body.badge?.trim() || null
+
+  // Restore only — the other half of DELETE's deactivate. `active: false`
+  // is refused here on purpose: DELETE is the one path that carries the
+  // self-lockout / last-owner guards, and a second route to the same write
+  // without them is how those guards get quietly bypassed.
+  if (body && 'active' in body) {
+    if (body.active !== true) {
+      return NextResponse.json({ error: 'להסרה יש להשתמש בפעולת ההסרה' }, { status: 400 })
+    }
+    patch.active = true
+  }
 
   // Real name, editable for offline rows ONLY. For everyone else first/last
   // are a snapshot of their Google profile and `claim_staff_invite()` writes
@@ -307,7 +320,29 @@ export async function DELETE(request: NextRequest) {
     }
   }
 
-  const { error } = await auth.service.from('staff').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: 'מחיקה נכשלה' }, { status: 500 })
+  // Deactivate, never delete — same pattern deactivateTable() already uses
+  // for the floor plan (migration 028), and for the same reason: historical
+  // orders/events still point at this row (registered_by, claimed_by,
+  // delivered_by, voided_by, picked_up_by, actor_staff_id, waiter_staff_id,
+  // and half a dozen more, mostly ON DELETE NO ACTION) — a hard DELETE on
+  // anyone with real activity fails outright, which was exactly the
+  // "מחיקה נכשלה" bug for staff who'd actually worked a shift.
+  //
+  // auth_user_id is cleared alongside `active` — not just for tidiness.
+  // Every access check in this app (isOp/canEditMenu/isStaff, the SQL
+  // is_op()/is_menu_editor()/is_floor_manager()/is_schedule_manager()/
+  // is_staff_client() functions, middleware, and every /owner/* page's own
+  // server-side re-check) resolves "who is signed in" as `staff WHERE
+  // auth_user_id = auth.uid()`. Nulling it here means that lookup finds NO
+  // row for this person's next request — access is revoked EVERYWHERE those
+  // checks already run, without touching any of them. See migration
+  // 041_staff_soft_delete.sql's own note on why claim_staff_invite() also
+  // had to change: without that fix, the same person signing in again would
+  // silently re-link and undo this.
+  const { error } = await auth.service
+    .from('staff')
+    .update({ active: false, auth_user_id: null })
+    .eq('id', id)
+  if (error) return NextResponse.json({ error: 'ההסרה נכשלה' }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

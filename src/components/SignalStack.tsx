@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { haptic } from '@/lib/haptics'
 import type { DashboardSignal, SignalSeverity } from '@/lib/owner/signals'
+import type { DashboardDetails } from '@/lib/owner/signal-details'
+import { MenuChangesList, StuckItemsList } from '@/components/DashboardDetailLists'
 
 // The dashboard's alert stack. Renders nothing at all when there is nothing to
 // say — see the header of lib/owner/signals.ts for why that matters more than
@@ -13,6 +14,13 @@ import type { DashboardSignal, SignalSeverity } from '@/lib/owner/signals'
 // Ordering is decided upstream (each signal carries a fixed `rank`), not here.
 // A component that re-sorted by its own idea of urgency would make the stack
 // jitter between two loads with identical contents.
+//
+// 2026-08-30: two rows now expand IN PLACE instead of only linking away —
+// "פריט תקוע" (which items, which table, whose) and "שינויים בתפריט לא
+// פורסמו" (which items). EXPANDABLE maps a signal id to the detail list it
+// opens; every other signal keeps its original single-Link row untouched.
+// The row's own action chip still navigates to the full page (a report, the
+// editor) — expanding answers "what is this," the chip is still "go fix it."
 
 const T = {
   title: 'מה דורש תשומת לב',
@@ -27,10 +35,26 @@ const SEVERITY: Record<SignalSeverity, { line: string; chip: string; ring: strin
   info:     { line: '#60a5fa', chip: 'rgba(96,165,250,0.13)',  ring: 'rgba(96,165,250,0.32)' },
 }
 
-export default function SignalStack({ signals }: { signals: DashboardSignal[] }) {
-  const router = useRouter()
+/** Which detail list a signal's id expands into, if any. Keyed by id rather
+ *  than a flag on DashboardSignal itself — signals.ts stays a pure "what's
+ *  true right now" module with no opinion about how the UI presents it. */
+const EXPANDABLE: Record<string, (d: DashboardDetails) => ReactNode> = {
+  'oms-stuck-items': (d) => <StuckItemsList rows={d.stuckItems} />,
+  'menu-unpublished': (d) => <MenuChangesList rows={d.menuChanges} />,
+}
+
+export default function SignalStack({ signals, details, onDemoToggled }: {
+  signals: DashboardSignal[]
+  details: DashboardDetails
+  /** Called after turning demo mode off succeeds — an immediate re-poll so
+   *  this row disappears right away instead of waiting for the next 30s
+   *  tick (see DashboardLive's own comment on why router.refresh() stopped
+   *  reaching this once it lived inside a polled client component). */
+  onDemoToggled?: () => void
+}) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
 
   // The silence rule, enforced at the only place it can be enforced.
   if (signals.length === 0) return null
@@ -58,9 +82,7 @@ export default function SignalStack({ signals }: { signals: DashboardSignal[] })
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? T.demoFailed)
-      // Re-read the server component so the row disappears — and so the
-      // Overall view's own card updates in the same paint.
-      router.refresh()
+      onDemoToggled?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : T.demoFailed)
     } finally {
@@ -90,6 +112,10 @@ export default function SignalStack({ signals }: { signals: DashboardSignal[] })
             delay={Math.min(i, 6) * 45}
             busy={busy}
             onDemoOff={turnDemoOff}
+            renderDetail={EXPANDABLE[s.id]}
+            details={details}
+            open={openId === s.id}
+            onToggle={() => setOpenId((cur) => (cur === s.id ? null : s.id))}
           />
         ))}
       </div>
@@ -103,11 +129,15 @@ export default function SignalStack({ signals }: { signals: DashboardSignal[] })
   )
 }
 
-function SignalRow({ signal, delay, busy, onDemoOff }: {
+function SignalRow({ signal, delay, busy, onDemoOff, renderDetail, details, open, onToggle }: {
   signal: DashboardSignal
   delay: number
   busy: boolean
   onDemoOff: () => void
+  renderDetail?: (d: DashboardDetails) => ReactNode
+  details: DashboardDetails
+  open: boolean
+  onToggle: () => void
 }) {
   const tone = SEVERITY[signal.severity]
   const body = (
@@ -123,15 +153,9 @@ function SignalRow({ signal, delay, busy, onDemoOff }: {
           </small>
         )}
       </span>
-      <span style={action} aria-hidden>
-        {signal.kind === 'demo-off' && busy ? T.demoOffBusy : signal.actionLabel}
-      </span>
     </>
   )
 
-  // The whole row is the target, not just the chip at the end — this is read
-  // one-handed on a phone mid-service, and a 60px pill is the wrong tap area
-  // for the most urgent thing on the screen.
   const shared: CSSProperties = {
     ...row,
     borderInlineStartColor: tone.line,
@@ -146,13 +170,50 @@ function SignalRow({ signal, delay, busy, onDemoOff }: {
         style={{ ...shared, font: 'inherit', textAlign: 'start', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}
       >
         {body}
+        <span style={action} aria-hidden>{busy ? T.demoOffBusy : signal.actionLabel}</span>
       </button>
     )
   }
 
+  if (renderDetail) {
+    // Two sibling controls, not one nested inside the other (a <Link> inside
+    // a <button> is invalid and unreachable by keyboard either way): the row
+    // body TOGGLES the detail open, the chip at the end still NAVIGATES —
+    // expanding answers "what is this," the chip is still "go fix it."
+    return (
+      <div className="rise" style={{ ...shared, flexDirection: 'column', alignItems: 'stretch', gap: 0, padding: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px' }}>
+          <button
+            type="button" className="press" onClick={onToggle} aria-expanded={open}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'start', cursor: 'pointer' }}
+          >
+            {body}
+            <span aria-hidden style={{ flex: '0 0 auto', color: 'var(--text-faint)', fontSize: '0.8rem', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s var(--ease)' }}>
+              ▾
+            </span>
+          </button>
+          {signal.href && (
+            <Link href={signal.href} style={{ ...action, textDecoration: 'none', flex: '0 0 auto' }}>
+              {signal.actionLabel}
+            </Link>
+          )}
+        </div>
+        {open && (
+          <div className="rise" style={{ padding: '0 11px 11px' }}>
+            {renderDetail(details)}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // The whole row is the target, not just the chip at the end — this is read
+  // one-handed on a phone mid-service, and a 60px pill is the wrong tap area
+  // for the most urgent thing on the screen.
   return (
     <Link href={signal.href ?? '#'} className="rise press" style={{ ...shared, textDecoration: 'none' }}>
       {body}
+      <span style={action} aria-hidden>{signal.actionLabel}</span>
     </Link>
   )
 }

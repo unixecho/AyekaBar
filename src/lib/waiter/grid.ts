@@ -148,3 +148,92 @@ export function gridDims(canvas: Canvas): { cols: number; rows: number } {
   const { pw, ph } = cellSize(canvas)
   return { cols: Math.floor((100 + EPS) / pw), rows: Math.floor((100 + EPS) / ph) }
 }
+
+/**
+ * Whether this footprint has anywhere at all to land in the current canvas —
+ * i.e., whether snapToGrid would find a real anchor rather than falling
+ * through to its last-resort "leave it where it landed" clamp. Scans every
+ * anchor rather than ring-searching outward: this only runs when a caller is
+ * deciding whether the room needs to grow, not on every drag frame, so
+ * exhaustive is fine and a lot simpler to trust than reasoning about how far
+ * a ring search reaches from an arbitrary starting point.
+ */
+export function hasRoomFor(
+  moving: Pick<Placeable, 'grid_w' | 'grid_h' | 'rotation'>,
+  canvas: Canvas,
+  others: Placeable[]
+): boolean {
+  const span = effSpan(moving)
+  const { cols, rows } = gridDims(canvas)
+  const occupied = occupancySet(others, canvas)
+  for (let r = 0; r <= rows - span.h; r++) {
+    for (let c = 0; c <= cols - span.w; c++) {
+      if (fits(c, r, span, canvas, occupied)) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Recompute every placed object's percentage position for a NEW canvas size,
+ * preserving its ANCHOR CELL rather than its raw percentage. A percentage
+ * only means something relative to one canvas size — resizing the canvas
+ * without this would silently slide every existing table by however much the
+ * resize distorted the grid, which reads as furniture drifting for no reason
+ * the owner did. Used when a builder grows or shrinks the room: reanchor
+ * everything already on the map first, onto the SAME cells, then whatever
+ * triggered the resize gets its own fresh snap against the result.
+ */
+export function reanchorAll<T extends Placeable>(
+  objects: T[], oldCanvas: Canvas, newCanvas: Canvas
+): T[] {
+  return objects.map((o) => {
+    if (!isPlaced(o)) return o
+    const span = effSpan(o)
+    const { c, r } = anchorOf(o.pos_x!, o.pos_y!, span, oldCanvas)
+    const center = centerOf(c, r, span, newCanvas)
+    return { ...o, pos_x: center.x, pos_y: center.y }
+  })
+}
+
+/**
+ * The smallest height (canvas.h grown by whole MAGNET rows) that gives
+ * `moving` somewhere to land, given every OTHER object's CURRENT placement.
+ * Reasons in CELL space against the canvas passed in, computed once — an
+ * object's anchor cell does not move just because the canvas is about to
+ * grow, so occupancy must not be re-derived from raw percentages at each
+ * candidate height. Doing that would reinterpret a percentage that has not
+ * caught up with the new size yet, and answer a question about the wrong
+ * cells entirely (the same bug reanchorAll above exists to fix on the write
+ * side). Only grows height: a column anchor depends on width alone, so a
+ * caller that only ever adds rows never has to reason about width drift.
+ */
+export function growHeightToFit(
+  moving: Pick<Placeable, 'grid_w' | 'grid_h' | 'rotation'>,
+  canvas: Canvas,
+  others: Placeable[],
+  maxSteps = 30
+): Canvas {
+  // Every OTHER object's cell, fixed once against the canvas passed in —
+  // this is the stable fact that must survive however many rows get added.
+  const otherCells = others.filter(isPlaced).map((o) => {
+    const oSpan = effSpan(o)
+    const { c, r } = anchorOf(o.pos_x!, o.pos_y!, oSpan, canvas)
+    return { c, r, span: oSpan }
+  })
+  const occupied = new Set<string>()
+  for (const o of otherCells) for (const key of cellsOf(o.c, o.r, o.span)) occupied.add(key)
+
+  const span = effSpan(moving)
+  let grown = canvas
+  for (let i = 0; i < maxSteps; i++) {
+    const { cols, rows } = gridDims(grown)
+    for (let r = 0; r <= rows - span.h; r++) {
+      for (let c = 0; c <= cols - span.w; c++) {
+        if (fits(c, r, span, grown, occupied)) return grown
+      }
+    }
+    grown = { ...grown, h: grown.h + MAGNET.h }
+  }
+  return grown
+}

@@ -30,15 +30,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  addFloor, addProp, addTable, canvasOf, deactivateTable, isLandmark,
+  addFloor, addProp, addTable, canvasOf, deactivateTable, defaultPropSpan, isLandmark,
   loadFloorPlan, onFloor, PROP_LANDMARKS, PROP_OBSTACLES, reactivateTable, removeProp,
   saveFloorLayout, setTableLabelKind, suggestNumber, tableName, UNIQUE_VIOLATION,
   type Floor, type FloorPlan, type FloorProp, type FloorTable,
   type LabelKind, type PropKind, type TableKind, type TableShape,
 } from '@/lib/waiter/floor'
-import { cellSize, effSpan, gridDims, isPlaced, snapToGrid, type Canvas } from '@/lib/waiter/grid'
+import {
+  anchorOf, cellSize, effSpan, gridDims, growHeightToFit, isPlaced, MAGNET,
+  reanchorAll, snapToGrid, type Canvas, type Placeable,
+} from '@/lib/waiter/grid'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import PromptSheet, { type PromptRequest } from '@/components/PromptSheet'
+import { haptic } from '@/lib/haptics'
 import './floor-builder.css'
 
 const KIND_HE: Record<TableKind, string> = {
@@ -52,6 +56,11 @@ const PROP_HE: Record<PropKind, string> = {
 const PROP_GLYPH: Partial<Record<PropKind, string>> = {
   entrance: '⇥', kitchen: '⌂', wc: '⚦', bar: '⊓', register: '▤',
 }
+
+// Room size bounds, in whole MAGNET cells per axis — shared by the manual
+// resize stepper and the ceiling auto-grow refuses to sail past.
+const MIN_ROOM_CELLS = 2
+const MAX_ROOM_CELLS = 24
 
 type Sel = { kind: 'table'; id: string } | { kind: 'prop'; id: string } | null
 
@@ -73,6 +82,13 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   const [sel, setSel] = useState<Sel>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [dirty, setDirty] = useState(false)
+  // A local override once the room has been resized (manually, or auto-grown
+  // to fit a table) — same "batched into Save" posture as position/size.
+  // `floor.canvas_w/h` stays untouched until Save persists this. Cleared on
+  // a floor switch (a different floor has its own size) and folded back into
+  // `plan` after a successful Save, so nothing keeps two disagreeing ideas
+  // of "the current canvas" once the database agrees.
+  const [canvasOverride, setCanvasOverride] = useState<Canvas | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null)
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
@@ -92,7 +108,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   }, [])
 
   const floor: Floor | undefined = plan?.floors.find((f) => f.id === floorId)
-  const canvas: Canvas = canvasOf(floor)
+  const canvas: Canvas = canvasOverride ?? canvasOf(floor)
   const scoped = plan && floorId ? onFloor(plan, floorId) : { tables: [], props: [] }
   const placedTables = scoped.tables.filter(isPlaced)
   const unplaced = scoped.tables.filter((t) => !isPlaced(t))
@@ -116,6 +132,41 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
     setDirty(true)
   }
 
+  /** Grow the room by whole rows when there is nowhere left for `moving` to
+   *  land, then snap it in. Growing reanchors every OTHER object already on
+   *  this floor onto the taller canvas FIRST — same cell, recomputed
+   *  percentage (see grid.ts's reanchorAll) — so nothing already placed
+   *  silently drifts just because the room got taller. `excludeId` is the
+   *  object being placed/moved/resized itself, which must never count as
+   *  its own obstacle. */
+  const snapWithGrowth = (
+    x: number, y: number,
+    moving: Pick<Placeable, 'grid_w' | 'grid_h' | 'rotation'>,
+    excludeId: string
+  ): { x: number; y: number } => {
+    const others = objects.filter((o) => o.id !== excludeId)
+    // Capped at the same ceiling the manual stepper respects — auto-grow is
+    // the emergency door, not a way to sail past a limit the owner would
+    // otherwise be stopped at.
+    const room = Math.max(0, MAX_ROOM_CELLS - gridDims(canvas).rows)
+    const grown = growHeightToFit(moving, canvas, others, room)
+    if (grown.h === canvas.h) return snapToGrid(x, y, moving, canvas, others)
+
+    const reTables = reanchorAll(scoped.tables, canvas, grown)
+    const reProps = reanchorAll(scoped.props, canvas, grown)
+    setPlan((p) => p && {
+      ...p,
+      tables: p.tables.map((t) => reTables.find((r) => r.id === t.id) ?? t),
+      props: p.props.map((x2) => reProps.find((r) => r.id === x2.id) ?? x2),
+    })
+    setCanvasOverride(grown)
+    setDirty(true)
+    flash('החדר הורחב כדי לפנות מקום')
+
+    const grownOthers = [...reTables, ...reProps].filter(isPlaced).filter((o) => o.id !== excludeId)
+    return snapToGrid(x, y, moving, grown, grownOthers)
+  }
+
   /** Re-snap after a resize or rotation: a table that grew must not be left
    *  overlapping a neighbour it used to clear. */
   const reshape = (id: string, kind: 'table' | 'prop', patch: { grid_w?: number; grid_h?: number; rotation?: number }) => {
@@ -125,8 +176,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
     if (!obj) return
     const next = { ...obj, ...patch }
     if (isPlaced(next)) {
-      const others = objects.filter((o) => o.id !== id)
-      const spot = snapToGrid(next.pos_x!, next.pos_y!, next, canvas, others)
+      const spot = snapWithGrowth(next.pos_x!, next.pos_y!, next, id)
       Object.assign(next, { pos_x: spot.x, pos_y: spot.y })
     }
     if (kind === 'table') patchTable(id, next as Partial<FloorTable>)
@@ -175,8 +225,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
         ? plan?.tables.find((t) => t.id === drag.id)
         : plan?.props.find((x) => x.id === drag.id)
       if (obj) {
-        const others = objects.filter((o) => o.id !== drag.id)
-        const spot = snapToGrid(drag.x, drag.y, obj, canvas, others)
+        const spot = snapWithGrowth(drag.x, drag.y, obj, drag.id)
         if (drag.kind === 'table') patchTable(drag.id, { pos_x: spot.x, pos_y: spot.y })
         else patchProp(drag.id, { pos_x: spot.x, pos_y: spot.y })
       }
@@ -201,7 +250,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   /** Drop an unplaced table onto the middle of the room and let the magnet
    *  find the nearest free anchor. */
   function placeOnMap(t: FloorTable) {
-    const spot = snapToGrid(50, 50, t, canvas, objects)
+    const spot = snapWithGrowth(50, 50, t, t.id)
     patchTable(t.id, { pos_x: spot.x, pos_y: spot.y })
     setSel({ kind: 'table', id: t.id })
   }
@@ -242,13 +291,21 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   async function onAddProp(kind: PropKind) {
     if (!floorId) return
     setBusy(true)
-    const spot = snapToGrid(50, 50, { grid_w: 1, grid_h: 1, rotation: 0 }, canvas, objects)
-    const { row, error } = await addProp({ floor_id: floorId, kind, pos_x: spot.x, pos_y: spot.y })
+    // The real footprint is knowable up front (defaultPropSpan is the same
+    // pure function the server falls back to) — snapping once with it,
+    // rather than guessing 1×1 and re-snapping after the round trip, is both
+    // simpler and lets snapWithGrowth grow the room BEFORE the write instead
+    // of after, when a second grow decision would be reasoning about a
+    // canvas that may already be stale.
+    const span = defaultPropSpan(kind)
+    const spot = snapWithGrowth(50, 50, { grid_w: span.grid_w, grid_h: span.grid_h, rotation: 0 }, '')
+    const { row, error } = await addProp({
+      floor_id: floorId, kind, pos_x: spot.x, pos_y: spot.y,
+      grid_w: span.grid_w, grid_h: span.grid_h,
+    })
     setBusy(false)
     if (error || !row) { flash(error ?? 'לא ניתן להוסיף', true); return }
-    // Re-snap with the real footprint now that we know it.
-    const fixed = snapToGrid(spot.x, spot.y, row, canvas, objects)
-    setPlan((p) => p && { ...p, props: [...p.props, { ...row, pos_x: fixed.x, pos_y: fixed.y }] })
+    setPlan((p) => p && { ...p, props: [...p.props, row] })
     setSel({ kind: 'prop', id: row.id })
     setDirty(true)
   }
@@ -338,8 +395,50 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
     const err = await saveFloorLayout(floorId, scoped.tables, scoped.props, canvas)
     setBusy(false)
     if (err) { flash(err, true); return }
+    // Fold the (possibly resized) canvas into the floor itself and drop the
+    // local override — the database now agrees with it, so re-deriving from
+    // `plan` on the next render must land on the same values it just saved.
+    setPlan((p) => p && {
+      ...p,
+      floors: p.floors.map((f) => f.id === floorId
+        ? { ...f, canvas_w: Math.round(canvas.w), canvas_h: Math.round(canvas.h), configured: scoped.tables.length > 0 && scoped.tables.every(isPlaced) }
+        : f),
+    })
+    setCanvasOverride(null)
     setDirty(false)
     flash('המפה נשמרה')
+  }
+
+  /** Manual room resize, in whole MAGNET cells per axis — the other half of
+   *  auto-grow: "reaches the end of the grid" is handled on its own by
+   *  snapWithGrowth, this is for an owner who wants to shrink a room back
+   *  down once it has emptied out, or grow it ahead of time before dragging
+   *  in a wall of new tables. A shrink that would push something already on
+   *  the map outside the new bounds is refused rather than silently cropping
+   *  or moving anyone's tables. */
+  function resizeCanvas(axis: 'w' | 'h', cells: number) {
+    const unit = axis === 'w' ? MAGNET.w : MAGNET.h
+    const next: Canvas = { ...canvas, [axis]: cells * unit }
+    const { cols: newCols, rows: newRows } = gridDims(next)
+
+    for (const o of objects) {
+      const span = effSpan(o)
+      const { c, r } = anchorOf(o.pos_x!, o.pos_y!, span, canvas)
+      if (c + span.w > newCols || r + span.h > newRows) {
+        flash('אי אפשר לצמצם — יש פריטים שייצאו מהחדר. הזיזו או מחקו אותם קודם', true)
+        return
+      }
+    }
+
+    const reTables = reanchorAll(scoped.tables, canvas, next)
+    const reProps = reanchorAll(scoped.props, canvas, next)
+    setPlan((p) => p && {
+      ...p,
+      tables: p.tables.map((t) => reTables.find((r) => r.id === t.id) ?? t),
+      props: p.props.map((x) => reProps.find((r) => r.id === x.id) ?? x),
+    })
+    setCanvasOverride(next)
+    setDirty(true)
   }
 
   /* ── Render ───────────────────────────────────────────────────────── */
@@ -363,11 +462,11 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
                   title: 'יש שינויים שלא נשמרו',
                   body: 'לעבור קומה בכל זאת? השינויים שלא נשמרו יאבדו.',
                   confirmLabel: 'מעבר בכל זאת',
-                  onConfirm: () => { setFloorId(f.id); setSel(null); setDirty(false) },
+                  onConfirm: () => { setFloorId(f.id); setSel(null); setDirty(false); setCanvasOverride(null) },
                 })
                 return
               }
-              setFloorId(f.id); setSel(null); setDirty(false)
+              setFloorId(f.id); setSel(null); setDirty(false); setCanvasOverride(null)
             }}
           >
             {f.name_he}
@@ -386,6 +485,19 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
           <button className="fb-btn fb-btn--primary" onClick={() => void onAddTable()} disabled={busy}>
             + שולחן
           </button>
+          <div className="fb-group">
+            <span className="fb-group-label">גודל החדר</span>
+            <div className="fb-steppers">
+              <Stepper
+                label="עמודות" value={cols} min={MIN_ROOM_CELLS} max={MAX_ROOM_CELLS} disabled={busy}
+                onChange={(v) => resizeCanvas('w', v)}
+              />
+              <Stepper
+                label="שורות" value={rows} min={MIN_ROOM_CELLS} max={MAX_ROOM_CELLS} disabled={busy}
+                onChange={(v) => resizeCanvas('h', v)}
+              />
+            </div>
+          </div>
           <div className="fb-group">
             <span className="fb-group-label">נקודות ציון</span>
             <div className="fb-chips">
@@ -690,12 +802,16 @@ function Stepper({
   label: string; value: number; min: number; max: number
   disabled: boolean; onChange: (v: number) => void
 }) {
+  // haptic('tick') on every step — the finger is doing the deciding here,
+  // same rule the shift scheduler's own steppers follow (CLAUDE.md's
+  // haptics section names "wheels, steppers" explicitly).
+  const step = (v: number) => { haptic('tick'); onChange(v) }
   return (
     <div className="fb-stepper">
       <span>{label}</span>
-      <button disabled={disabled || value <= min} onClick={() => onChange(value - 1)} aria-label={`${label} פחות`}>−</button>
+      <button disabled={disabled || value <= min} onClick={() => step(value - 1)} aria-label={`${label} פחות`}>−</button>
       <b>{value}</b>
-      <button disabled={disabled || value >= max} onClick={() => onChange(value + 1)} aria-label={`${label} עוד`}>+</button>
+      <button disabled={disabled || value >= max} onClick={() => step(value + 1)} aria-label={`${label} עוד`}>+</button>
     </div>
   )
 }

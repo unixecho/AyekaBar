@@ -59,8 +59,13 @@ export const SHIFT_OPEN_HOURS = 14
  *  case. Leaving it out inverted the alert, flagging untouched items while
  *  staying silent on abandoned ones. (Full lifecycle, per the CHECK on
  *  waiter_order_items: registered → sent → preparing → ready → delivered,
- *  plus voided.) */
-const IN_FLIGHT_ITEM_STATUSES = ['sent', 'preparing']
+ *  plus voided.)
+ *
+ *  Exported so signal-details.ts's drill-down query filters on the EXACT
+ *  same statuses/thresholds this count does — two copies of this list would
+ *  eventually drift, and a dashboard whose expanded view shows a different
+ *  count than the number above it is worse than not expanding at all. */
+export const IN_FLIGHT_ITEM_STATUSES = ['sent', 'preparing']
 
 /** How many out-of-stock item names to name before "ועוד N". */
 const NAME_PREVIEW = 2
@@ -220,6 +225,12 @@ async function readMenu(service: Service): Promise<DashboardSignal[]> {
  *
  *  `total_agorot` is maintained live as items are registered (verified against
  *  the item sums on production), so this stays one cheap read. */
+
+/** A tab still on the floor. Exported so signal-details.ts's drill-down
+ *  query filters on the EXACT same statuses this count does — see
+ *  IN_FLIGHT_ITEM_STATUSES's own comment for why that matters. */
+export const OPEN_TAB_STATUSES = ['open', 'filed']
+
 async function readFloor(service: Service): Promise<{
   openTabs: number; floorAgorot: number; known: boolean
 }> {
@@ -227,7 +238,7 @@ async function readFloor(service: Service): Promise<{
     const { data, error } = await service
       .from('waiter_orders')
       .select('total_agorot')
-      .in('status', ['open', 'filed'])
+      .in('status', OPEN_TAB_STATUSES)
     if (error || !data) return { openTabs: 0, floorAgorot: 0, known: false }
     return {
       openTabs: data.length,
@@ -353,11 +364,57 @@ async function readDemoMode(service: Service): Promise<DashboardSignal | null> {
 /** The snapshot a published week froze. Mirrors `rowToPublishedWeek`'s input
  *  in lib/shifts/serialize.ts — kept local and minimal because this module
  *  only needs staffing counts, not the full domain type. */
-interface SnapshotShift {
+export interface SnapshotShift {
   date?: string
   start?: string
-  assignments?: { roleId?: string; staffId?: string | null }[]
+  end?: string
+  // Frozen alongside roleId/staffId at publish time — the snapshot already
+  // carries a display name, so a "who's on today" drill-down needs no
+  // separate staff lookup at all (see signal-details.ts's readScheduledToday).
+  assignments?: { roleId?: string; staffId?: string | null; staffName?: string }[]
   requirements?: { roleId?: string; min?: number }[]
+}
+
+/** The active venue's id, today's date string, and every published shift
+ *  touching today or tomorrow — shared by readSchedule (the count + gap
+ *  signal below) and signal-details.ts's "who's on today" drill-down, so the
+ *  two can never disagree about what counts as "today's schedule." `known`
+ *  is false only on an actual read failure — a real "nobody published a
+ *  week" resolves to `shifts: []` with `known: true`, per this file's own
+ *  "never surface a failure as a confident zero" rule. */
+export async function readTodayShifts(service: Service): Promise<{
+  venueId: string | null; today: string; shifts: SnapshotShift[]; known: boolean
+}> {
+  const today = todayIn(AYEKA_VENUE.timezone)
+  const unknown = { venueId: null, today, shifts: [], known: false }
+
+  const { data: venue, error: venueError } = await service
+    .from('venues')
+    .select('id')
+    .eq('active', true)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  // No active venue is folded into "unknown" too, not a confident zero — the
+  // original readSchedule treated it that way (an unconfigured venue reads
+  // as "can't tell" rather than "definitely nobody's scheduled"), and this
+  // helper must not quietly relax that.
+  if (venueError || !venue) return unknown
+
+  const tomorrow = addDays(today, 1)
+
+  const { data: weeks, error } = await service
+    .from('schedule_weeks')
+    .select('published_snapshot')
+    .eq('venue_id', venue.id)
+    .eq('status', 'published')
+  if (error) return unknown
+
+  const shifts: SnapshotShift[] = (weeks ?? []).flatMap((w) => {
+    const snap = w.published_snapshot as { shifts?: SnapshotShift[] } | null
+    return (snap?.shifts ?? []).filter((s) => s.date === today || s.date === tomorrow)
+  })
+  return { venueId: venue.id, today, shifts, known: true }
 }
 
 /** Today's roster, and any role a published shift is short on.
@@ -387,31 +444,8 @@ async function readSchedule(service: Service): Promise<{
 }> {
   const miss = { scheduledToday: 0, known: false, signal: null }
   try {
-    const { data: venue } = await service
-      .from('venues')
-      .select('id')
-      .eq('active', true)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-    if (!venue) return miss
-
-    const today = todayIn(AYEKA_VENUE.timezone)
-    const tomorrow = addDays(today, 1)
-
-    const { data: weeks, error } = await service
-      .from('schedule_weeks')
-      .select('published_snapshot')
-      .eq('venue_id', venue.id)
-      .eq('status', 'published')
-    if (error) return miss
-
-    const shifts: SnapshotShift[] = (weeks ?? []).flatMap((w) => {
-      const snap = w.published_snapshot as { shifts?: SnapshotShift[] } | null
-      return (snap?.shifts ?? []).filter(
-        (s) => s.date === today || s.date === tomorrow
-      )
-    })
+    const { today, shifts, known } = await readTodayShifts(service)
+    if (!known) return miss
     if (shifts.length === 0) return { scheduledToday: 0, known: true, signal: null }
 
     // Distinct PEOPLE on today. A split shift is two assignment rows and one
@@ -502,7 +536,7 @@ async function readSchedule(service: Service): Promise<{
  *  Read from DEFAULT_ROLES rather than a second hand-written map, so adding a
  *  role in config.ts cannot leave this function behind. An unknown id falls
  *  back to the id itself: visibly raw, rather than confidently wrong. */
-function roleLabel(roleId: string): string {
+export function roleLabel(roleId: string): string {
   return DEFAULT_ROLES.find((r) => r.id === roleId)?.name.he ?? roleId
 }
 

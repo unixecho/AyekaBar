@@ -24,18 +24,25 @@ interface Member {
   display_order: number | null
   /** Public-facing name override (e.g. Hebrew spelling). */
   display_name: string | null
+  /** false = removed. The row (and their order/audit history) stays intact
+   *  — same pattern the floor plan already uses for a deleted table
+   *  (migration 028) — and access is revoked (see 041_staff_soft_delete.sql).
+   *  Restorable with one tap, same as a removed table. */
+  active: boolean
 }
 
 const T = {
   title: 'ניהול צוות',
   subtitle: 'הוסף/י אנשי צוות לפי אימייל — גם לפני שנכנסו לראשונה. בכניסה עם Google הם יזוהו אוטומטית ויקבלו גישה לחלון הצוות. מי שלא צריך/ה גישה למערכת אפשר להוסיף בלי אימייל, לשיבוץ בסידור העבודה בלבד.',
 
-  // ── Two roster sections (2026-08-29) ──────────────────────────────
+  // ── Roster sections (2026-08-29, +removed 2026-08-30) ─────────────
   management: 'הנהלה',
   managementHint: 'בעלים, מנהל/ת כללי/ת ואחראי/ת משמרת. משתנה לעיתים רחוקות.',
   employees: 'עובדים',
   employeesHint: 'שאר הצוות — הרשימה שמתעדכנת באמת.',
   emptyGroup: 'אין אף אחד בקבוצה הזו.',
+  removed: 'הוסרו',
+  removedHint: 'ההרשאות שלהם בוטלו וההיסטוריה שלהם נשמרה. שחזור מחזיר גישה בכניסה הבאה עם Google.',
 
   // ── Add-form modes ────────────────────────────────────────────────
   modeAccount: 'עם חשבון',
@@ -65,16 +72,20 @@ const T = {
   displayNameHint: 'ברירת מחדל: השם מחשבון Google. כאן אפשר לקבוע איך השם ייכתב בעמוד הצוות — גם ראשי התיבות יתעדכנו.',
   remove: 'הסר/י מהצוות',
   revoke: 'בטל/י הזמנה',
+  restore: 'שחזור',
   confirmRemove: 'להסיר את איש הצוות?',
-  confirmRemoveBody: 'הגישה שלו/ה לחלון הצוות תיפסק מיד, והוא/היא ייעלמו מעמוד הצוות באתר.',
+  confirmRemoveBody: 'הגישה שלו/ה לחלון הצוות תיפסק מיד, והוא/היא ייעלמו מעמוד הצוות באתר. אפשר לשחזר בכל שלב מרשימת "הוסרו" למטה.',
   confirmRevoke: 'לבטל את ההזמנה?',
-  confirmRevokeBody: 'האימייל הזה כבר לא יוכל להיכנס לחלון הצוות.',
+  confirmRevokeBody: 'האימייל הזה כבר לא יוכל להיכנס לחלון הצוות. אפשר לשחזר בכל שלב מרשימת "הוסרו" למטה.',
   pending: 'ממתין לכניסה ראשונה',
   pendingNote: 'ההרשאה תיכנס לתוקף ברגע שיתחבר/תתחבר עם Google מהאימייל הזה.',
   active: 'מחובר/ת',
   addedPending: 'נוסף/ה. ההרשאה תופעל בכניסה הראשונה עם Google מהאימייל הזה.',
   addedActive: 'נוסף/ה לצוות. הגישה פעילה מיד.',
   updated: 'האימייל כבר היה ברשימה — התפקיד עודכן.',
+  reactivated: 'המנוי שוחזר לצוות.',
+  restoredNotice: 'שוחזר/ה לצוות.',
+  restoreFailed: 'השחזור נכשל',
   schedulable: 'זמין/ה לסידור עבודה',
   schedulableHint: 'מופיע/ה כמי שאפשר לשבץ במסך סידור העבודה (owner/schedule).',
 }
@@ -171,6 +182,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       setNotice({
         kind: 'ok',
         text: json.offline ? T.addedOffline
+          : json.reactivated ? T.reactivated
           : json.updated ? T.updated
           : json.pending ? T.addedPending
           : T.addedActive,
@@ -193,6 +205,9 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       badge?: string; role?: 'staff' | 'owner'
       showOnSite?: boolean; displayName?: string | null
       firstName?: string; lastName?: string
+      /** Restore only — the API refuses `false` here; use removeMember for
+       *  that (it carries the self-lockout / last-owner guards this doesn't). */
+      active?: true
     },
   ) {
     setBusyId(id)
@@ -205,12 +220,15 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
       setMembers((cur) => cur?.map((m) => m.id === id ? json.member : m) ?? cur)
+      if (patch.active) setNotice({ kind: 'ok', text: T.restoredNotice })
     } catch (err) {
-      setNotice({ kind: 'err', text: err instanceof Error ? err.message : 'עדכון נכשל' })
+      setNotice({ kind: 'err', text: err instanceof Error ? err.message : (patch.active ? T.restoreFailed : 'עדכון נכשל') })
     } finally {
       setBusyId(null)
     }
   }
+
+  const restoreMember = (id: string) => patchMember(id, { active: true })
 
   function askRemove(m: Member) {
     // Only a real invite gets the "revoke" wording. An offline row was never
@@ -235,9 +253,13 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      setMembers((cur) => cur?.filter((x) => x.id !== m.id) ?? cur)
+      // The row moves to "הוסרו" rather than vanishing — same DELETE-means-
+      // deactivate the API now does (041_staff_soft_delete.sql). Mirrors
+      // auth_user_id locally too, so a removed row that gets re-rendered
+      // before the next full load() doesn't briefly still look "מחובר/ת".
+      setMembers((cur) => cur?.map((x) => x.id === m.id ? { ...x, active: false, auth_user_id: null } : x) ?? cur)
     } catch (err) {
-      setNotice({ kind: 'err', text: err instanceof Error ? err.message : 'מחיקה נכשלה' })
+      setNotice({ kind: 'err', text: err instanceof Error ? err.message : 'ההסרה נכשלה' })
     } finally {
       setBusyId(null)
     }
@@ -361,6 +383,18 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       <div>
         <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 12px' }}>{T.roster}</h3>
 
+        {/* A shimmering placeholder for the row addMember() is about to
+            insert — the same SkeletonRow the initial load uses, not a
+            spinner, so "something is being added" reads the same visual
+            language as "something is loading." Sits above the sections since
+            which one the new row lands in isn't known until the response
+            comes back. */}
+        {adding && (
+          <div style={{ marginBottom: 8 }}>
+            <SkeletonRow />
+          </div>
+        )}
+
         {members === null ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[0, 1, 2].map((i) => <SkeletonRow key={i} />)}
@@ -372,8 +406,8 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
             {([
-              { key: 'mgmt', title: T.management, hint: T.managementHint, rows: members.filter(isManagement) },
-              { key: 'staff', title: T.employees, hint: T.employeesHint, rows: members.filter((m) => !isManagement(m)) },
+              { key: 'mgmt', title: T.management, hint: T.managementHint, rows: members.filter((m) => m.active && isManagement(m)) },
+              { key: 'staff', title: T.employees, hint: T.employeesHint, rows: members.filter((m) => m.active && !isManagement(m)) },
             ]).map((group, gi) => (
               <div key={group.key}>
                 <div style={{ marginBottom: 10 }}>
@@ -416,6 +450,39 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                 )}
               </div>
             ))}
+
+            {/* Removed — mirrors FloorBuilder's "הוסרו" list for a deleted
+                table: the row is gone from the active roster, not gone from
+                the database, and restoring is one tap (041_staff_soft_delete.sql). */}
+            {members.some((m) => !m.active) && (
+              <div>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+                      {T.removed}
+                    </h4>
+                    <span style={{
+                      borderRadius: 999, padding: '1px 8px', fontSize: '0.7rem', fontWeight: 700,
+                      color: 'var(--text-faint)', border: '1px solid var(--line-strong)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>{members.filter((m) => !m.active).length}</span>
+                  </div>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '3px 0 0', lineHeight: 1.5 }}>
+                    {T.removedHint}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {members.filter((m) => !m.active).map((m) => (
+                    <RemovedMemberRow
+                      key={m.id}
+                      m={m}
+                      busy={busyId === m.id}
+                      onRestore={() => restoreMember(m.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -436,6 +503,13 @@ function MemberRow({
   onToggleSchedulable: () => void
   onRemove: () => void
 }) {
+  // A shimmer, not a dimmed row, while a remove/restore/edit is in flight —
+  // "skeleton loading... no refresh needed upon removal," 2026-08-30. The
+  // row still occupies its slot (no layout jump when it resolves), it just
+  // reads as "working" the same way the initial roster load does, rather
+  // than as a row that's merely faded and might be broken.
+  if (busy) return <MemberRowSkeleton delay={delay} />
+
   const meta = badgeMeta(m.badge, m.role)
   const access = accessLabel(m)
   // The owner badge already grants everything, so offering a separate
@@ -464,7 +538,7 @@ function MemberRow({
       borderStyle: pending ? 'dashed' : 'solid',
       borderRadius: 14,
       padding: '13px 14px', display: 'flex', flexDirection: 'column', gap: 10,
-      opacity: busy ? 0.55 : 1, transition: 'opacity .2s var(--ease)', animationDelay: `${delay}ms`,
+      animationDelay: `${delay}ms`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div aria-hidden style={{
@@ -624,6 +698,57 @@ function MemberRow({
   )
 }
 
+/** A removed person's row — deliberately much simpler than MemberRow. Once
+ *  someone is off the active roster there is nothing left to edit (badge,
+ *  display name, schedulability all stop mattering the moment access is
+ *  revoked); the only action that makes sense here is restoring them, so
+ *  that's the only control this renders. Same shimmer-while-busy treatment
+ *  as MemberRow, for the same reason. */
+function RemovedMemberRow({ m, busy, onRestore }: { m: Member; busy: boolean; onRestore: () => void }) {
+  if (busy) return <MemberRowSkeleton delay={0} />
+
+  const meta = badgeMeta(m.badge, m.role)
+  const offline = !m.auth_user_id && !m.email
+  const name = [m.first_name, m.last_name].filter(Boolean).join(' ')
+    || m.email?.split('@')[0] || 'משתמש'
+  const inits = ((m.first_name?.[0] ?? '') + (m.last_name?.[0] ?? '')).trim()
+    || (m.email?.[0] ?? '?').toUpperCase()
+
+  return (
+    <div className="rise" style={{
+      background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14,
+      padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 12, opacity: 0.85,
+    }}>
+      <div aria-hidden style={{
+        width: 42, height: 42, borderRadius: 999, flex: '0 0 auto',
+        background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line-strong)',
+        color: 'var(--text-faint)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.95rem',
+      }}>{inits}</div>
+
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: `${meta.color}14`, border: `1px solid ${meta.color}33`, color: `${meta.color}bb`,
+            borderRadius: 999, padding: '2px 8px', fontSize: '0.7rem', fontWeight: 700,
+          }}>
+            <span>{meta.emoji}</span>{meta.he}
+          </span>
+        </div>
+        {!offline && (
+          <div dir="ltr" style={{ fontSize: '0.8rem', color: 'var(--text-faint)', textAlign: 'start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
+        )}
+      </div>
+
+      <button type="button" onClick={onRestore} disabled={busy} className="press" style={{ ...ghostBtn, flex: '0 0 auto' }}>
+        ↺ {T.restore}
+      </button>
+    </div>
+  )
+}
+
 /** First + last for an offline roster entry.
  *
  *  ── Commits on GROUP blur, not field blur ───────────────────────────
@@ -755,6 +880,30 @@ function SkeletonRow() {
         <div className="sk" style={{ width: '75%', height: 10, borderRadius: 6 }} />
       </div>
       <div className="sk" style={{ width: 64, height: 22, borderRadius: 999, flex: '0 0 auto' }} />
+    </div>
+  )
+}
+
+/** What a MemberRow becomes while it's busy — same shimmer, roughly the same
+ *  footprint as a real row (avatar + two lines + a couple of controls), so
+ *  the roster doesn't jump when the request resolves and the real row (or
+ *  its new "הוסרו"/roster section) takes its place. */
+function MemberRowSkeleton({ delay }: { delay: number }) {
+  return (
+    <div className="rise" style={{
+      background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14,
+      padding: '13px 14px', display: 'flex', flexDirection: 'column', gap: 10,
+      animationDelay: `${delay}ms`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="sk" style={{ width: 42, height: 42, borderRadius: 999, flex: '0 0 auto' }} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <div className="sk" style={{ width: '45%', height: 13, borderRadius: 6 }} />
+          <div className="sk" style={{ width: '65%', height: 10, borderRadius: 6 }} />
+        </div>
+        <div className="sk" style={{ width: 70, height: 24, borderRadius: 999, flex: '0 0 auto' }} />
+      </div>
+      <div className="sk" style={{ width: '100%', height: 34, borderRadius: 10 }} />
     </div>
   )
 }
