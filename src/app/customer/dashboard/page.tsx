@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import PointsCard from '@/components/PointsCard'
 import RewardsList from '@/components/RewardsList'
 import SignOutButton from '@/components/SignOutButton'
+import AccountControls from '@/components/AccountControls'
 
 interface CustomerRow {
   id: string
@@ -10,6 +11,9 @@ interface CustomerRow {
   total_visits: number
   last_visit_at: string | null
   created_at: string
+  first_name: string | null
+  last_name: string | null
+  phone: string | null
 }
 
 interface ProfileData {
@@ -19,6 +23,9 @@ interface ProfileData {
     totalVisits: number
     lastVisitAt: string | null
     memberSince: string
+    firstName: string | null
+    lastName: string | null
+    phone: string | null
   }
   rewards: Array<{
     id: string
@@ -35,9 +42,10 @@ interface ProfileData {
 }
 
 async function getOrFetchCustomer(supabase: ReturnType<typeof createClient>, userId: string): Promise<CustomerRow | null> {
+  const cols = 'id, points, total_visits, last_visit_at, created_at, first_name, last_name, phone'
   const { data: existing } = await supabase
     .from('customers')
-    .select('id, points, total_visits, last_visit_at, created_at')
+    .select(cols)
     .eq('auth_user_id', userId)
     .single()
 
@@ -48,7 +56,7 @@ async function getOrFetchCustomer(supabase: ReturnType<typeof createClient>, use
 
   const { data: created } = await supabase
     .from('customers')
-    .select('id, points, total_visits, last_visit_at, created_at')
+    .select(cols)
     .eq('auth_user_id', userId)
     .single()
 
@@ -86,6 +94,9 @@ async function getProfile(): Promise<ProfileData | null> {
       totalVisits: customer.total_visits,
       lastVisitAt: customer.last_visit_at,
       memberSince: customer.created_at,
+      firstName: customer.first_name,
+      lastName: customer.last_name,
+      phone: customer.phone,
     },
     rewards: (rewards ?? []).map((r) => ({
       id: r.id,
@@ -158,6 +169,11 @@ export default async function CustomerDashboardPage() {
         <div className="rise" style={{ animationDelay: '230ms' }}>
           <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 10px' }}>הפרסים שלי</h2>
           <RewardsList rewards={rewards} customerPoints={customer.points} />
+        </div>
+
+        {/* My data — edit / download / delete */}
+        <div className="rise" style={{ animationDelay: '360ms' }}>
+          <AccountControls firstName={customer.firstName} lastName={customer.lastName} phone={customer.phone} />
         </div>
 
         {/* Visit history */}
