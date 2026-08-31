@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { AuthHandoff, GoogleG } from '@/components/AuthHandoff'
 import { Suspense } from 'react'
 
 function CheckinContent() {
@@ -63,25 +64,6 @@ function CheckinContent() {
     }
   }
 
-  async function handleSignIn(email: string) {
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/checkin?token=${encodeURIComponent(token!)}`,
-      },
-    })
-
-    if (error) {
-      setStatus('error')
-      setMessage('שגיאה בשליחת קישור הכניסה')
-      return
-    }
-
-    setStatus('signing-in')
-    setMessage('שלחנו קישור למייל שלך — לחץ עליו כדי להשלים את הצבירה')
-  }
-
   if (status === 'loading' || status === 'checking-in') {
     return (
       <div className="text-center space-y-4">
@@ -131,66 +113,69 @@ function CheckinContent() {
     )
   }
 
-  // signing-in state: show email form
-  return (
-    <SignInForm onSubmit={handleSignIn} message={message} />
-  )
+  // signing-in state: Google only — same interstitial pattern as /login,
+  // never a bespoke email/password or magic-link form on a new sign-in
+  // surface (see CLAUDE.md, "Auth model").
+  return <GoogleSignInPrompt token={token!} />
 }
 
-function SignInForm({
-  onSubmit,
-  message,
-}: {
-  onSubmit: (email: string) => void
-  message: string
-}) {
-  const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
+function GoogleSignInPrompt({ token }: { token: string }) {
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authBusy, setAuthBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  if (message) {
-    return (
-      <div className="text-center space-y-4">
-        <div className="text-4xl">📧</div>
-        <p className="text-zinc-300">{message}</p>
-      </div>
-    )
+  async function startGoogle() {
+    setAuthBusy(true)
+    setError(null)
+    const supabase = createClient()
+    // `next` carries the QR token through Google's round-trip so
+    // /auth/callback can send the visitor straight back here instead of to
+    // their normal post-login destination. /auth/callback only ever follows
+    // a same-origin relative path here — never an open redirect.
+    const next = `/checkin?token=${encodeURIComponent(token)}`
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        queryParams: { prompt: 'select_account' },
+      },
+    })
+    if (error) {
+      setAuthBusy(false)
+      setError('שגיאה בהתחברות ל-Google.')
+    }
+    // success → the browser leaves for Google
   }
 
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
+    <>
+      <div className="text-center space-y-6">
         <div className="text-4xl">🍺</div>
-        <h2 className="text-xl font-bold text-amber-400">כמעט שם!</h2>
-        <p className="text-zinc-400 text-sm">הזן את המייל שלך כדי לצבור את הנקודה</p>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-amber-400">כמעט שם!</h2>
+          <p className="text-zinc-400 text-sm">התחברו עם Google כדי לצבור את הנקודה</p>
+        </div>
+        <button
+          onClick={() => setAuthOpen(true)}
+          className="w-full rounded-xl bg-white px-6 py-3 font-semibold text-zinc-900 hover:bg-zinc-100 flex items-center justify-center gap-2"
+        >
+          <GoogleG size={18} />
+          המשך עם Google
+        </button>
       </div>
 
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault()
-          setLoading(true)
-          await onSubmit(email)
-          setLoading(false)
+      <AuthHandoff
+        open={authOpen}
+        busy={authBusy}
+        error={error}
+        lang="he"
+        onContinue={startGoogle}
+        onClose={() => {
+          setAuthOpen(false)
+          setError(null)
         }}
-        className="space-y-4"
-      >
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="your@email.com"
-          required
-          dir="ltr"
-          className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
-        />
-        <button
-          type="submit"
-          disabled={loading || !email}
-          className="w-full rounded-xl bg-amber-500 px-6 py-3 font-semibold text-black hover:bg-amber-400 disabled:opacity-50"
-        >
-          {loading ? '...' : 'צבור נקודה'}
-        </button>
-      </form>
-    </div>
+      />
+    </>
   )
 }
 

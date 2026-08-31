@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = clientIp(request)
+    if (!(await checkRateLimit(`redeem:${ip}`, 10, 60))) {
+      return rateLimitResponse()
+    }
+
     const body = await request.json().catch(() => null) as { rewardId?: string } | null
     const rewardId = body?.rewardId
 

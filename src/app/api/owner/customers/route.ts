@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOwner } from '@/lib/owner/guard'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 const LIST_COLS = 'id, first_name, last_name, email, phone, points, total_visits, last_visit_at, created_at'
 
@@ -65,6 +66,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireOwner()
   if (!auth.ok) return auth.res
+
+  if (!(await checkRateLimit(`point-adjustment:${auth.userId}`, 30, 60))) {
+    return rateLimitResponse()
+  }
 
   const body = await request.json().catch(() => null) as { customerId?: string; delta?: number; reason?: string } | null
   const customerId = body?.customerId

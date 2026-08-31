@@ -15,13 +15,19 @@ import { getLoyaltyEnabled } from '@/lib/settings/server'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  // Optional return-path override — used by /checkin so a customer lands
+  // straight back at their QR check-in instead of their normal dashboard.
+  // Only ever a same-origin relative path: never `//host/...` (protocol-
+  // relative) or an absolute URL, or this becomes an open redirect riding on
+  // the back of a real Google login.
+  const next = safeNext(searchParams.get('next'))
 
   if (code) {
     const supabase = createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
       const { data: { user } } = await supabase.auth.getUser()
-      let dest = '/customer/dashboard'
+      let dest = next ?? '/customer/dashboard'
       if (user) {
         // Link any pending invite the owner created for this email before the
         // person's first sign-in. Safe to call every time — it's a no-op once
@@ -36,11 +42,13 @@ export async function GET(request: NextRequest) {
 
         if (staff) {
           // Send everyone to the most capable place they're actually allowed
-          // in, so nobody lands on a page that immediately denies them.
-          if (isOp(staff)) dest = '/owner/dashboard'
+          // in, so nobody lands on a page that immediately denies them —
+          // unless a specific return path was requested (e.g. /checkin).
+          if (next) dest = next
+          else if (isOp(staff)) dest = '/owner/dashboard'
           else if (canEditMenu(staff)) dest = '/owner/editor'
           else dest = '/staff/dashboard'
-        } else if (!(await getLoyaltyEnabled())) {
+        } else if (!next && !(await getLoyaltyEnabled())) {
           // Not staff, and the loyalty club isn't running — there is nothing
           // here for this account. Say so, with the admin's number, rather than
           // bouncing them through a customer dashboard that redirects again.
@@ -52,4 +60,11 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.redirect(`${origin}/customer?error=auth`)
+}
+
+function safeNext(value: string | null): string | null {
+  if (!value) return null
+  if (!value.startsWith('/') || value.startsWith('//')) return null
+  if (value.includes('://')) return null
+  return value
 }

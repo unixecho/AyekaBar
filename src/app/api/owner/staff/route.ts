@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { requireOwner } from '@/lib/owner/guard'
 import { splitName } from '@/lib/staff/name'
+import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 type Service = SupabaseClient
@@ -94,6 +95,13 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requireOwner()
   if (!auth.ok) return auth.res
+
+  // requireOwner() is the real gate; this is defense-in-depth against a
+  // compromised/scripted owner session hammering findAuthUserByEmail()'s
+  // up-to-4000-row auth.users scan below.
+  if (!(await checkRateLimit(`staff-invite:${auth.userId}`, 20, 60))) {
+    return rateLimitResponse()
+  }
 
   const body = await request.json().catch(() => null) as
     { email?: string; badge?: string; role?: string; firstName?: string; lastName?: string } | null

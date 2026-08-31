@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { verifyQRToken } from '@/lib/loyalty/qr'
+import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
+    // Per-IP, not per-account — a scripted attacker doesn't need a session
+    // to hammer this route with guessed/replayed tokens.
+    const ip = clientIp(request)
+    if (!(await checkRateLimit(`checkin:${ip}`, 10, 60))) {
+      return rateLimitResponse()
+    }
+
     const body = await request.json()
     const { token } = body as { token: string }
 

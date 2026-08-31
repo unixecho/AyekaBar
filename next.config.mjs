@@ -4,7 +4,12 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'xdvjhhgmrmrfccgdnnja.supabase.co',
+        // The live project, migrated to Frankfurt 2026-08-09 (see
+        // MIGRATION_PLAN.md / HANDOFF.md). This used to point at
+        // xdvjhhgmrmrfccgdnnja.supabase.co, the old pre-migration Tokyo
+        // project — stale since the cutover; nothing should be resolving
+        // image URLs against it any more.
+        hostname: 'uemnappyzjqntildlhlr.supabase.co',
       },
     ],
   },
@@ -24,6 +29,13 @@ const nextConfig = {
           // Keeps the check-in token in /checkin?token=… out of the Referer
           // header on cross-origin navigation.
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // Tell the browser to never speak to this host over plain HTTP
+          // again, even if someone types http:// or an old link points at
+          // it — 2 years, applies to subdomains too, eligible for the
+          // browser preload list. Vercel already terminates/redirects to
+          // TLS at the edge; this is the client-side backstop so a
+          // downgrade attempt never even reaches the network.
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
         ],
       },
     ]
