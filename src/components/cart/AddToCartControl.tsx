@@ -54,7 +54,15 @@ export default function AddToCartControl({
   const linesForItem = cart.lines.filter((l) => l.itemUid === uid)
   const name = loc(item, lang)
 
-  const mustChoose = needsChoice(variants, optionGroups)
+  // ASK EVERY TIME, ONCE THE TABLE HAS SPLIT. "on each new item we need to ask
+  // which diner is it going to" (owner, 2026-09-01). Before this, the first
+  // add set an active diner and every later add silently followed it, so a
+  // round meant for three people quietly piled onto whoever was selected.
+  //
+  // The one case that is NOT asked is when nobody has been named yet: with no
+  // diners there is exactly one possible answer, and a sheet offering a single
+  // choice is a dialog that exists to be dismissed.
+  const mustChoose = needsChoice(variants, optionGroups) || cart.diners.length > 0
 
   function addPlain(from: DOMRect | null) {
     const v = variants[0]
@@ -74,12 +82,19 @@ export default function AddToCartControl({
 
   function onPlus(e: React.MouseEvent<HTMLButtonElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
-    // Already chose once and there is exactly one line? "+" means one more of
-    // the same — re-asking which size would be pedantic. Two or more lines is
-    // genuinely ambiguous, so the sheet opens and the customer says which.
-    if (mustChoose && linesForItem.length !== 1) { setChoosing(true); return }
-    if (mustChoose && linesForItem.length === 1) {
-      const line = linesForItem[0]
+    // "+" on a row that already has exactly ONE open line means "one more of
+    // the same" — the customer answered every question the first time, and
+    // re-asking would be pedantic. Zero lines is a NEW item and gets asked;
+    // two or more is genuinely ambiguous and gets asked.
+    //
+    // `openLines` and not all lines: a line already shown to the waiter is a
+    // closed round. Adding to it would hide the new drink inside something
+    // the customer has already read out, so that case opens the sheet and
+    // starts a fresh line.
+    const open = linesForItem.filter((l) => l.presentedAt === undefined)
+    if (mustChoose && open.length !== 1) { setChoosing(true); return }
+    if (mustChoose && open.length === 1) {
+      const line = open[0]
       addToCart({
         itemUid: uid,
         name: line.name,

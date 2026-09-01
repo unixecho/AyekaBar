@@ -1,12 +1,22 @@
 -- ============================================================
 -- Ayeka Bar — groundwork for a customer ordering FROM THEIR TABLE.
 --
--- ⚠️⚠️  DRAFTED, NOT APPLIED. NOTHING IN THIS APP CALLS ANY OF IT.  ⚠️⚠️
+-- ✅ APPLIED to production 2026-09-01 on the owner's explicit instruction.
+--    NOTHING IN EITHER APP CALLS ANY OF IT YET — the tables are empty and the
+--    functions are unreferenced. What applying it changed in practice is the
+--    three app_settings rows at the bottom (the cart's off switch) and the
+--    menu_audit CHECK fix in §9.
 --
--- Same status as 035/036 (the payment ledger): written so the design is
--- concrete and reviewable, held until the feature it serves is actually
--- greenlit and the endpoints exist. Per CLAUDE.md, a migration is applied only
--- on explicit, per-migration approval — this one is not that.
+-- ⚠️ ONE CLAIM IN THIS FILE IS WRONG AND IS CORRECTED BY MIGRATION 049:
+--    §7 below says the per-code `attempts` counter is the defence against
+--    guessing. It is not — a wrong code hashes to no row, so no counter can
+--    rise. Read 049 before reasoning about this function's security.
+--
+-- Local testing was not possible (no Docker in the authoring environment, so
+-- no local Supabase stack). It was therefore verified directly ON production
+-- after applying: RLS + zero policies on all four tables, grants checked with
+-- has_function_privilege, and a full mint/redeem/replay round-trip exercised
+-- inside a transaction that was rolled back.
 --
 -- WHAT IT IS FOR. PLAN_MENU_CART.md ships Phase 1 today: a customer builds an
 -- order on their own phone, splits it between named diners, and reads it out
@@ -58,8 +68,11 @@ create table if not exists public.waiter_table_codes (
   -- look the row up — the customer types a code and nothing else, so with a
   -- per-row salt the only way to find the match is to scan every live code and
   -- run the KDF against each, which also destroys per-code attempt counting
-  -- (you cannot increment the counter of a row you failed to identify). The
-  -- attempt counter is the actual defence here, so it wins.
+  -- (you cannot increment the counter of a row you failed to identify).
+  -- ⚠️ That last argument is WEAKER THAN IT LOOKS and migration 049 spells out
+  -- why: a wrong guess matches no row either way, so the counter was never
+  -- the brute-force defence it is described as further down. The O(1) lookup
+  -- is still the right call — it is just bought with less than was claimed.
   --   The thing a salt protects against is an offline dictionary attack on a
   -- leaked table. Six digits is 10^6 — trivially reversible either way at
   -- SHA-256 speeds — but the value is single-use, expires in ten minutes, is

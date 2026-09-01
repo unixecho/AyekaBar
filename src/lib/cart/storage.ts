@@ -24,7 +24,7 @@
 // project's "no banner needed yet" status.
 
 import {
-  CART_STORAGE_KEY, CART_TTL_MS, EMPTY_CART, MAX_DINERS, MAX_LINES,
+  CART_STORAGE_KEY, CART_TTL_MS, DINER_COLOURS, EMPTY_CART, MAX_DINERS, MAX_LINES,
   MAX_NAME_LEN, MAX_NOTE_LEN, MAX_QTY,
   type Cart, type CartDiner, type CartLine, type CartOptionChoice, type StoredCart,
 } from './types'
@@ -97,8 +97,17 @@ export function sanitizeCart(input: unknown): Cart {
       const id = str(d.id, 64)
       const name = str(d.name, MAX_NAME_LEN)
       if (!id || !name || seenDinerIds.has(id)) continue
+      // The colour must be one WE chose. Accepting an arbitrary string here
+      // would let a hand-edited localStorage entry put unvalidated text into a
+      // style attribute, which is the shape of a CSS-injection bug even though
+      // React would escape it today. An unrecognised value falls back to a
+      // palette entry rather than being dropped, so the diner still renders.
+      const rawColour = typeof d.colour === 'string' ? d.colour : ''
+      const colour = DINER_COLOURS.includes(rawColour)
+        ? rawColour
+        : DINER_COLOURS[diners.length % DINER_COLOURS.length]
       seenDinerIds.add(id)
-      diners.push({ id, name })
+      diners.push({ id, name, colour })
     }
   }
 
@@ -129,6 +138,9 @@ export function sanitizeCart(input: unknown): Cart {
       const addedAtRaw = Number(l.addedAt)
       const addedAt = Number.isFinite(addedAtRaw) && addedAtRaw > 0 ? addedAtRaw : 0
 
+      const presentedRaw = Number(l.presentedAt)
+      const presentedAt = Number.isFinite(presentedRaw) && presentedRaw > 0 ? presentedRaw : undefined
+
       // 1-90 mirrors the owner editor's own bound on a Happy Hour rule.
       // Anything else is dropped rather than clamped: an out-of-range value
       // is corrupt data, and a corrupt discount badge is worse than none.
@@ -153,6 +165,7 @@ export function sanitizeCart(input: unknown): Cart {
         addedAt,
         ...(note ? { note } : {}),
         ...(happyHourPercent ? { happyHourPercent } : {}),
+        ...(presentedAt ? { presentedAt } : {}),
       })
     }
   }

@@ -5,7 +5,7 @@ import PromptSheet, { type PromptRequest } from '@/components/PromptSheet'
 import { haptic } from '@/lib/haptics'
 import type { Lang } from '@/lib/menu/types'
 import { CART_UI } from '@/lib/cart/i18n'
-import { MAX_DINERS } from '@/lib/cart/types'
+import { MAX_DINERS, TABLE_COLOUR } from '@/lib/cart/types'
 import { useCart } from './CartProvider'
 
 // "Who am I adding this for?", answered once and then reused for every tap.
@@ -54,7 +54,10 @@ export default function DinerStrip({ lang }: { lang: Lang }) {
           aria-checked={activeDinerId === null}
           data-on={activeDinerId === null}
           onClick={() => { haptic('select'); setActiveDinerId(null) }}
-        >{CART_UI.table[lang]}</button>
+          style={whoStyle(TABLE_COLOUR, activeDinerId === null)}
+        >
+          <Dot colour={TABLE_COLOUR} />{CART_UI.table[lang]}
+        </button>
 
         {cart.diners.map((d) => (
           <button
@@ -62,7 +65,10 @@ export default function DinerStrip({ lang }: { lang: Lang }) {
             aria-checked={activeDinerId === d.id}
             data-on={activeDinerId === d.id}
             onClick={() => { haptic('select'); setActiveDinerId(d.id) }}
-          >{d.name}</button>
+            style={whoStyle(d.colour, activeDinerId === d.id)}
+          >
+            <Dot colour={d.colour} />{d.name}
+          </button>
         ))}
 
         {cart.diners.length < MAX_DINERS && (
@@ -74,5 +80,23 @@ export default function DinerStrip({ lang }: { lang: Lang }) {
 
       <PromptSheet request={prompt} onClose={() => setPrompt(null)} />
     </>
+  )
+}
+
+/** Each person carries their own colour everywhere they appear — this strip,
+ *  the sheet's section header, the chip on each line. That consistency is the
+ *  whole point: you find your drinks by colour instead of reading names. */
+function whoStyle(colour: string, on: boolean): React.CSSProperties {
+  return on
+    ? { borderColor: colour, background: `${colour}26`, color: 'var(--text)', boxShadow: `0 0 12px ${colour}44` }
+    : { borderColor: `${colour}40` }
+}
+
+function Dot({ colour }: { colour: string }) {
+  return (
+    <span aria-hidden style={{
+      width: 8, height: 8, borderRadius: 999, background: colour,
+      flex: '0 0 auto', marginInlineEnd: 5, display: 'inline-block',
+    }} />
   )
 }

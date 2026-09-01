@@ -42,11 +42,33 @@ export interface CartOptionChoice {
 }
 
 /** A named person at the table. The OMS's `waiter_orders.seats` is
- *  `[{"id":"a1","name":"דנה"}]` — the same two fields, deliberately. */
+ *  `[{"id":"a1","name":"דנה"}]` — the same two fields, plus a colour that
+ *  is purely ours: it never travels to the OMS (`seats` has no such column,
+ *  and `seat_name` is what an order line records), it exists so four people
+ *  splitting a round can find their own items at a glance instead of reading
+ *  every row. */
 export interface CartDiner {
   id: string
   name: string
+  /** Hex, assigned on creation from DINER_COLOURS below. */
+  colour: string
 }
+
+/** "לשולחן" — teal, and reserved. The table is not a person, so it does
+ *  not draw from the diner palette; it gets the app's own second accent
+ *  (`--neon-2`), which is used nowhere else in the cart. */
+export const TABLE_COLOUR = '#38e1ff'
+
+/** Assigned round-robin as diners are named. Deliberately the same set as
+ *  `ACCENTS` in `lib/shifts/config.ts` — one visual language across the app —
+ *  MINUS teal, which belongs to the table and must never be confusable with a
+ *  person. Copied rather than imported: this module is meant to be liftable
+ *  as a directory, and importing the shift scheduler's config to draw a chip
+ *  would tie the two together for no reason. */
+export const DINER_COLOURS = [
+  '#ff8a5c', '#f472b6', '#c084fc', '#60a5fa',
+  '#2dd4bf', '#4ade80', '#fbbf24', '#fb7185',
+]
 
 export interface CartLine {
   id: string
@@ -95,6 +117,19 @@ export interface CartLine {
   /** Epoch ms. Orders the sheet, and lets the menu-row stepper's "−" undo the
    *  most recent add rather than an arbitrary line. */
   addedAt: number
+  /** Epoch ms of the moment the customer said they had shown this line to the
+   *  waiter. Absent = still in the current round.
+   *
+   *  WHY A ROUND MODEL AT ALL. A table orders more than once over an evening.
+   *  Without this, the second time the waiter comes over the customer has to
+   *  remember which half of the list is new — which is the exact problem this
+   *  whole feature exists to remove. It mirrors the OMS's own batch model
+   *  (`waiter_order_batches`: rounds that are typed in and then lock).
+   *
+   *  Presented lines stay fully editable on purpose. Marking is a note to
+   *  self, not a claim about the bar's till, and making it irreversible would
+   *  turn one mis-tap into a cart the customer cannot fix. */
+  presentedAt?: number
 }
 
 export interface Cart {

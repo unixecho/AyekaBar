@@ -5,10 +5,10 @@ import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import PromptSheet, { type PromptRequest } from '@/components/PromptSheet'
 import { haptic } from '@/lib/haptics'
 import { MENU_UI, RTL, loc, type Lang } from '@/lib/menu/types'
-import { cartTotals, groupByDiner, type CartAction, type DinerGroup } from '@/lib/cart/store'
+import { cartTotals, groupByDiner, hasPresented, openLines, totals, type CartAction, type DinerGroup } from '@/lib/cart/store'
 import { fmtAgorot } from '@/lib/cart/variants'
 import { CART_UI } from '@/lib/cart/i18n'
-import { MAX_DINERS, type Cart, type CartLine } from '@/lib/cart/types'
+import { MAX_DINERS, TABLE_COLOUR, type Cart, type CartLine } from '@/lib/cart/types'
 import { useCart } from './CartProvider'
 import SheetShell from './SheetShell'
 
@@ -33,17 +33,44 @@ export default function CartSheet({ lang }: { lang: Lang }) {
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [pickingFor, setPickingFor] = useState<string | null>(null)
+  // In read-out mode, show only the round that has not been given to the
+  // waiter yet. That IS the useful view the second time they come over.
+  const [readoutAll, setReadoutAll] = useState(false)
 
   const dir = RTL[lang] ? 'rtl' : 'ltr'
   const groups = useMemo(() => groupByDiner(cart), [cart])
+  const open = useMemo(() => openLines(cart), [cart])
+  const readoutLines = readoutAll ? cart.lines : open
+  const readoutGroups = useMemo(
+    () => groupByDiner(cart, readoutLines),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cart, readoutLines],
+  )
   const { agorot, unpricedLines } = cartTotals(cart)
+  // The footer's number follows what is ON SCREEN. Showing the whole order's
+  // total under a read-out of three new drinks would be a number the waiter
+  // could act on and the customer did not mean.
+  const shown = mode === 'readout' ? totals(readoutLines) : { agorot, unpricedLines }
   const empty = cart.lines.length === 0
   const split = cart.diners.length > 0
+  const anyPresented = hasPresented(cart)
 
   function close() {
     setMode('edit')
     setPickingFor(null)
+    setReadoutAll(false)
     closeSheet()
+  }
+
+  /** "הראיתי למלצר" — closes the current round. Deliberately NOT behind a
+   *  confirmation and NOT irreversible: the lines stay fully editable, this
+   *  only records where the round ended so the next read-out shows what is
+   *  new. A mis-tap costs one label, not an order. */
+  function markPresented() {
+    haptic('select')
+    dispatch({ type: 'markPresented' })
+    setReadoutAll(false)
+    setMode('edit')
   }
 
   function addDiner() {
@@ -111,11 +138,11 @@ export default function CartSheet({ lang }: { lang: Lang }) {
     <div className="cart-foot">
       <div className="cart-total-row">
         <span className="cart-total-label">{CART_UI.total[lang]}</span>
-        <span className="cart-total-value" dir="ltr">{fmtAgorot(agorot)}₪</span>
+        <span className="cart-total-value" dir="ltr">{fmtAgorot(shown.agorot)}₪</span>
       </div>
       <p className="cart-foot-note">
         {CART_UI.estimateNote[lang]}
-        {unpricedLines > 0 && <> {CART_UI.priceOnChoice[lang]}.</>}
+        {shown.unpricedLines > 0 && <> {CART_UI.priceOnChoice[lang]}.</>}
       </p>
 
       {mode === 'edit' ? (
@@ -157,9 +184,17 @@ export default function CartSheet({ lang }: { lang: Lang }) {
           <p className="cart-foot-note" style={{ margin: '2px 0 0' }}>{CART_UI.soonHint[lang]}</p>
         </div>
       ) : (
-        <button type="button" className="cart-primary press" onClick={() => setMode('edit')}>
-          {CART_UI.backToCart[lang]}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button type="button" className="cart-primary press" onClick={() => setMode('edit')}>
+            {CART_UI.backToCart[lang]}
+          </button>
+          {/* Only offered when there is actually an open round to close. */}
+          {readoutLines.length > 0 && open.length > 0 && (
+            <button type="button" className="cart-secondary press" onClick={markPresented}>
+              ✓ {CART_UI.markPresented[lang]}
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -193,8 +228,22 @@ export default function CartSheet({ lang }: { lang: Lang }) {
         <div className="sheet-scroll">
           {mode === 'readout' ? (
             <>
-              <p className="cart-foot-note" style={{ margin: '0 0 6px' }}>{CART_UI.readoutHint[lang]}</p>
-              {groups
+              <p className="cart-foot-note" style={{ margin: '0 0 6px' }}>
+                {readoutLines.length === 0 ? CART_UI.allPresented[lang] : CART_UI.readoutHint[lang]}
+              </p>
+
+              {/* Once a round has been closed, the customer can still pull up
+                  everything — useful for checking the bill at the end of the
+                  night, useless while ordering, so it is not the default. */}
+              {anyPresented && (
+                <button
+                  type="button" className="cart-chip press"
+                  style={{ alignSelf: 'center' }}
+                  onClick={() => setReadoutAll((v) => !v)}
+                >{readoutAll ? CART_UI.showRound[lang] : CART_UI.showAll[lang]}</button>
+              )}
+
+              {readoutGroups
                 .filter((g) => g.lines.length > 0)
                 .map((g) => (
                   <ReadoutGroup key={g.diner?.id ?? '~table'} group={g} lang={lang} split={split} />
@@ -228,9 +277,22 @@ export default function CartSheet({ lang }: { lang: Lang }) {
               {split && groups.map((g) => {
                 if (g.diner === null && g.lines.length === 0) return null
                 return (
-                  <section className="cart-group" key={g.diner?.id ?? '~table'} data-table={g.diner === null}>
-                    <header className="cart-group-head">
-                      <h3 className="cart-group-name">{g.diner ? g.diner.name : CART_UI.table[lang]}</h3>
+                  <section
+                    className="cart-group" key={g.diner?.id ?? '~table'} data-table={g.diner === null}
+                    style={{ borderColor: `${g.diner?.colour ?? TABLE_COLOUR}55` }}
+                  >
+                    <header
+                      className="cart-group-head"
+                      style={{ background: `${g.diner?.colour ?? TABLE_COLOUR}14` }}
+                    >
+                      <span aria-hidden style={{
+                        width: 10, height: 10, borderRadius: 999, flex: '0 0 auto',
+                        background: g.diner?.colour ?? TABLE_COLOUR,
+                        boxShadow: `0 0 10px ${g.diner?.colour ?? TABLE_COLOUR}99`,
+                      }} />
+                      <h3 className="cart-group-name" style={{ color: g.diner?.colour ?? TABLE_COLOUR }}>
+                        {g.diner ? g.diner.name : CART_UI.table[lang]}
+                      </h3>
                       {g.lines.length > 0 && (
                         <span className="cart-group-sum" dir="ltr">{fmtAgorot(g.totals.agorot)}₪</span>
                       )}
@@ -311,14 +373,17 @@ function LineRow({
   const variant = loc(line.variantLabel, lang)
   const diner = line.dinerId ? cart.diners.find((d) => d.id === line.dinerId) : null
   const dinerLabel = diner ? diner.name : CART_UI.table[lang]
+  const dinerColour = diner?.colour ?? TABLE_COLOUR
   const lineTotal = line.unitAgorot === null ? null : line.unitAgorot * line.qty
+  const presented = line.presentedAt !== undefined
 
   return (
-    <div className="cart-line">
+    <div className="cart-line" data-presented={presented}>
       <div className="cart-line-main">
         <div className="cart-line-name">
           {name}
           {variant && <span className="cart-line-variant">{' · '}{variant}</span>}
+          {presented && <span className="cart-presented-tag">✓ {CART_UI.presented[lang]}</span>}
           {!!line.happyHourPercent && (
             <span className="cart-hh">{MENU_UI.happyHour[lang]} −{line.happyHourPercent}%</span>
           )}
@@ -367,8 +432,11 @@ function LineRow({
             aria-expanded={picking}
             aria-label={`${CART_UI.assignedTo[lang]} ${dinerLabel} — ${CART_UI.assignTo[lang]}`}
             onClick={onPick}
+            style={{ borderColor: `${dinerColour}66`, color: dinerColour }}
           >
-            <span aria-hidden>👤</span>{dinerLabel}
+            <span aria-hidden style={{
+              width: 8, height: 8, borderRadius: 999, background: dinerColour, flex: '0 0 auto',
+            }} />{dinerLabel}
           </button>
 
           {/* A note can be added when the line is created but, until this
@@ -392,11 +460,13 @@ function LineRow({
           <div className="cart-line-tools" style={{ marginTop: 6 }}>
             <button
               type="button" className="cart-chip press" data-assigned={line.dinerId === null}
+              style={{ borderColor: `${TABLE_COLOUR}66`, color: TABLE_COLOUR }}
               onClick={() => { haptic('select'); dispatch({ type: 'assignLine', lineId: line.id, dinerId: null }); onPicked() }}
             >{CART_UI.table[lang]}</button>
             {cart.diners.map((d) => (
               <button
                 key={d.id} type="button" className="cart-chip press" data-assigned={line.dinerId === d.id}
+                style={{ borderColor: `${d.colour}66`, color: d.colour }}
                 onClick={() => { haptic('select'); dispatch({ type: 'assignLine', lineId: line.id, dinerId: d.id }); onPicked() }}
               >{d.name}</button>
             ))}
@@ -410,10 +480,11 @@ function LineRow({
 }
 
 function ReadoutGroup({ group, lang, split }: { group: DinerGroup; lang: Lang; split: boolean }) {
+  const colour = group.diner?.colour ?? TABLE_COLOUR
   return (
-    <section className="cart-readout-group">
+    <section className="cart-readout-group" style={{ borderColor: `${colour}66` }}>
       {split && (
-        <h3 className="cart-readout-name" style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+        <h3 className="cart-readout-name" style={{ display: 'flex', alignItems: 'baseline', gap: 10, color: colour }}>
           <span style={{ flex: 1, minWidth: 0 }}>
             {group.diner ? group.diner.name : CART_UI.table[lang]}
           </span>

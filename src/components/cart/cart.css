@@ -151,11 +151,10 @@
   cursor: pointer; white-space: nowrap;
   transition: color .2s var(--ease), border-color .2s var(--ease), background .2s var(--ease);
 }
-.cart-who[data-on='true'] {
-  color: #fff; border-color: transparent;
-  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
-  box-shadow: 0 0 14px rgba(255, 94, 58, 0.36);
-}
+/* The selected state's COLOUR comes from the diner (inline, per person) —
+   only the weight is set here. A blanket orange gradient would override the
+   one thing this control now exists to show. */
+.cart-who[data-on='true'] { color: var(--text); font-weight: 700; }
 
 /* ---- Sheet internals (the shell itself reuses .sheet-scrim/.sheet-panel) ---- */
 
@@ -179,11 +178,21 @@
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; border-bottom: 1px solid var(--line);
 }
-.cart-group-name { flex: 1; min-width: 0; font-size: 0.92rem; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cart-group-name { flex: 1; min-width: 0; font-size: 0.92rem; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cart-group-sum { font-size: 0.84rem; font-weight: 700; color: var(--neon-soft); direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
 .cart-group-empty { padding: 12px; font-size: 0.8rem; color: var(--text-faint); }
 
 .cart-line { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-top: 1px solid rgba(255, 255, 255, 0.03); }
+/* A line the customer has already read out. Dimmed, not disabled: it is a
+   note to self about where the round ended, and it stays editable. */
+.cart-line[data-presented='true'] { opacity: 0.62; }
+.cart-presented-tag {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-inline-start: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.64rem; font-weight: 800; letter-spacing: .2px;
+  color: var(--text-dim); background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line-strong); vertical-align: middle; white-space: nowrap;
+}
 .cart-line:first-child { border-top: none; }
 .cart-line-main { flex: 1; min-width: 0; }
 .cart-line-name { font-size: 0.92rem; font-weight: 600; color: var(--text); line-height: 1.35; }
@@ -252,6 +261,15 @@
 
 /* The two things that don't work yet. Present, legible, obviously inert —
    a greyed button with a reason beats a button that isn't there. */
+/* The quieter sibling of .cart-primary — a real action, but not the one the
+   screen is about. Used for "הראיתי למלצר" under "חזרה לעריכה". */
+.cart-secondary {
+  width: 100%; min-height: 46px; border-radius: 14px;
+  border: 1px solid rgba(56, 225, 255, 0.4); background: rgba(56, 225, 255, 0.08);
+  color: var(--neon-2); font: inherit; font-size: 0.95rem; font-weight: 700;
+  cursor: pointer;
+}
+
 .cart-soon {
   width: 100%; min-height: 44px; padding: 6px 8px; border-radius: 14px;
   border: 1px solid var(--line-strong); background: var(--bg-elev);

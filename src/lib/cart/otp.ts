@@ -78,17 +78,34 @@ export const TABLE_CODE_LENGTH = 6
  *  that outlives the interaction is a code that outlives the trust. */
 export const TABLE_CODE_TTL_SECONDS = 600
 
-/** Wrong guesses before the CODE (not the customer) is burned. Five attempts
- *  against a 6-digit space inside 10 minutes is a 1-in-200,000 chance; the
- *  cap is what makes that true, and it is enforced in SQL rather than in a
- *  route, so it holds no matter which caller arrives. */
+/** Attempts against ONE code before it is burned.
+ *
+ *  ⚠️ THIS IS NOT THE BRUTE-FORCE DEFENCE, despite looking like one. The SQL
+ *  looks a code up by the SHA-256 of its digits, so a WRONG guess matches no
+ *  row at all and there is nothing whose counter could rise. This cap only
+ *  ever bites on a correct-but-unusable submission — a replay, or an expired
+ *  code — which is a real thing worth bounding (a code overheard across the
+ *  bar) but a much smaller one. Discovered by exercising the function; see
+ *  migration 049 for the full argument.
+ *
+ *  Brute force is bounded by, in order: the 10-minute TTL, single use, the
+ *  handful of codes live at any moment, TABLE_CODE_RATE_* below, and the fact
+ *  that a human reviews every submission before it becomes an order. */
 export const TABLE_CODE_MAX_ATTEMPTS = 5
 
-/** Per-IP redemption attempts per window, for `checkRateLimit()` — the outer
- *  layer, stopping someone from burning through fresh codes rather than one
- *  code's own attempts. Mirrors the checkin/redeem posture (migration 045). */
+/** Per-IP redemption attempts per window, for `checkRateLimit()`. Given the
+ *  note on TABLE_CODE_MAX_ATTEMPTS above, THIS is the real bound on guessing,
+ *  not the per-code counter. Mirrors the checkin/redeem posture (045).
+ *
+ *  ⚠️ PHASE-2 REQUIREMENT: the route must ALSO keep a GLOBAL failed-redemption
+ *  counter (a second check_rate_limit key, not scoped to an IP). A per-IP
+ *  limit does nothing against a sprayer with many addresses, and per-code
+ *  counting cannot cover for it. Do not ship the endpoint without both. */
 export const TABLE_CODE_RATE_MAX = 10
 export const TABLE_CODE_RATE_WINDOW_SECONDS = 300
+/** The global one. Failed redemptions venue-wide per window, across all IPs. */
+export const TABLE_CODE_GLOBAL_FAIL_MAX = 50
+export const TABLE_CODE_GLOBAL_FAIL_WINDOW_SECONDS = 300
 
 /** How long a verified table session lasts. Deliberately shorter than a night
  *  out: a phone that authenticated at 21:00 should not still be able to order

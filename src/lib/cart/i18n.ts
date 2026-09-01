@@ -118,6 +118,32 @@ export const CART_UI = {
   },
   backToCart:  { he: 'חזרה לעריכה', en: 'Back to editing', ar: 'العودة للتحرير' },
 
+  // ── Rounds ───────────────────────────────────────────────────
+  markPresented: { he: 'הראיתי למלצר', en: 'Shown to the waiter', ar: 'عرضتُها على النادل' },
+  presented:     { he: 'נמסר למלצר',  en: 'Given to the waiter', ar: 'أُعطي للنادل' },
+  newRound:      { he: 'הזמנה חדשה',   en: 'New order',           ar: 'طلب جديد' },
+  allPresented: {
+    he: 'הכל נמסר למלצר. הוסיפו פריטים חדשים כדי להזמין שוב.',
+    en: 'Everything has been given to the waiter. Add more items to order again.',
+    ar: 'تم إعطاء كل شيء للنادل. أضف أصنافاً جديدة للطلب مرة أخرى.',
+  },
+  presentedHint: {
+    he: 'הפריטים האלה כבר נמסרו. מה שתוסיפו מעכשיו יוצג בנפרד.',
+    en: 'These have already been given. Anything you add now is shown separately.',
+    ar: 'هذه الأصناف أُعطيت مسبقاً. ما تضيفه الآن يُعرض منفصلاً.',
+  },
+  showAll:  { he: 'הצגת כל ההזמנה', en: 'Show the whole order', ar: 'عرض الطلب كاملاً' },
+  showRound:{ he: 'הצגת החדש בלבד',  en: 'Show only what is new', ar: 'عرض الجديد فقط' },
+
+  // ── Ordering for several people at once ─────────────────────
+  forWhomMulti: { he: 'עבור מי? אפשר לבחור כמה', en: 'For whom? You can pick several', ar: 'لمن؟ يمكنك اختيار عدة' },
+  pickAtLeastOne: {
+    he: 'בחרו לפחות אחד.',
+    en: 'Pick at least one.',
+    ar: 'اختر واحداً على الأقل.',
+  },
+  eachGets: { he: 'לכל אחד', en: 'each', ar: 'لكل واحد' },
+
   // ── The two things that don't work yet ─────────────────────────────
   sendToWaiter: { he: 'שליחה למלצר', en: 'Send to waiter', ar: 'إرسال للنادل' },
   callWaiter:   { he: 'קריאה למלצר', en: 'Call a waiter',  ar: 'استدعاء نادل' },

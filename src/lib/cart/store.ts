@@ -9,7 +9,7 @@
 // Every function returns a NEW cart; nothing here mutates its input.
 
 import {
-  MAX_DINERS, MAX_LINES, MAX_NAME_LEN, MAX_NOTE_LEN, MAX_QTY,
+  DINER_COLOURS, MAX_DINERS, MAX_LINES, MAX_NAME_LEN, MAX_NOTE_LEN, MAX_QTY,
   type Cart, type CartDiner, type CartLine, type CartOptionChoice,
 } from './types'
 
@@ -73,6 +73,9 @@ export type CartAction =
   | { type: 'addDiner'; name: string }
   | { type: 'renameDiner'; dinerId: string; name: string }
   | { type: 'removeDiner'; dinerId: string }
+  /** "הראיתי למלצר" — close the current round. Stamps every still-open
+   *  line; presented lines are left alone so tapping it twice is harmless. */
+  | { type: 'markPresented' }
   | { type: 'clear' }
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -90,6 +93,15 @@ export function clampText(raw: unknown, max: number): string {
   return raw.replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
+/** The first colour nobody is using yet, wrapping round when there are more
+ *  diners than colours. Least-recently-used rather than `length % n` so that
+ *  removing the second of three diners and adding a new one does not hand the
+ *  newcomer the colour of the person still sitting there. */
+function nextColour(diners: CartDiner[]): string {
+  const taken = new Set(diners.map((d) => d.colour))
+  return DINER_COLOURS.find((c) => !taken.has(c)) ?? DINER_COLOURS[diners.length % DINER_COLOURS.length]
+}
+
 /** Two lines merge when every single thing about them matches. Options are
  *  compared as a SORTED signature, because the sheet renders groups in menu
  *  order but nothing guarantees a future caller will. */
@@ -103,6 +115,7 @@ function optionSignature(options: CartOptionChoice[]): string {
 export function lineSignature(line: {
   itemUid: string; variantIndex: number; dinerId: string | null
   unitAgorot: number | null
+  presentedAt?: number
   note?: string; selectedOptions: CartOptionChoice[]
 }): string {
   // JSON rather than a joined string: a note is free text and could contain
@@ -118,6 +131,12 @@ export function lineSignature(line: {
     // the earlier one. Two lines, two prices, both true.
     line.unitAgorot,
     line.note ?? '',
+    // A ROUND IS PART OF IDENTITY TOO. Two beers already shown to the waiter
+    // and a third ordered afterwards are not "three beers" — the waiter has
+    // been told about two. Merging them would hide the new one inside a line
+    // the customer has already read out, which is the one thing the round
+    // model exists to prevent.
+    line.presentedAt === undefined ? '~open' : 'presented',
     optionSignature(line.selectedOptions),
   ])
 }
@@ -140,6 +159,8 @@ export function reduce(cart: Cart, action: CartAction, ctx: ReduceCtx = defaultC
         variantIndex: p.variantIndex,
         dinerId,
         unitAgorot: p.unitAgorot,
+        // A new add always joins the OPEN round, never a presented one.
+        presentedAt: undefined,
         note: note || undefined,
         selectedOptions,
       })
@@ -247,7 +268,7 @@ export function reduce(cart: Cart, action: CartAction, ctx: ReduceCtx = defaultC
       // "דנה" in a splitting UI is not usable. Reject the exact duplicate and
       // let the customer disambiguate ("דנה ק").
       if (cart.diners.some((d) => d.name === name)) return cart
-      return { ...cart, diners: [...cart.diners, { id: ctx.newId(), name }] }
+      return { ...cart, diners: [...cart.diners, { id: ctx.newId(), name, colour: nextColour(cart.diners) }] }
     }
 
     case 'renameDiner': {
@@ -273,6 +294,19 @@ export function reduce(cart: Cart, action: CartAction, ctx: ReduceCtx = defaultC
         }
       }
       return next
+    }
+
+    case 'markPresented': {
+      const at = ctx.now()
+      let touched = false
+      const lines = cart.lines.map((l) => {
+        if (l.presentedAt !== undefined) return l
+        touched = true
+        return { ...l, presentedAt: at }
+      })
+      // Nothing open? Return by reference so the UI can tell it was a no-op
+      // and skip the toast, exactly like every other refusal here.
+      return touched ? { ...cart, lines } : cart
     }
 
     case 'clear':
@@ -318,6 +352,15 @@ export function cartTotals(cart: Cart): CartTotals {
   return totals(cart.lines)
 }
 
+/** Lines the customer has not yet read out — "the current round". */
+export function openLines(cart: Cart): CartLine[] {
+  return cart.lines.filter((l) => l.presentedAt === undefined)
+}
+
+export function hasPresented(cart: Cart): boolean {
+  return cart.lines.some((l) => l.presentedAt !== undefined)
+}
+
 export interface DinerGroup {
   /** null = the "לשולחן" group, which always exists and always comes first. */
   diner: CartDiner | null
@@ -331,10 +374,10 @@ export interface DinerGroup {
  * still gets a section — that empty row is how you see that you named someone
  * and haven't ordered for them.
  */
-export function groupByDiner(cart: Cart): DinerGroup[] {
+export function groupByDiner(cart: Cart, lines: CartLine[] = cart.lines): DinerGroup[] {
   const byDiner = new Map<string, CartLine[]>()
   const table: CartLine[] = []
-  for (const line of cart.lines) {
+  for (const line of lines) {
     if (line.dinerId === null) { table.push(line); continue }
     const bucket = byDiner.get(line.dinerId)
     if (bucket) bucket.push(line)

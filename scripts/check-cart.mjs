@@ -296,6 +296,92 @@ section('store — notes are editable and clearable after the fact')
     merged.lines.length === 1 && merged.lines[0].qty === 2)
 }
 
+section('store — colours: one per person, teal reserved for the table')
+{
+  let cart = EMPTY
+  for (const n of ['דנה', 'יוסי', 'שיר']) cart = R(cart, { type: 'addDiner', name: n })
+  const colours = cart.diners.map((d) => d.colour)
+  check('every diner gets a colour', colours.every((c) => typeof c === 'string' && c.startsWith('#')))
+  check('no two diners share one', new Set(colours).size === 3)
+  check('the colours come from the palette', colours.every((c) => T.DINER_COLOURS.includes(c)))
+  check('the table\'s teal is NOT in the diner palette', !T.DINER_COLOURS.includes(T.TABLE_COLOUR))
+
+  // Removing the middle diner and adding a new one must not hand the newcomer
+  // a colour still worn by somebody sitting at the table.
+  const afterRemove = R(cart, { type: 'removeDiner', dinerId: cart.diners[1].id })
+  const afterAdd = R(afterRemove, { type: 'addDiner', name: 'רוני' })
+  const live = afterAdd.diners.map((d) => d.colour)
+  check('a new diner never reuses a colour still in use', new Set(live).size === live.length)
+
+  let many = EMPTY
+  for (let i = 0; i < T.DINER_COLOURS.length + 3; i++) many = R(many, { type: 'addDiner', name: `p${i}` })
+  check('past the end of the palette it wraps instead of running out',
+    many.diners.every((d) => T.DINER_COLOURS.includes(d.colour)))
+}
+
+section('store — rounds: "הראיתי למלצר"')
+{
+  let cart = R(EMPTY, { type: 'add', payload: payload() })
+  cart = R(cart, { type: 'add', payload: payload({ itemUid: 'u-nuts' }) })
+  check('two open lines to start', S.openLines(cart).length === 2)
+  check('nothing presented yet', S.hasPresented(cart) === false)
+
+  const closed = R(cart, { type: 'markPresented' })
+  check('marking stamps every open line', closed.lines.every((l) => l.presentedAt !== undefined))
+  check('openLines is now empty', S.openLines(closed).length === 0)
+  check('hasPresented flips', S.hasPresented(closed) === true)
+  check('nothing was deleted', closed.lines.length === 2)
+
+  const again = R(closed, { type: 'markPresented' })
+  check('marking twice is a no-op, refused by reference', again === closed)
+
+  // The rule the whole round model exists for.
+  const more = R(closed, { type: 'add', payload: payload() })
+  check('the SAME item ordered again after presenting is a NEW line',
+    more.lines.length === 3)
+  check('…and the presented one keeps its own quantity',
+    more.lines.filter((l) => l.itemUid === 'u-beer' && l.presentedAt !== undefined)[0].qty === 1)
+  check('…and the new one is open', S.openLines(more).length === 1)
+
+  const secondRound = R(more, { type: 'markPresented' })
+  check('a second round can be closed too', S.openLines(secondRound).length === 0)
+
+  // A presented line is still fully editable — marking is a note, not a lock.
+  const edited = R(closed, { type: 'setQty', lineId: closed.lines[0].id, qty: 5 })
+  check('a presented line can still be edited', edited.lines[0].qty === 5)
+  check('…and stays presented', edited.lines[0].presentedAt !== undefined)
+
+  // groupByDiner can group an arbitrary subset — that is how the read-out
+  // shows only the current round.
+  const roundGroups = S.groupByDiner(more, S.openLines(more))
+  const shown = roundGroups.reduce((n, g) => n + g.lines.length, 0)
+  check('groupByDiner can group just one round', shown === 1)
+}
+
+section('storage — colour and round survive a round trip')
+{
+  const good = St.sanitizeCart({
+    diners: [{ id: 'd1', name: 'דנה', colour: T.DINER_COLOURS[2] }],
+    lines: [{ id: 'a', itemUid: 'u', qty: 1, dinerId: 'd1', presentedAt: 1700000000000 }],
+  })
+  check('a palette colour survives', good.diners[0].colour === T.DINER_COLOURS[2])
+  check('presentedAt survives', good.lines[0].presentedAt === 1700000000000)
+
+  // A colour is interpolated into a style attribute, so it must be one of
+  // OURS and never arbitrary text from a hand-edited localStorage entry.
+  const evil = St.sanitizeCart({
+    diners: [{ id: 'd1', name: 'x', colour: 'red; background:url(//evil)' }],
+    lines: [],
+  })
+  check('an arbitrary colour string is replaced with a palette entry',
+    T.DINER_COLOURS.includes(evil.diners[0].colour))
+  check('a missing colour is filled in rather than left undefined',
+    T.DINER_COLOURS.includes(St.sanitizeCart({ diners: [{ id: 'd', name: 'y' }] }).diners[0].colour))
+  check('a nonsense presentedAt is dropped',
+    St.sanitizeCart({ lines: [{ id: 'a', itemUid: 'u', qty: 1, presentedAt: 'soon' }] })
+      .lines[0].presentedAt === undefined)
+}
+
 section('store — caps and totals')
 {
   let cart = EMPTY
