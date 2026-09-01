@@ -4,6 +4,7 @@ import {
   PORTAL_LINKS, PORTAL_LINKS_DEFAULT, type PortalLinkKey,
   PORTAL_REVIEWS,
   OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT,
+  ACCESSIBILITY_STATEMENT, ACCESSIBILITY_STATEMENT_DEFAULT, type AccessibilityStatement,
   SETTINGS_TAG,
 } from './keys'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
@@ -71,4 +72,31 @@ export async function getPortalReviews(): Promise<PortalReviewsBlock> {
   // the SQL editor, and an empty/broken blob falls back to the seeded quotes
   // instead of leaving a titled section with nothing under it.
   return normalizeReviews(stored, PORTAL_REVIEWS_DEFAULT)
+}
+
+/** The public accessibility statement — /accessibility renders only
+ *  whichever of these fields actually have a value. */
+export function getAccessibilityStatement(): Promise<AccessibilityStatement> {
+  return readSetting<AccessibilityStatement>(ACCESSIBILITY_STATEMENT, ACCESSIBILITY_STATEMENT_DEFAULT)
+}
+
+/** Same row, plus its own last-updated timestamp — the regulations
+ *  require the statement to carry a visible update date, which the plain
+ *  value-only read above doesn't have. A second small request rather than
+ *  widening readSetting<T>'s generic shape for every other caller. */
+export async function getAccessibilityStatementUpdatedAt(): Promise<string | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon) return null
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/app_settings?key=eq.${ACCESSIBILITY_STATEMENT}&select=updated_at`,
+      { headers: { apikey: anon, Authorization: `Bearer ${anon}` }, next: { revalidate: 60, tags: [SETTINGS_TAG] } }
+    )
+    if (!res.ok) return null
+    const rows = (await res.json()) as { updated_at: string }[]
+    return rows?.[0]?.updated_at ?? null
+  } catch {
+    return null
+  }
 }

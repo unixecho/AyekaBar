@@ -34,6 +34,18 @@ const T = {
   backInStock: '↩ החזרה למלאי',
   viewMenu: 'צפייה בתפריט', dash: '← ניהול',
   confirmDelCat: 'למחוק את הקטגוריה?',
+  // 2026-09-01: returning an item to stock only edits the DRAFT — the
+  // out-of-stock dashboard signal disappears (it reads the draft) while
+  // customers, who read `published`, still see the item as אזל until
+  // someone separately remembers to hit "פרסום". The gap between "the
+  // warning went away" and "it's actually visible to customers" read as a
+  // bug, not two correctly-separate steps — so prompt for the second step
+  // right where the first one just happened, instead of leaving it to a
+  // signal the owner has to notice later.
+  publishStockTitle: 'המוצר הוחזר למלאי בטיוטה',
+  publishStockBody: 'הלקוחות עדיין רואים את התפריט הישן ולא יראו את המוצר עד שתפרסם/י.',
+  publishStockNow: 'פרסם עכשיו',
+  publishStockLater: 'אעשה זאת אחר כך',
   empty: 'אין עדיין קטגוריות. הוסף/י אחת למטה.',
   // Item options (item E, 2026-08-15) — same-priced named choices a price
   // split can't express: hookah flavor, a pasta sauce.
@@ -68,6 +80,11 @@ export default function MenuEditor() {
   const [openCat, setOpenCat] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
+  // See restoreItem() / save()'s own comments — tracks whether an item was
+  // returned to stock since the last publish, so a successful save can
+  // offer to publish immediately instead of leaving that step to a
+  // dashboard signal the owner has to separately notice.
+  const [stockJustRestored, setStockJustRestored] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -93,7 +110,11 @@ export default function MenuEditor() {
     setDirty(true); setSavedTick(false)
   }, [])
 
-  async function save(): Promise<boolean> {
+  // `promptIfStockRestored` defaults on for the owner's own explicit Save
+  // click, and is turned off for the internal save publish() already does
+  // when the draft is dirty — no reason to offer "publish now?" to someone
+  // who's already mid-publish.
+  async function save(promptIfStockRestored = true): Promise<boolean> {
     if (!menuId) return false
     setSaving(true); setMsg(null)
     const { error } = await supabase.from('menus').update({ draft: { categories: cats }, updated_at: new Date().toISOString() }).eq('id', menuId)
@@ -104,13 +125,22 @@ export default function MenuEditor() {
     // trail is reported separately. Fire-and-forget: a failed log line must
     // never make a successful save look like it failed.
     void recordAudit('menu.save', 'שמר/ה טיוטת תפריט', { categories: cats.length })
+    if (promptIfStockRestored && stockJustRestored) {
+      setStockJustRestored(false)
+      setConfirmReq({
+        title: T.publishStockTitle,
+        body: T.publishStockBody,
+        confirmLabel: T.publishStockNow,
+        onConfirm: () => { void publish() },
+      })
+    }
     return true
   }
 
   async function publish() {
     if (!menuId) return
     setPublishing(true); setMsg(null)
-    if (dirty) { const ok = await save(); if (!ok) { setPublishing(false); return } }
+    if (dirty) { const ok = await save(false); if (!ok) { setPublishing(false); return } }
     const { error } = await supabase.rpc('publish_menu', { p_menu_id: menuId })
     setPublishing(false)
     if (error) { setMsg('הפרסום נכשל.'); return }
@@ -148,7 +178,7 @@ export default function MenuEditor() {
   const addItem = (ci: number) => edit((d) => { d[ci].items.push({ he: 'פריט חדש', price: null }) })
   const delItem = (ci: number, ii: number) => edit((d) => { d[ci].items.splice(ii, 1) })
   const moveItem = (ci: number, ii: number, dir: -1 | 1) => edit((d) => { const j = ii + dir; const it = d[ci].items; if (j < 0 || j >= it.length) return;[it[ii], it[j]] = [it[j], it[ii]] })
-  const restoreItem = (ci: number, ii: number) => edit((d) => { d[ci].items[ii].available = undefined })
+  const restoreItem = (ci: number, ii: number) => { edit((d) => { d[ci].items[ii].available = undefined }); setStockJustRestored(true) }
 
   // Out-of-stock overview — a VIRTUAL grouping, not a real move: an item
   // stays in its actual category (deleting it out of "Cocktails" into a
@@ -262,7 +292,7 @@ export default function MenuEditor() {
         <span style={{ fontSize: '0.8rem', color: dirty ? 'var(--neon-soft)' : 'var(--text-faint)', flex: 1 }}>
           {msg ?? (dirty ? T.unsaved : savedTick ? T.saved : '')}
         </span>
-        <button onClick={save} disabled={saving || !dirty} className="press" style={{ ...ghost, opacity: (saving || !dirty) ? 0.5 : 1 }}>{saving ? T.saving : T.save}</button>
+        <button onClick={() => save()} disabled={saving || !dirty} className="press" style={{ ...ghost, opacity: (saving || !dirty) ? 0.5 : 1 }}>{saving ? T.saving : T.save}</button>
         <button onClick={publish} disabled={publishing} className="press" style={{ ...primary, opacity: publishing ? 0.6 : 1 }}>{publishing ? T.publishing : T.publish}</button>
       </div>
 

@@ -72,6 +72,48 @@ export const OMS_OVERALL_DEMO_MODE_DEFAULT = false
  *  the query form needs no rewrite to resolve on any host. */
 export const OVERALL_VIEW_URL = 'https://staff.ayeka.bar/?demo=1'
 
+/** The public accessibility statement (הצהרת נגישות), required regardless
+ *  of compliance route under Israel's Accessibility of Service Regulations
+ *  — see PLAYBOOK.md §5. Every field is optional at the type level on
+ *  purpose: the public page (`/accessibility`) renders only the fields
+ *  that are actually filled in, never a "[TODO]" placeholder for a real
+ *  visitor to see. What's genuinely missing surfaces instead as a
+ *  dashboard signal (src/lib/owner/signals.ts) pointing the owner at
+ *  /owner/accessibility — so the gap is tracked as an input to collect,
+ *  not silently either invented or shown as broken. */
+export const ACCESSIBILITY_STATEMENT = 'accessibility_statement'
+
+export interface AccessibilityStatement {
+  /** Physical entrance — step-free access, ramps, etc. */
+  entranceAccess?: string
+  /** Restroom accessibility — door width, grab bars, etc. */
+  restroomAccess?: string
+  /** Anything else about the physical venue not covered by the two fields
+   *  above (seating, table height, general accommodations). */
+  generalNote?: string
+  /** Browsers/devices the WEBSITE itself was tested with. */
+  browsersTested?: string
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  /** Only rendered if the owner explicitly sets it — claiming an exemption
+   *  is itself a decision, not a default, so an empty value here means
+   *  "no exemption claimed," not "missing information." */
+  exemptionNote?: string
+}
+
+export const ACCESSIBILITY_STATEMENT_DEFAULT: AccessibilityStatement = {}
+
+/** Which fields the regulations actually require before the statement is
+ *  complete — used both by the dashboard signal (what's still missing)
+ *  and, implicitly, by nothing on the public page (it never blocks on
+ *  this, it just renders what exists). Contact info needs at least ONE
+ *  of phone/email, not literally both — see readDashboardSignals's own
+ *  check rather than a flat list here. */
+export const ACCESSIBILITY_REQUIRED_TEXT_FIELDS: (keyof AccessibilityStatement)[] = [
+  'entranceAccess', 'restroomAccess', 'browsersTested',
+]
+
 export type PortalLinkKey = 'instagram' | 'facebook' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {

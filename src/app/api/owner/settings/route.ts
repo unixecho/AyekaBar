@@ -8,6 +8,7 @@ import {
   PORTAL_REVIEWS,
   OMS_NOTIFY_ALL_WAITERS, OMS_NOTIFY_ALL_WAITERS_DEFAULT,
   OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT,
+  ACCESSIBILITY_STATEMENT, ACCESSIBILITY_STATEMENT_DEFAULT, type AccessibilityStatement,
   SETTINGS_TAG,
 } from '@/lib/settings/keys'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
@@ -25,7 +26,7 @@ export async function GET() {
   const { data, error } = await auth.service
     .from('app_settings')
     .select('key, value, updated_at')
-    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS, PORTAL_REVIEWS, OMS_NOTIFY_ALL_WAITERS, OMS_OVERALL_DEMO_MODE])
+    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS, PORTAL_REVIEWS, OMS_NOTIFY_ALL_WAITERS, OMS_OVERALL_DEMO_MODE, ACCESSIBILITY_STATEMENT])
 
   if (error) return NextResponse.json({ error: 'טעינת ההגדרות נכשלה' }, { status: 500 })
 
@@ -35,6 +36,7 @@ export async function GET() {
   const reviewsRow = data?.find((r) => r.key === PORTAL_REVIEWS)
   const notifyAllRow = data?.find((r) => r.key === OMS_NOTIFY_ALL_WAITERS)
   const overallDemoRow = data?.find((r) => r.key === OMS_OVERALL_DEMO_MODE)
+  const accessibilityRow = data?.find((r) => r.key === ACCESSIBILITY_STATEMENT)
 
   return NextResponse.json({
     loyaltyEnabled: (loyaltyRow?.value as boolean | undefined) ?? LOYALTY_ENABLED_DEFAULT,
@@ -48,6 +50,8 @@ export async function GET() {
     omsNotifyAllWaitersUpdatedAt: notifyAllRow?.updated_at ?? null,
     omsOverallDemoMode: (overallDemoRow?.value as boolean | undefined) ?? OMS_OVERALL_DEMO_MODE_DEFAULT,
     omsOverallDemoModeUpdatedAt: overallDemoRow?.updated_at ?? null,
+    accessibilityStatement: { ...ACCESSIBILITY_STATEMENT_DEFAULT, ...(accessibilityRow?.value as AccessibilityStatement | undefined) },
+    accessibilityStatementUpdatedAt: accessibilityRow?.updated_at ?? null,
   })
 }
 
@@ -56,7 +60,46 @@ export async function PATCH(request: NextRequest) {
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown; portalReviews?: unknown; omsNotifyAllWaiters?: unknown; omsOverallDemoMode?: unknown } | null
+    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown; portalReviews?: unknown; omsNotifyAllWaiters?: unknown; omsOverallDemoMode?: unknown; accessibilityStatement?: unknown } | null
+
+  if (body && 'accessibilityStatement' in body) {
+    const input = body.accessibilityStatement
+    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+      return NextResponse.json({ error: 'ערך לא תקין' }, { status: 400 })
+    }
+    const ALLOWED_KEYS = ['entranceAccess', 'restroomAccess', 'generalNote', 'browsersTested', 'contactName', 'contactPhone', 'contactEmail', 'exemptionNote'] as const
+    const next: AccessibilityStatement = {}
+    for (const k of ALLOWED_KEYS) {
+      const v = (input as Record<string, unknown>)[k]
+      if (typeof v !== 'string') continue
+      const trimmed = v.trim()
+      if (trimmed.length > 600) return NextResponse.json({ error: 'הטקסט ארוך מדי' }, { status: 400 })
+      // Empty string = "not filled in yet", stored as absent so the public
+      // page and the missing-fields signal both read it the same way.
+      if (trimmed) next[k] = trimmed
+    }
+
+    const { data, error } = await auth.service
+      .from('app_settings')
+      .upsert({
+        key: ACCESSIBILITY_STATEMENT,
+        value: next,
+        is_public: true, // the signed-out /accessibility page reads this
+        updated_at: new Date().toISOString(),
+        updated_by: auth.userId,
+      }, { onConflict: 'key' })
+      .select('value, updated_at')
+      .single()
+
+    if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
+
+    revalidateTag(SETTINGS_TAG)
+
+    return NextResponse.json({
+      accessibilityStatement: data.value as AccessibilityStatement,
+      updatedAt: data.updated_at,
+    })
+  }
 
   if (body && 'omsOverallDemoMode' in body) {
     if (typeof body.omsOverallDemoMode !== 'boolean') {

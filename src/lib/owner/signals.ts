@@ -32,7 +32,10 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { MENU_SLUG, type MenuCategory } from '@/lib/menu/types'
-import { OMS_OVERALL_DEMO_MODE } from '@/lib/settings/keys'
+import {
+  OMS_OVERALL_DEMO_MODE,
+  ACCESSIBILITY_STATEMENT, ACCESSIBILITY_REQUIRED_TEXT_FIELDS, type AccessibilityStatement,
+} from '@/lib/settings/keys'
 import { AYEKA_VENUE, DEFAULT_ROLES } from '@/lib/shifts/config'
 import { todayIn, addDays, dayIndex, intervalOf, nowMinutesIn } from '@/lib/shifts/time'
 
@@ -211,6 +214,53 @@ async function readMenu(service: Service): Promise<DashboardSignal[]> {
     return out
   } catch {
     return []
+  }
+}
+
+const ACCESSIBILITY_FIELD_LABELS: Record<keyof AccessibilityStatement, string> = {
+  entranceAccess: 'נגישות הכניסה', restroomAccess: 'נגישות השירותים',
+  generalNote: 'הערה כללית', browsersTested: 'דפדפנים שנבדקו',
+  contactName: 'שם איש קשר', contactPhone: 'טלפון', contactEmail: 'אימייל', exemptionNote: 'פטור',
+}
+
+/** 2026-09-01: "don't show the customer any missing information... every
+ *  missing field surfaces in the dashboard notification bar as input that
+ *  needs to be entered." The public /accessibility page already renders
+ *  only whatever's filled in — this is the other half, telling the owner
+ *  what's still blank rather than leaving that silent. Info-tier: an
+ *  incomplete compliance document is a real gap, but not an operational
+ *  emergency the way a stuck order is. */
+async function readAccessibility(service: Service): Promise<DashboardSignal | null> {
+  try {
+    const { data, error } = await service
+      .from('app_settings')
+      .select('value')
+      .eq('key', ACCESSIBILITY_STATEMENT)
+      .maybeSingle()
+    if (error) return null
+
+    const value = (data?.value as AccessibilityStatement | undefined) ?? {}
+    const missing = ACCESSIBILITY_REQUIRED_TEXT_FIELDS.filter((k) => !value[k]?.trim())
+    // Contact info needs at least one channel, not literally both fields.
+    if (!value.contactPhone?.trim() && !value.contactEmail?.trim()) {
+      missing.push('contactPhone')
+    }
+    if (missing.length === 0) return null
+
+    const names = missing.map((k) => ACCESSIBILITY_FIELD_LABELS[k] ?? k)
+    return {
+      id: 'accessibility-incomplete',
+      severity: 'info',
+      rank: 20,
+      icon: '♿',
+      title: 'הצהרת הנגישות חסרה פרטים',
+      detail: names.join(', '),
+      href: '/owner/accessibility',
+      actionLabel: 'להשלמה',
+      kind: 'link',
+    }
+  } catch {
+    return null
   }
 }
 
@@ -631,7 +681,7 @@ export async function readDashboardSignals(): Promise<DashboardSignals> {
     return { stats: EMPTY_STATS, signals: [] }
   }
 
-  const [menu, floor, stuck, session, reminder, demo, schedule] = await Promise.all([
+  const [menu, floor, stuck, session, reminder, demo, schedule, accessibility] = await Promise.all([
     readMenu(service),
     readFloor(service),
     readStuckItems(service),
@@ -639,6 +689,7 @@ export async function readDashboardSignals(): Promise<DashboardSignals> {
     readShiftReminder(service),
     readDemoMode(service),
     readSchedule(service),
+    readAccessibility(service),
   ])
 
   const signals = [
@@ -648,6 +699,7 @@ export async function readDashboardSignals(): Promise<DashboardSignals> {
     reminder,
     demo,
     schedule.signal,
+    accessibility,
   ].filter((s): s is DashboardSignal => s !== null)
 
   signals.sort((a, b) => b.rank - a.rank)

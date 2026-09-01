@@ -99,7 +99,14 @@ export default async function OwnerDashboardPage() {
         initialOverallDemoMode={overallDemoMode} initialShiftStatus={shiftStatus}
       />
 
-      {/* 4. Everything else. Eight tiles before this rebuild, eight after. */}
+      {/* 4. Everything else. Eight tiles before this rebuild, nine as of
+          2026-09-01 — the accessibility statement joined the grid rather
+          than staying signal-only, because once its required fields are
+          filled the dashboard signal correctly disappears ("no empty
+          state" is the whole mechanism) and it would otherwise become
+          unreachable without typing the URL by hand — unlike a stuck
+          order, the statement is something the owner may come back to
+          edit again long after it's first "done". */}
       <div className="rise" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, animationDelay: '140ms' }}>
         <Link href="/owner/editor" style={navCard}>
           <span style={{ fontSize: '1.3rem' }} aria-hidden>🍽️</span>
@@ -128,6 +135,10 @@ export default async function OwnerDashboardPage() {
         <Link href="/owner/reports" style={navCard}>
           <span style={{ fontSize: '1.3rem' }} aria-hidden>🧮</span>
           <span>קבלות ומשמרות</span>
+        </Link>
+        <Link href="/owner/accessibility" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>♿</span>
+          <span>הצהרת נגישות</span>
         </Link>
         <Link href="/owner/audit" style={navCard}>
           <span style={{ fontSize: '1.3rem' }} aria-hidden>🧾</span>

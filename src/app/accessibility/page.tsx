@@ -1,22 +1,26 @@
 import Link from 'next/link'
+import { getAccessibilityStatement, getAccessibilityStatementUpdatedAt } from '@/lib/settings/server'
 
 // The accessibility statement (הצהרת נגישות) required by Israel's Equal
 // Rights for Persons with Disabilities regulations (תקנות נגישות השירות) —
-// a separate, mandatory document regardless of whether the site also
-// carries a Privacy Policy or Terms page. Hebrew-only, matching how the
-// Privacy Policy / Terms drafts were scoped (a single-language legal
-// document is the norm on this site, not a gap — see CLAUDE.md's i18n
-// note, which is about product UI strings, not legal filings).
+// mandatory regardless of whether the site also carries a Privacy Policy or
+// Terms page. Hebrew-only, matching how those drafts are scoped (a
+// single-language legal document is the norm on this site, not a gap).
 //
-// Genuinely known, stated as fact below: every digital-accessibility item
-// under "מה בוצע באתר". Everything about the PHYSICAL venue (wheelchair
-// access, accessible restroom, etc.) is owner-supplied — marked
-// [להשלמה] rather than guessed, same convention as the Privacy Policy /
-// Terms drafts' business-identity placeholders.
+// 2026-09-01: content is now owner-editable (/owner/accessibility, backed
+// by app_settings) rather than hardcoded. Every section below renders only
+// if it actually has content — a real visitor never sees a "[להשלמה]"
+// placeholder. Whatever's still missing surfaces instead as a dashboard
+// signal pointing the owner at the editor (src/lib/owner/signals.ts).
 
-const STATEMENT_DATE = '01.09.2026'
+export default async function AccessibilityPage() {
+  const [s, updatedAt] = await Promise.all([
+    getAccessibilityStatement(),
+    getAccessibilityStatementUpdatedAt(),
+  ])
+  const hasPhysical = s.entranceAccess || s.restroomAccess || s.generalNote
+  const hasContact = s.contactName || s.contactPhone || s.contactEmail
 
-export default function AccessibilityPage() {
   return (
     <main style={{ minHeight: '100dvh', padding: '32px 20px 60px', position: 'relative' }} dir="rtl" lang="he">
       <div className="app-bg" aria-hidden />
@@ -30,9 +34,11 @@ export default function AccessibilityPage() {
         <h1 style={{ fontSize: '1.7rem', fontWeight: 800, color: 'var(--text)', margin: '18px 0 4px' }}>
           הצהרת נגישות — אייכה בר
         </h1>
-        <p style={{ color: 'var(--text-faint)', fontSize: '0.85rem', margin: '0 0 28px' }}>
-          עודכן לאחרונה: {STATEMENT_DATE}
-        </p>
+        {updatedAt && (
+          <p style={{ color: 'var(--text-faint)', fontSize: '0.85rem', margin: '0 0 28px' }}>
+            עודכן לאחרונה: {new Date(updatedAt).toLocaleDateString('he-IL')}
+          </p>
+        )}
 
         <Section title="כללי">
           <p>
@@ -42,36 +48,52 @@ export default function AccessibilityPage() {
           </p>
         </Section>
 
-        <Section title="מה בוצע באתר (נכון לתאריך עדכון ההצהרה)">
+        <Section title="מה בוצע באתר">
           <ul style={listStyle}>
             <li>מבנה סמנטי וכותרות מדורגות בכל עמוד.</li>
             <li>ניגודיות צבעים בין טקסט לרקע בהתאם לרמה AA (4.5:1 לטקסט רגיל).</li>
             <li>אינדיקציה חזותית ברורה למיקוד מקלדת (focus) בכל רכיב אינטראקטיבי.</li>
             <li>תמיכה בניווט מלא באמצעות מקלדת.</li>
-            <li>כיבוד הגדרת "הפחתת תנועה" (prefers-reduced-motion) של הדפדפן/מערכת ההפעלה — למי שמוגדר אצלו כך, אנימציות באתר מצטמצמות אוטומטית.</li>
+            <li>כיבוד הגדרת "הפחתת תנועה" (prefers-reduced-motion) של הדפדפן/מערכת ההפעלה.</li>
             <li>תמיכה מלאה בכיווניות טקסט מימין-לשמאל (RTL) עבור עברית וערבית.</li>
           </ul>
         </Section>
 
-        <Section title="דפדפנים שנבדקו">
-          <p>Chrome, Safari — גרסאות עדכניות, מחשב ונייד. <span style={pillPh}>[להשלמה: רשימה סופית לאחר סבב בדיקה מלא]</span></p>
-        </Section>
+        {s.browsersTested && (
+          <Section title="דפדפנים שנבדקו">
+            <p>{s.browsersTested}</p>
+          </Section>
+        )}
 
-        <Section title="נגישות בית העסק הפיזי">
-          <p style={pillPh}>[להשלמה ע״י בעל העסק: התאמות נגישות בבית העסק עצמו — גישה לכיסא גלגלים, שירותים נגישים, וכל התאמה פיזית רלוונטית אחרת.]</p>
-        </Section>
+        {hasPhysical && (
+          <Section title="נגישות בית העסק הפיזי">
+            <ul style={listStyle}>
+              {s.entranceAccess && <li>{s.entranceAccess}</li>}
+              {s.restroomAccess && <li>{s.restroomAccess}</li>}
+              {s.generalNote && <li>{s.generalNote}</li>}
+            </ul>
+          </Section>
+        )}
 
-        <Section title="פטורים">
-          <p style={pillPh}>[להשלמה: האם העסק חוסה תחת פטור עסק קטן לפי התקנות — כפוף למחזור ההכנסות השנתי. לבירור מול בעל העסק ו/או יועץ נגישות.]</p>
-        </Section>
+        {s.exemptionNote && (
+          <Section title="פטורים">
+            <p>{s.exemptionNote}</p>
+          </Section>
+        )}
 
-        <Section title="לא הצלחת להשתמש בחלק מהאתר?">
-          <p>
-            אנו פועלים לשפר את נגישות האתר באופן שוטף. אם נתקלת בקושי או בעיה בנושא נגישות, נשמח
-            שתדווח/י לנו כדי שנוכל לטפל בכך:
-          </p>
-          <p style={pillPh}>[להשלמה: שם רכז/ת הנגישות, טלפון, אימייל]</p>
-        </Section>
+        {hasContact && (
+          <Section title="לא הצלחת להשתמש בחלק מהאתר?">
+            <p>
+              אנו פועלים לשפר את נגישות האתר באופן שוטף. אם נתקלת בקושי או בעיה בנושא נגישות, נשמח
+              שתדווח/י לנו כדי שנוכל לטפל בכך:
+            </p>
+            <p style={{ margin: '8px 0 0' }}>
+              {s.contactName && <>{s.contactName}<br /></>}
+              {s.contactPhone && <>{s.contactPhone}<br /></>}
+              {s.contactEmail && <>{s.contactEmail}</>}
+            </p>
+          </Section>
+        )}
 
         <p style={{ color: 'var(--text-faint)', fontSize: '0.78rem', marginTop: 36 }}>
           הצהרה זו מתייחסת לנגישות האתר הדיגיטלי. ר׳ גם{' '}
@@ -95,4 +117,3 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 const listStyle: React.CSSProperties = { margin: 0, paddingInlineStart: 20, display: 'flex', flexDirection: 'column', gap: 6 }
-const pillPh: React.CSSProperties = { color: 'var(--neon-soft)', background: 'rgba(255,94,58,0.1)', border: '1px solid rgba(255,94,58,0.25)', borderRadius: 10, padding: '8px 12px', display: 'inline-block' }
