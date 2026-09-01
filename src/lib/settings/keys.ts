@@ -153,6 +153,25 @@ export const WAITER_CALL_ENABLED_DEFAULT = false
  *  the key lives here so the owner API and any future reader agree on it. */
 export const TABLE_CODE_CHANNEL = 'table_code_channel'
 
+/** The portal's customer feedback box (PLAN_CUSTOMER_FEEDBACK.md). Governs
+ *  whether the button renders AND whether POST /api/feedback accepts a
+ *  submission — a switch that only hid the button would be theatre, since
+ *  the endpoint is public and its shape is in the page source.
+ *
+ *  DEFAULTS TO **ON**, same posture as MENU_CART_ENABLED, and it fails OPEN
+ *  the same way: a settings-read blip must not silently close the suggestion
+ *  box. That is defensible only because this switch is NOT the security
+ *  boundary — the rate limits and length caps are, and they hold regardless
+ *  of what this row says. What the switch is for is the case those don't
+ *  cover: a human deciding the box has become more trouble than it is worth,
+ *  without waiting for a deploy. It is the lever PLAN_CUSTOMER_FEEDBACK §4
+ *  needs in order to ship without a CAPTCHA.
+ *
+ *  Public read (the signed-out portal decides whether to render the button).
+ *  Row created by migration 050. */
+export const CUSTOMER_FEEDBACK_ENABLED = 'customer_feedback_enabled'
+export const CUSTOMER_FEEDBACK_ENABLED_DEFAULT = true
+
 export type PortalLinkKey = 'instagram' | 'facebook' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {

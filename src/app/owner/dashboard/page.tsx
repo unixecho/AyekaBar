@@ -99,14 +99,17 @@ export default async function OwnerDashboardPage() {
         initialOverallDemoMode={overallDemoMode} initialShiftStatus={shiftStatus}
       />
 
-      {/* 4. Everything else. Eight tiles before this rebuild, nine as of
+      {/* 4. Everything else. Eight tiles before this rebuild, ten as of
           2026-09-01 — the accessibility statement joined the grid rather
           than staying signal-only, because once its required fields are
           filled the dashboard signal correctly disappears ("no empty
           state" is the whole mechanism) and it would otherwise become
           unreachable without typing the URL by hand — unlike a stuck
           order, the statement is something the owner may come back to
-          edit again long after it's first "done". */}
+          edit again long after it's first "done". The feedback inbox is the
+          tenth, and joined for exactly the same reason: `feedback-new` goes
+          silent the moment everything is read, and the queue is worth
+          re-opening (and its box worth closing) long after that. */}
       <div className="rise" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, animationDelay: '140ms' }}>
         <Link href="/owner/editor" style={navCard}>
           <span style={{ fontSize: '1.3rem' }} aria-hidden>🍽️</span>
@@ -139,6 +142,10 @@ export default async function OwnerDashboardPage() {
         <Link href="/owner/accessibility" style={navCard}>
           <span style={{ fontSize: '1.3rem' }} aria-hidden>♿</span>
           <span>הצהרת נגישות</span>
+        </Link>
+        <Link href="/owner/feedback" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>💬</span>
+          <span>משוב מלקוחות</span>
         </Link>
         <Link href="/owner/audit" style={navCard}>
           <span style={{ fontSize: '1.3rem' }} aria-hidden>🧾</span>

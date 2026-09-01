@@ -62,7 +62,29 @@ function iosTap(): void {
     document.body.appendChild(label)
     iosSwitch = label
   }
+
+  // ⚠️ CLICKING A CHECKBOX FOCUSES IT. Found 2026-09-01 while building the
+  // feedback sheet: `label.click()` activates the checkbox inside, and
+  // activating a checkbox moves keyboard focus to it — so every control that
+  // called haptic() silently handed focus to an invisible, aria-hidden,
+  // tabIndex=-1 input sitting at 0,0.
+  //
+  // That is not a small cosmetic thing. It hit EVERY caller in the app on
+  // every device with no vibration motor — which is all desktop browsers and,
+  // pointedly, iOS Safari itself, the one platform this trick exists for.
+  // A keyboard user lost their place on every tap (WCAG 2.4.3), and any
+  // overlay opened by a haptic control could never restore focus to whatever
+  // opened it, because by the time the sheet read document.activeElement the
+  // answer was already this checkbox.
+  //
+  // `pointer-events: none` does not help — a scripted .click() never
+  // hit-tests. So focus is taken back explicitly. preventScroll because
+  // re-focusing must not yank a long page back to where the button is.
+  const before = document.activeElement
   iosSwitch.click()
+  if (before instanceof HTMLElement && document.activeElement !== before) {
+    before.focus({ preventScroll: true })
+  }
 }
 
 /**

@@ -7,6 +7,7 @@ import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
 import type { PortalReviewsBlock } from '@/lib/reviews/types'
 import LanguageSwitch, { useLanguage, type Lang } from '@/components/LanguageSwitch'
 import ReviewWall from '@/components/ReviewWall'
+import FeedbackButton from '@/components/FeedbackButton'
 
 const LINKS = {
   menu: '/menu',
@@ -45,12 +46,16 @@ export default function Portal({
   loyaltyVisible = true,
   links = PORTAL_LINKS_DEFAULT,
   reviews = PORTAL_REVIEWS_DEFAULT,
+  feedbackEnabled = true,
 }: {
   loyaltyEnabled?: boolean
   /** Off = no loyalty entry on the portal at all, teaser included. */
   loyaltyVisible?: boolean
   links?: Record<PortalLinkKey, string>
   reviews?: PortalReviewsBlock
+  /** The owner's switch for the feedback box. Display only — the endpoint
+   *  re-reads the same setting and refuses on its own. */
+  feedbackEnabled?: boolean
 }) {
   const [lang, setLang] = useLanguage()
   const [navOpen, setNavOpen] = useState(false)
@@ -197,6 +202,11 @@ export default function Portal({
           <span style={{ flex: 1, textAlign: 'start' }}>{t.review}</span>
           <Arrow />
         </a>
+
+        {/* The private half of the same conversation the gold CTA above asks
+            for in public. Sits after it on purpose (PLAN_CUSTOMER_FEEDBACK
+            §6) and is styled down to match — see FeedbackButton's own note. */}
+        <FeedbackButton lang={lang} enabled={feedbackEnabled} />
 
         <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)' }}>
           <p style={{ margin: '0 0 6px' }}>{t.footer}</p>

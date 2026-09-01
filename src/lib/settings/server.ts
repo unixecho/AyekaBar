@@ -8,6 +8,7 @@ import {
   MENU_CART_ENABLED, MENU_CART_ENABLED_DEFAULT,
   TABLE_ORDERING_ENABLED, TABLE_ORDERING_ENABLED_DEFAULT,
   WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT,
+  CUSTOMER_FEEDBACK_ENABLED, CUSTOMER_FEEDBACK_ENABLED_DEFAULT,
   SETTINGS_TAG,
 } from './keys'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
@@ -76,6 +77,14 @@ export async function getCartActionFlags(): Promise<{ ordering: boolean; call: b
     readSetting<boolean>(WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT),
   ])
   return { ordering: ordering === true, call: call === true }
+}
+
+/** Is the portal's feedback box open? Read by the portal (to render the
+ *  button) and, independently, by POST /api/feedback itself — the endpoint
+ *  never trusts the page that called it to have honoured the switch. See
+ *  CUSTOMER_FEEDBACK_ENABLED for why this one fails open. */
+export function getCustomerFeedbackEnabled(): Promise<boolean> {
+  return readSetting<boolean>(CUSTOMER_FEEDBACK_ENABLED, CUSTOMER_FEEDBACK_ENABLED_DEFAULT)
 }
 
 /** The portal's external link destinations (Instagram, Facebook, review, navigate). */

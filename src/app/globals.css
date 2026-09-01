@@ -387,6 +387,85 @@ html[dir="ltr"] .menu-back svg { transform: scaleX(-1); }
   .sheet-scrim, .sheet-panel { animation: none !important; }
 }
 
+/* ============================================================
+   Customer feedback box — motion
+   ============================================================
+   Lives here rather than in a module stylesheet because it EXTENDS the
+   .sheet-* system directly above it: the sheet already owns the entrance
+   (sheet-up + a fading scrim), and everything below is what happens once
+   it has landed. Keeping the two together is what stops the sheet and its
+   contents drifting into two different easings.
+
+   House easing throughout: var(--ease) for travel, and the overshoot
+   spring cubic-bezier(.34,1.56,.64,1) — the same one `.pop` uses — for the
+   two moments that should feel physical rather than smooth: a radio being
+   chosen, and the success glyph landing. Everything is transform/opacity
+   only; nothing here animates a backdrop-filter (see CLAUDE.md). */
+
+/* Each block of the form arrives just after the sheet does, staggered by an
+   inline animationDelay. `backwards` so a delayed block holds its
+   pre-animation state instead of flashing at full opacity first. */
+.fb-step { animation: rise-in .42s var(--ease) backwards; }
+
+/* Form -> thank-you is a REPLACE, not a cut: the form scales back and fades
+   out, then the success view springs in. Two separate animations driven by
+   a `phase` state rather than one cross-fade, because both views in the DOM
+   at once would mean the sheet briefly sized to whichever is taller. */
+.fb-view      { animation: fb-view-in .36s var(--ease) backwards; }
+.fb-view-out  { animation: fb-view-out .18s var(--ease) forwards; }
+@keyframes fb-view-in  { from { opacity: 0; transform: scale(.97) translateY(10px) } to { opacity: 1; transform: none } }
+@keyframes fb-view-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(.98) translateY(-6px) } }
+
+/* The two category targets. The row itself only tints; the radio is what
+   springs, which is where an iOS eye actually looks. */
+.fb-choice {
+  transition: border-color .22s var(--ease), background .22s var(--ease),
+              box-shadow .22s var(--ease), transform .2s var(--ease);
+}
+.fb-choice:active { transform: scale(.985); }
+.fb-radio {
+  flex: 0 0 auto; width: 20px; height: 20px; border-radius: 999px;
+  border: 2px solid var(--line-strong); display: grid; place-items: center;
+  transition: border-color .22s var(--ease);
+}
+.fb-radio[data-on="true"] { border-color: var(--neon); }
+.fb-radio > span {
+  width: 10px; height: 10px; border-radius: 999px; background: var(--neon);
+  transform: scale(0);
+  transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+}
+.fb-radio[data-on="true"] > span { transform: scale(1); }
+
+/* A refused send shakes the action once — iOS's own vocabulary for "that
+   didn't go through", and it draws the eye to the message that just
+   appeared under it. Keyed on an incrementing counter in the component so
+   a second failure re-fires it rather than sitting inert. */
+.fb-shake { animation: fb-shake .42s var(--ease); }
+@keyframes fb-shake {
+  10%, 90% { transform: translateX(-2px) }
+  20%, 80% { transform: translateX(3px) }
+  30%, 50%, 70% { transform: translateX(-5px) }
+  40%, 60% { transform: translateX(5px) }
+}
+
+/* The activity indicator inside the send button while it is in flight —
+   the label is replaced rather than reworded, so the button never changes
+   width mid-press. */
+.fb-spin {
+  width: 16px; height: 16px; border-radius: 999px;
+  border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+  animation: ah-spin .7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-step, .fb-view, .fb-view-out, .fb-shake { animation: none !important; }
+  .fb-choice, .fb-radio, .fb-radio > span { transition: none !important; }
+  .fb-choice:active { transform: none; }
+  /* The spinner stays — it is the only thing telling the customer the send
+     is still running — but slowed well below the flash threshold. */
+  .fb-spin { animation-duration: 1.6s; }
+}
+
 /* ---- Category / item picker rows ---- */
 .pick-cat {
   border: 1px solid var(--line); border-radius: 14px;

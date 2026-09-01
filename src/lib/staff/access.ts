@@ -52,6 +52,11 @@ export const OP_ONLY_PREFIXES = [
   '/owner/staff',
   '/owner/loyalty',
   '/owner/links',
+  // Unsolicited free text from the public, sometimes carrying a contact
+  // address. OP only — being trusted with the MENU has never implied being
+  // handed customer correspondence, so this deliberately does NOT follow the
+  // editor's wider circle. /api/owner/feedback takes the same view.
+  '/owner/feedback',
 ]
 
 export const MENU_EDITOR_PREFIX = '/owner/editor'

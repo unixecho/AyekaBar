@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     // trimmed dashboard shape below. Every table with a customer_id/
     // attempted_by FK into customers, in full, no row limit.
     if (request.nextUrl.searchParams.get('export')) {
-      const [{ data: allVisits }, { data: allRedemptions }, { data: allAdjustments }] = await Promise.all([
+      const [{ data: allVisits }, { data: allRedemptions }, { data: allAdjustments }, { data: allFeedback }] = await Promise.all([
         serviceClient.from('visit_logs')
           .select('id, points_awarded, visit_timestamp, table_number')
           .eq('customer_id', customer.id).order('visit_timestamp', { ascending: false }),
@@ -45,6 +45,18 @@ export async function GET(request: NextRequest) {
           .eq('customer_id', customer.id).order('redeemed_at', { ascending: false }),
         serviceClient.from('point_adjustments')
           .select('id, delta, reason, created_at')
+          .eq('customer_id', customer.id).order('created_at', { ascending: false }),
+        // Feedback they sent from the portal while signed in (migration 050).
+        // Included because "every table with a customer_id FK, in full" is the
+        // rule this export states about itself, and this is now one of them —
+        // an export that quietly skipped a table would be worse than no
+        // export. Anonymous feedback (the normal case) has no customer_id and
+        // therefore appears here for nobody, which is correct: it is not
+        // "their" data in any sense the law or the customer would recognise.
+        // A read error (e.g. before 050 is applied) resolves to [] rather than
+        // failing the whole download.
+        serviceClient.from('customer_feedback')
+          .select('id, category, message, contact_email, page_url, status, created_at')
           .eq('customer_id', customer.id).order('created_at', { ascending: false }),
       ])
 
@@ -64,6 +76,7 @@ export async function GET(request: NextRequest) {
         visits: allVisits ?? [],
         rewardRedemptions: allRedemptions ?? [],
         pointAdjustments: allAdjustments ?? [],
+        feedback: allFeedback ?? [],
       }
 
       return new NextResponse(JSON.stringify(exportPayload, null, 2), {
@@ -185,6 +198,14 @@ export async function PATCH(request: NextRequest) {
 // first — preserving the security/fraud record's shape (an attempted
 // redemption still shows it happened and when) without keeping the
 // identifying link once the account is gone.
+//
+// customer_feedback (migration 050) needs NO code here and deliberately so:
+// its customer_id is `ON DELETE SET NULL`, so the cascade from auth.users →
+// customers reaches it on its own and leaves the feedback standing as
+// anonymous input. That is the intended outcome, not an oversight — the
+// message was never about their account, and deleting a loyalty membership
+// should not silently retract things the person said about the bar. Worth
+// re-checking against pg_constraint if a future migration touches that FK.
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = createClient()

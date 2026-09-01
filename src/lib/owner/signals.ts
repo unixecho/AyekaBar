@@ -264,6 +264,48 @@ async function readAccessibility(service: Service): Promise<DashboardSignal | nu
   }
 }
 
+/** Unread customer feedback (PLAN_CUSTOMER_FEEDBACK.md §5).
+ *
+ *  Info-tier and the LOWEST-RANKED signal in the stack, deliberately. Every
+ *  other row here describes something happening on the floor right now; this
+ *  one describes a message that will still be there tomorrow. Ranking it
+ *  above a stuck order — or even above an incomplete accessibility statement,
+ *  which is a live legal exposure — would be a small lie about urgency, and
+ *  the stack only works as long as its order can be trusted.
+ *
+ *  Counts `status = 'new'` only: a row the owner has opened has been seen,
+ *  which is the entire question this signal answers. `head: true` so it is a
+ *  count and never a page of customer messages travelling into a dashboard
+ *  payload that does not display them.
+ *
+ *  Before migration 050 is applied this read errors and the signal simply
+ *  does not exist — which is the correct behaviour for a feature whose table
+ *  isn't there yet, and is why every read in this file is allowed to fail
+ *  alone. */
+async function readFeedback(service: Service): Promise<DashboardSignal | null> {
+  try {
+    const { count, error } = await service
+      .from('customer_feedback')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'new')
+    if (error || !count) return null
+
+    return {
+      id: 'feedback-new',
+      severity: 'info',
+      rank: 15,
+      icon: '💬',
+      title: count === 1 ? 'משוב חדש מלקוח' : `${count} משובים חדשים מלקוחות`,
+      detail: 'עדיין לא נקראו',
+      href: '/owner/feedback',
+      actionLabel: 'לקריאה',
+      kind: 'link',
+    }
+  } catch {
+    return null
+  }
+}
+
 /** Open tabs: how many, and how much money is sitting on the floor.
  *
  *  TABS, NOT TABLES. The count used to be labelled "שולחנות פתוחים" and it was
@@ -681,7 +723,7 @@ export async function readDashboardSignals(): Promise<DashboardSignals> {
     return { stats: EMPTY_STATS, signals: [] }
   }
 
-  const [menu, floor, stuck, session, reminder, demo, schedule, accessibility] = await Promise.all([
+  const [menu, floor, stuck, session, reminder, demo, schedule, accessibility, feedback] = await Promise.all([
     readMenu(service),
     readFloor(service),
     readStuckItems(service),
@@ -690,6 +732,7 @@ export async function readDashboardSignals(): Promise<DashboardSignals> {
     readDemoMode(service),
     readSchedule(service),
     readAccessibility(service),
+    readFeedback(service),
   ])
 
   const signals = [
@@ -700,6 +743,7 @@ export async function readDashboardSignals(): Promise<DashboardSignals> {
     demo,
     schedule.signal,
     accessibility,
+    feedback,
   ].filter((s): s is DashboardSignal => s !== null)
 
   signals.sort((a, b) => b.rank - a.rank)
