@@ -1,0 +1,304 @@
+/* ============================================================
+   The digital menu's order cart.
+   Imported once, from CartProvider.tsx — self-contained the way
+   components/shifts/shifts.css and waiter/floor-builder.css are, so the whole
+   directory can be lifted into another bar's site as a copy.
+
+   Reuses the app's tokens (--neon, --ease, …) rather than defining any of its
+   own. Every animation honours prefers-reduced-motion at the bottom of the
+   file, in one block, so it is auditable in one place.
+   ============================================================ */
+
+/* ---- The per-item control that lives in a menu row ---- */
+
+.cart-add,
+.cart-step {
+  /* 44px is the tap target; the visible control can be smaller than the box
+     around it but must never be smaller than this. */
+  min-height: 40px;
+  flex: 0 0 auto;
+  font: inherit;
+  direction: ltr; /* − 2 + reads the same in Hebrew, Arabic and English */
+}
+
+.cart-add {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 14px; border-radius: 999px;
+  border: 1px solid rgba(255, 94, 58, 0.42);
+  background: rgba(255, 94, 58, 0.10);
+  color: var(--neon-soft);
+  font-weight: 700; font-size: 0.86rem;
+  cursor: pointer; white-space: nowrap;
+  transition: background .2s var(--ease), border-color .2s var(--ease), color .2s var(--ease);
+}
+.cart-add .cart-add-plus { font-size: 1.05rem; font-weight: 700; line-height: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .cart-add:hover { background: rgba(255, 94, 58, 0.2); border-color: var(--neon); color: #fff; }
+}
+
+.cart-step {
+  display: inline-flex; align-items: center;
+  border-radius: 999px; overflow: hidden;
+  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+  box-shadow: 0 0 16px rgba(255, 94, 58, 0.34);
+}
+.cart-step-btn {
+  width: 38px; height: 40px; border: 0; background: transparent;
+  color: #fff; font: inherit; font-size: 1.25rem; font-weight: 700; line-height: 1;
+  cursor: pointer; display: grid; place-items: center;
+  transition: background .16s var(--ease);
+}
+.cart-step-btn:active { background: rgba(0, 0, 0, 0.18); }
+.cart-step-qty {
+  min-width: 22px; text-align: center;
+  color: #fff; font-weight: 800; font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The tail column of a menu row: price above, control below. */
+.menu-page .item-tail {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+}
+
+/* ---- The floating button ---- */
+/* Pinned to a PHYSICAL corner, not a logical one: house rule (CLAUDE.md) —
+   floating UI stays where the thumb learned to find it, whichever way the
+   text runs. */
+.cart-fab-wrap {
+  position: fixed;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
+  z-index: 120;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+}
+
+.cart-fab {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 10px;
+  height: 54px; padding: 0 18px 0 16px;
+  border: 0; border-radius: 999px;
+  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+  color: #fff; font: inherit; font-weight: 700; font-size: 0.95rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 24px rgba(255, 94, 58, 0.42);
+  cursor: pointer;
+  direction: ltr;
+}
+.cart-fab-icon { width: 22px; height: 22px; flex: 0 0 auto; }
+.cart-fab-total { font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: .2px; }
+
+/* The count sits on the corner of the button, the way it does on every app
+   the customer already knows. */
+.cart-fab-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 24px; height: 24px; padding: 0 6px;
+  border-radius: 999px; background: var(--bg-elev-2);
+  border: 2px solid var(--bg);
+  color: var(--text); font-size: 0.76rem; font-weight: 800;
+  display: grid; place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Summoning: the button does not exist until the first add, then springs in
+   and never leaves again (PLAN_MENU_CART §4.3). Same spring the auth handoff
+   uses — one token, not a second opinion about what a pop feels like. */
+.cart-fab-wrap[data-summoned='false'] {
+  opacity: 0; pointer-events: none;
+  /* NOT transformed while hidden: the fly-to-cart animation measures this
+     element's rect to know where to fly TO, and a scaled box measures wrong. */
+}
+.cart-fab-wrap[data-summoned='true'] { opacity: 1; }
+.cart-fab-wrap[data-pop='true'] .cart-fab { animation: handoff-pop .5s cubic-bezier(.34, 1.56, .64, 1) backwards; }
+
+/* Reduced motion gets this instead of the flight — the badge still has to
+   register that something happened. */
+@keyframes cart-badge-bump {
+  0% { transform: scale(1) } 40% { transform: scale(1.35) } 100% { transform: scale(1) }
+}
+.cart-fab-badge[data-bump='true'] { animation: cart-badge-bump .32s var(--ease); }
+
+/* ---- The item flying into the cart ---- */
+.cart-fly {
+  position: fixed; z-index: 130;
+  pointer-events: none;
+  padding: 6px 12px; border-radius: 999px;
+  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+  color: #fff; font-family: 'Rubik', sans-serif; font-weight: 700; font-size: 0.82rem;
+  white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  will-change: transform, opacity;
+}
+
+/* ---- The active-diner strip, under the category chips ---- */
+/* Only rendered once at least one diner has been named. Until then there is
+   nothing to choose between and a control offering one option is noise. */
+.cart-whostrip {
+  display: flex; align-items: center; gap: 6px;
+  overflow-x: auto; scrollbar-width: none;
+  padding: 0 14px 10px;
+  max-width: 720px; margin: 0 auto;
+}
+.cart-whostrip::-webkit-scrollbar { display: none; }
+.cart-whostrip-label {
+  flex: 0 0 auto; font-size: 0.74rem; font-weight: 600; color: var(--text-faint);
+  padding-inline-end: 2px;
+}
+.cart-who {
+  flex: 0 0 auto; min-height: 32px;
+  padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03);
+  color: var(--text-dim); font: inherit; font-size: 0.82rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: color .2s var(--ease), border-color .2s var(--ease), background .2s var(--ease);
+}
+.cart-who[data-on='true'] {
+  color: #fff; border-color: transparent;
+  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+  box-shadow: 0 0 14px rgba(255, 94, 58, 0.36);
+}
+
+/* ---- Sheet internals (the shell itself reuses .sheet-scrim/.sheet-panel) ---- */
+
+.cart-sheet-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px; flex: 0 0 auto;
+}
+.cart-sheet-title { margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--text); flex: 1; }
+.cart-sheet-icon-btn {
+  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: transparent;
+  color: var(--text-dim); display: grid; place-items: center; cursor: pointer;
+  font: inherit; font-size: 0.78rem; font-weight: 700;
+}
+.cart-sheet-icon-btn svg { width: 17px; height: 17px; }
+.cart-sheet-icon-btn[data-danger='true'] { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.35); width: auto; padding: 0 12px; }
+
+.cart-group { border: 1px solid var(--line); border-radius: 14px; background: var(--bg-elev); overflow: hidden; flex: 0 0 auto; }
+.cart-group[data-table='true'] { border-color: var(--line-strong); }
+.cart-group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid var(--line);
+}
+.cart-group-name { flex: 1; min-width: 0; font-size: 0.92rem; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cart-group-sum { font-size: 0.84rem; font-weight: 700; color: var(--neon-soft); direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+.cart-group-empty { padding: 12px; font-size: 0.8rem; color: var(--text-faint); }
+
+.cart-line { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-top: 1px solid rgba(255, 255, 255, 0.03); }
+.cart-line:first-child { border-top: none; }
+.cart-line-main { flex: 1; min-width: 0; }
+.cart-line-name { font-size: 0.92rem; font-weight: 600; color: var(--text); line-height: 1.35; }
+.cart-line-variant { font-size: 0.78rem; color: var(--neon-soft); font-weight: 600; }
+/* A line added while Happy Hour was running. It carries the discount forward
+   into a cart that may still be open after the window closes — see
+   CartLine.happyHourPercent for why that is worth saying out loud rather than
+   letting the bill be the first place anyone notices. */
+.cart-hh {
+  display: inline-flex; align-items: center;
+  margin-inline-start: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: .2px;
+  color: #04222b; background: linear-gradient(135deg, var(--neon-2), #7defff);
+  vertical-align: middle; white-space: nowrap;
+}
+.cart-line-meta { margin-top: 2px; font-size: 0.76rem; color: var(--text-dim); line-height: 1.45; }
+.cart-line-unpriced { margin-top: 2px; font-size: 0.72rem; color: var(--text-faint); }
+.cart-line-price { flex: 0 0 auto; font-size: 0.88rem; font-weight: 700; color: var(--text); direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; padding-top: 2px; }
+
+.cart-line-tools { display: flex; align-items: center; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+.cart-chip {
+  min-height: 30px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.03);
+  color: var(--text-dim); font: inherit; font-size: 0.75rem; font-weight: 600;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+  transition: color .2s var(--ease), border-color .2s var(--ease);
+}
+.cart-chip[data-assigned='true'] { color: var(--neon-2); border-color: rgba(56, 225, 255, 0.4); }
+.cart-chip[data-danger='true'] { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3); }
+
+/* Compact stepper inside a cart row — smaller than the menu's, because here
+   it sits next to three other controls. */
+.cart-line-step { display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid var(--line-strong); overflow: hidden; direction: ltr; }
+.cart-line-step button {
+  width: 32px; height: 30px; border: 0; background: transparent; color: var(--text);
+  font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; display: grid; place-items: center;
+}
+.cart-line-step button:active { background: rgba(255, 255, 255, 0.06); }
+.cart-line-step span { min-width: 20px; text-align: center; font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.cart-add-diner {
+  width: 100%; min-height: 44px; border-radius: 14px;
+  border: 1px dashed var(--line-strong); background: transparent;
+  color: var(--text-dim); font: inherit; font-size: 0.86rem; font-weight: 600;
+  cursor: pointer; flex: 0 0 auto;
+}
+
+.cart-foot { flex: 0 0 auto; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--line-strong); }
+.cart-total-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.cart-total-label { font-size: 0.92rem; font-weight: 700; color: var(--text); }
+.cart-total-value { font-size: 1.25rem; font-weight: 800; color: var(--neon-soft); direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+.cart-foot-note { margin: 0 0 10px; font-size: 0.72rem; color: var(--text-faint); line-height: 1.5; }
+
+.cart-primary {
+  width: 100%; min-height: 48px; border-radius: 14px; border: 0;
+  /* Flex + gap rather than a margin on the price span. `margin-inline-start`
+     resolves against the SPAN's own direction, and the price span is dir="ltr"
+     so that margin lands on its physical left — i.e. the outside — leaving
+     "הוספה52₪" with no gap at all in Hebrew. A gap on the container is
+     direction-agnostic and cannot get this wrong. */
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+  color: #fff; font: inherit; font-size: 0.98rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 0 20px rgba(255, 94, 58, 0.3);
+}
+
+/* The two things that don't work yet. Present, legible, obviously inert —
+   a greyed button with a reason beats a button that isn't there. */
+.cart-soon {
+  width: 100%; min-height: 44px; padding: 6px 8px; border-radius: 14px;
+  border: 1px solid var(--line-strong); background: var(--bg-elev);
+  color: var(--text-faint); font: inherit; font-size: 0.8rem; font-weight: 700;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  cursor: not-allowed; line-height: 1.25; text-align: center;
+}
+.cart-soon-badge {
+  font-size: 0.6rem; font-weight: 800; letter-spacing: .3px;
+  padding: 1px 7px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line-strong);
+  color: var(--text-dim);
+}
+
+/* ---- Read-out mode: what the waiter actually looks at ---- */
+.cart-readout-group { border: 1px solid var(--line-strong); border-radius: 14px; padding: 12px 14px; background: var(--bg-elev); flex: 0 0 auto; }
+.cart-readout-name { font-size: 1.05rem; font-weight: 800; color: var(--neon-soft); margin-bottom: 8px; }
+.cart-readout-line { display: flex; align-items: baseline; gap: 10px; padding: 5px 0; font-size: 1.02rem; color: var(--text); line-height: 1.4; }
+.cart-readout-qty { flex: 0 0 auto; min-width: 30px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+.cart-readout-note { display: block; font-size: 0.84rem; color: var(--text-dim); }
+
+/* ---- Choice sheet ---- */
+.cart-choice-label { font-size: 0.82rem; font-weight: 700; color: var(--text-dim); margin: 12px 0 6px; }
+.cart-choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.cart-choice {
+  min-height: 42px; padding: 8px 14px; border-radius: 12px;
+  border: 1px solid var(--line-strong); background: var(--bg-elev);
+  color: var(--text-dim); font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: color .2s var(--ease), border-color .2s var(--ease), background .2s var(--ease);
+}
+.cart-choice[data-on='true'] {
+  color: var(--text); border-color: var(--neon);
+  background: rgba(255, 94, 58, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 94, 58, 0.3);
+}
+.cart-choice-price { font-size: 0.82rem; font-weight: 800; color: var(--neon-soft); direction: ltr; unicode-bidi: isolate; }
+
+.cart-note-input {
+  width: 100%; padding: 11px 13px; border-radius: 12px;
+  border: 1px solid var(--line-strong); background: var(--bg);
+  color: var(--text); font: inherit; font-size: 0.92rem;
+}
+
+/* ---- Motion opt-out, in one place ---- */
+@media (prefers-reduced-motion: reduce) {
+  .cart-fab-wrap[data-pop='true'] .cart-fab,
+  .cart-fab-badge[data-bump='true'] { animation: none !important; }
+  .cart-add, .cart-step-btn, .cart-who, .cart-chip, .cart-choice { transition: none !important; }
+}

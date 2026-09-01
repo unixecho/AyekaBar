@@ -12,6 +12,15 @@ export type AuditAction =
   | 'variant.activate'
   | 'variant.default'
   | 'happy_hour.update'
+  /** The menu's customer-facing cart switched on/off (PLAN_MENU_CART.md).
+   *  ⚠️ Like 'variant.default' above, this value is NOT yet in
+   *  `menu_audit.action`'s CHECK constraint — migration 014 lists seven
+   *  actions and the union here has nine. Postgres rejects the insert and
+   *  `logAudit` swallows it, so writing it is harmless and it starts
+   *  recording the moment migration 048 widens the constraint. Flagged in
+   *  HANDOFF.md; 'variant.default' has been silently dropping rows since it
+   *  was added, which is how this was noticed. */
+  | 'menu_cart.update'
 
 /** Resolve who is acting, from the staff roster, falling back to the auth
  *  record. Stored as a snapshot so removing someone later doesn't erase what

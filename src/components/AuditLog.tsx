@@ -60,6 +60,7 @@ const ACTION_META: Record<string, { label: string; emoji: string; color: string 
   'variant.activate': { label: 'החלפת תפריט מוצג', emoji: '🔀', color: '#2dd4bf' },
   'variant.default': { label: 'הגדרת תפריט ראשי', emoji: '⭐', color: '#fbbf24' },
   'happy_hour.update': { label: 'Happy Hour', emoji: '🍹', color: '#f472b6' },
+  'menu_cart.update': { label: 'עגלת הזמנה בתפריט', emoji: '🧾', color: '#38e1ff' },
 }
 
 const fallbackMeta = { label: 'שינוי', emoji: '•', color: '#a8a5b0' }

@@ -5,6 +5,9 @@ import {
   PORTAL_REVIEWS,
   OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT,
   ACCESSIBILITY_STATEMENT, ACCESSIBILITY_STATEMENT_DEFAULT, type AccessibilityStatement,
+  MENU_CART_ENABLED, MENU_CART_ENABLED_DEFAULT,
+  TABLE_ORDERING_ENABLED, TABLE_ORDERING_ENABLED_DEFAULT,
+  WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT,
   SETTINGS_TAG,
 } from './keys'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
@@ -54,6 +57,25 @@ export function getLoyaltyVisible(): Promise<boolean> {
  *  means the deck observes a live service and cannot write. */
 export function getOverallDemoMode(): Promise<boolean> {
   return readSetting<boolean>(OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT)
+}
+
+/** Does the digital menu offer its order-building cart? See
+ *  MENU_CART_ENABLED for why this one defaults to ON rather than failing
+ *  closed like the loyalty switch. */
+export function getMenuCartEnabled(): Promise<boolean> {
+  return readSetting<boolean>(MENU_CART_ENABLED, MENU_CART_ENABLED_DEFAULT)
+}
+
+/** The cart's two not-yet-built actions, read together because the sheet
+ *  renders both footer buttons in one pass and a second round-trip for the
+ *  second boolean would be pure waste. Both fail closed — they gate writes
+ *  into live service, not a local convenience. */
+export async function getCartActionFlags(): Promise<{ ordering: boolean; call: boolean }> {
+  const [ordering, call] = await Promise.all([
+    readSetting<boolean>(TABLE_ORDERING_ENABLED, TABLE_ORDERING_ENABLED_DEFAULT),
+    readSetting<boolean>(WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT),
+  ])
+  return { ordering: ordering === true, call: call === true }
 }
 
 /** The portal's external link destinations (Instagram, Facebook, review, navigate). */

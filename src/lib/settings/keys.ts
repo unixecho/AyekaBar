@@ -114,6 +114,45 @@ export const ACCESSIBILITY_REQUIRED_TEXT_FIELDS: (keyof AccessibilityStatement)[
   'entranceAccess', 'restroomAccess', 'browsersTested',
 ]
 
+/** The digital menu's order-building cart (PLAN_MENU_CART.md). Lets a
+ *  customer collect items, split them between named diners, and read the
+ *  result out to the waiter. Entirely client-side — nothing is transmitted —
+ *  so this switch governs display, not access.
+ *
+ *  DEFAULTS TO **ON**, which is the opposite posture to `loyalty_enabled`,
+ *  and deliberately so. That switch fails closed because guessing wrong
+ *  exposes a club that isn't ready. This one guards a local, read-only
+ *  convenience with no data path and no cost; failing closed here would mean
+ *  a transient settings-read blip silently removes a feature the owner asked
+ *  for from the menu, with nothing gained. The row is created public by
+ *  migration 048 so the signed-out /menu page can read it. */
+export const MENU_CART_ENABLED = 'menu_cart_enabled'
+export const MENU_CART_ENABLED_DEFAULT = true
+
+/** PHASE 2 — submitting a cart to the waiter's app after verifying a
+ *  6-digit code the waiter reads out. Not built; see `lib/cart/otp.ts` and
+ *  PLAN_MENU_CART.md §9. Present so the customer-facing button has something
+ *  real to read instead of a hardcoded `false`, and so turning it on later is
+ *  a flip rather than a deploy.
+ *
+ *  FAILS CLOSED, unlike the cart switch above, and for the mirror-image
+ *  reason: this one gates a WRITE path into live service. */
+export const TABLE_ORDERING_ENABLED = 'table_ordering_enabled'
+export const TABLE_ORDERING_ENABLED_DEFAULT = false
+
+/** PHASE 3 — "קריאה למלצר". Same posture, same reason. The owner has also
+ *  floated staff smartwatches as the eventual receiving end; the event row
+ *  drafted in migration 048 (`waiter_table_calls`) serves a phone and a watch
+ *  identically, which is the only part of that idea this repo needs to not
+ *  foreclose. */
+export const WAITER_CALL_ENABLED = 'waiter_call_enabled'
+export const WAITER_CALL_ENABLED_DEFAULT = false
+
+/** How the Phase-2 code reaches the customer — 'handoff' | 'sms' | 'email'.
+ *  Shape and the reasoning behind each value live in `lib/cart/otp.ts`;
+ *  the key lives here so the owner API and any future reader agree on it. */
+export const TABLE_CODE_CHANNEL = 'table_code_channel'
+
 export type PortalLinkKey = 'instagram' | 'facebook' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {

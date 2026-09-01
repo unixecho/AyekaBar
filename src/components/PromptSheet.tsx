@@ -18,6 +18,13 @@ export interface PromptRequest {
   placeholder?: string
   defaultValue?: string
   confirmLabel: string
+  /** Let the caller submit an EMPTY value. Off by default, because the
+   *  original callers (name a floor, name a diner) have nothing to mean by
+   *  one. On for editing an OPTIONAL field — the menu cart's per-line note —
+   *  where clearing the text IS the edit, and a confirm button that stays
+   *  disabled when you delete everything is a control that cannot undo
+   *  itself. */
+  allowEmpty?: boolean
   onConfirm: (value: string) => void
 }
 
@@ -52,7 +59,8 @@ export default function PromptSheet({
   if (!request) return null
 
   const trimmed = value.trim()
-  const submit = () => { if (trimmed) { request.onConfirm(trimmed); onClose() } }
+  const canSubmit = request.allowEmpty || !!trimmed
+  const submit = () => { if (canSubmit) { request.onConfirm(trimmed); onClose() } }
 
   return (
     <ModalPortal>
@@ -98,8 +106,8 @@ export default function PromptSheet({
             </div>
 
             <button
-              type="button" className="press" disabled={!trimmed} onClick={submit}
-              style={{ ...confirmStyle, opacity: trimmed ? 1 : 0.4 }}
+              type="button" className="press" disabled={!canSubmit} onClick={submit}
+              style={{ ...confirmStyle, opacity: canSubmit ? 1 : 0.4 }}
             >
               {request.confirmLabel}
             </button>

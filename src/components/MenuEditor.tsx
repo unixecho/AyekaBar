@@ -7,6 +7,7 @@ import { MENU_SLUG, loc, type MenuCategory, type MenuItem, type MenuOptionGroup,
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import MenuVersionBar from '@/components/MenuVersionBar'
 import HappyHourCard from '@/components/HappyHourCard'
+import MenuCartCard from '@/components/MenuCartCard'
 import Switch from '@/components/Switch'
 
 const T = {
@@ -213,6 +214,10 @@ export default function MenuEditor() {
           above the item list because they decide what the item list means. */}
       <MenuVersionBar />
       <HappyHourCard categories={cats} />
+      {/* Whether the menu offers customers a cart at all. Here rather than on
+          the dashboard because it is a menu decision, and the menu editor is
+          already where every other "what do customers see" switch lives. */}
+      <MenuCartCard />
 
       {/* 2026-08-20: "put all the items marked out of stock in the same
           category for the managers to return it to the menu quickly...

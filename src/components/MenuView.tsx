@@ -9,10 +9,25 @@ import {
 import { fetchMenuClient, fetchMenuStamp, fetchHappyHour } from '@/lib/menu/client'
 import { applyHappyHour, isHappyHourActive, type HappyHour, type DiscountedItem } from '@/lib/menu/variants'
 import LanguageSwitch from '@/components/LanguageSwitch'
+import CartProvider, { type CartActionAvailability } from '@/components/cart/CartProvider'
+import CartFab from '@/components/cart/CartFab'
+import CartSheet from '@/components/cart/CartSheet'
+import DinerStrip from '@/components/cart/DinerStrip'
+import AddToCartControl from '@/components/cart/AddToCartControl'
 
 const POLL_MS = 30_000
 
-export default function MenuView({ initial }: { initial: MenuData | null }) {
+/** Owner-switched off, or the whole cart feature absent: the menu renders
+ *  exactly as it did before any of it existed. Nothing below `cartEnabled`
+ *  is mounted, so a disabled cart costs a customer nothing — not a provider,
+ *  not a stylesheet's worth of layout, not a localStorage read. */
+export default function MenuView({
+  initial, cartEnabled = false, cartActions = { ordering: false, call: false },
+}: {
+  initial: MenuData | null
+  cartEnabled?: boolean
+  cartActions?: CartActionAvailability
+}) {
   const [menu, setMenu] = useState<MenuData | null>(initial)
   const [loading, setLoading] = useState(initial === null)
   const [happyHour, setHappyHour] = useState<HappyHour | null>(null)
@@ -113,9 +128,22 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
 
   // Track sticky-header height in a CSS var so scroll-margin-top lands an opened
   // category's top just below the sticky bar.
+  //
+  // A ResizeObserver rather than the old resize-listener-plus-dependency-list:
+  // the bar's own height now changes for reasons that are not a viewport
+  // resize and are not in any dep array — the cart's diner strip appears
+  // inside it on the first add, and grows a row as names are added. Observing
+  // the element itself is the only version of this that cannot go stale.
+  // Falls back to the window listener where ResizeObserver is missing.
   useEffect(() => {
     const setH = () => document.documentElement.style.setProperty('--sticky-h', `${stickyRef.current?.offsetHeight ?? 108}px`)
     setH()
+    const el = stickyRef.current
+    if (el && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(setH)
+      ro.observe(el)
+      return () => ro.disconnect()
+    }
     window.addEventListener('resize', setH)
     return () => window.removeEventListener('resize', setH)
   }, [menu, lang])
@@ -145,7 +173,7 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
 
   const brand = menu ? (loc(menu.name, lang) || 'אייכה בר') : 'אייכה בר'
 
-  return (
+  const page = (
     <div className="menu-page">
       <div className="app-bg" aria-hidden />
       <div className="menu-scrim" aria-hidden />
@@ -184,6 +212,12 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
             </nav>
           </div>
         )}
+
+        {/* Inside the sticky bar, under the chips: "who am I adding for?" has
+            to stay answerable while scrolling the menu, because that is when
+            the answer changes. Renders nothing until the cart has something
+            in it. */}
+        {cartEnabled && <DinerStrip lang={lang} />}
       </div>
 
       {/* Which version of the menu this is, right under the nav bar. */}
@@ -218,21 +252,37 @@ export default function MenuView({ initial }: { initial: MenuData | null }) {
         ) : (
           categories.map((cat, i) => (
             <CategorySection key={cat.id} cat={cat} lang={lang} open={cat.id === openId}
-              badges={menu.badges} delay={Math.min(i, 8) * 45} onToggle={() => openCategory(cat.id)} />
+              badges={menu.badges} delay={Math.min(i, 8) * 45} onToggle={() => openCategory(cat.id)}
+              cartEnabled={cartEnabled} />
           ))
         )}
       </main>
 
-      <footer className="menu-footer">{menu ? MENU_UI.footer[lang] : ''}</footer>
+      {/* Extra clearance so the floating cart button never covers the last
+          line of the footer on a short menu. Only when there is a button. */}
+      <footer className="menu-footer" style={cartEnabled ? { paddingBottom: 110 } : undefined}>
+        {menu ? MENU_UI.footer[lang] : ''}
+      </footer>
+
+      {cartEnabled && (
+        <>
+          <CartFab lang={lang} />
+          <CartSheet lang={lang} />
+        </>
+      )}
     </div>
   )
+
+  if (!cartEnabled) return page
+  return <CartProvider lang={lang} actions={cartActions}>{page}</CartProvider>
 }
 
 function CategorySection({
-  cat, lang, open, badges, delay, onToggle,
+  cat, lang, open, badges, delay, onToggle, cartEnabled,
 }: {
   cat: MenuCategory; lang: Lang; open: boolean
   badges: Record<string, { he?: string; en?: string; ar?: string }>; delay: number; onToggle: () => void
+  cartEnabled: boolean
 }) {
   return (
     <section className={`cat rise${open ? ' open' : ''}`} id={`cat-${cat.id}`} style={{ animationDelay: `${delay}ms` }}>
@@ -249,7 +299,11 @@ function CategorySection({
                 `{he: ''}` is truthy and rendered an empty bordered box. */}
             {loc(cat.note, lang) && <div className="cat-note">{loc(cat.note, lang)}</div>}
             {cat.items.map((it, i) => (
-              <ItemRow key={i} it={it} i={i} lang={lang} badges={badges} />
+              // Keyed by uid where there is one: a menu republished mid-visit
+              // reorders items, and an index key would then hand a row's
+              // React state (an open choice sheet, say) to a different drink.
+              <ItemRow key={it.uid ?? `i${i}`} it={it} i={i} lang={lang} badges={badges}
+                categoryId={cat.id} categoryTitle={cat.title} cartEnabled={cartEnabled} />
             ))}
           </div>
         </div>
@@ -259,10 +313,13 @@ function CategorySection({
 }
 
 function ItemRow({
-  it, i, lang, badges,
+  it, i, lang, badges, categoryId, categoryTitle, cartEnabled,
 }: {
   it: MenuItem; i: number; lang: Lang
   badges: Record<string, { he?: string; en?: string; ar?: string }>
+  categoryId: string
+  categoryTitle: { he?: string; en?: string; ar?: string }
+  cartEnabled: boolean
 }) {
   const blist = it.badges ?? (it.badge ? [it.badge] : [])
   const price = fmtPrice(it.price)
@@ -290,21 +347,35 @@ function ItemRow({
           </div>
         ))}
       </div>
-      {price && (
-        <div className="price">
-          {wasPrice && (
-            <span
-              title={MENU_UI.wasPrice[lang]}
-              style={{
-                display: 'block', fontSize: '0.72em', fontWeight: 600,
-                color: 'var(--text-faint)', textDecoration: 'line-through',
-                lineHeight: 1.1, marginBottom: 1,
-              }}
-            >{wasPrice}₪</span>
+      {/* Price and the add control share a column so a long item name on a
+          390px phone squeezes the NAME (which wraps) rather than pushing the
+          price and the button onto each other. */}
+      {(price || cartEnabled) && (
+        <div className="item-tail">
+          {price && (
+            <div className="price">
+              {wasPrice && (
+                <span
+                  title={MENU_UI.wasPrice[lang]}
+                  style={{
+                    display: 'block', fontSize: '0.72em', fontWeight: 600,
+                    color: 'var(--text-faint)', textDecoration: 'line-through',
+                    lineHeight: 1.1, marginBottom: 1,
+                  }}
+                >{wasPrice}₪</span>
+              )}
+              <span style={wasPrice ? { color: 'var(--neon-soft)' } : undefined}>
+                {price}<span className="cur">₪</span>
+              </span>
+            </div>
           )}
-          <span style={wasPrice ? { color: 'var(--neon-soft)' } : undefined}>
-            {price}<span className="cur">₪</span>
-          </span>
+          {cartEnabled && (
+            // Happy Hour rewrites `it.price` in place before this renders
+            // (applyHappyHour, above), so the cart snapshots the DISCOUNTED
+            // price the customer is actually looking at — which is the whole
+            // point of snapshotting rather than re-reading the menu later.
+            <AddToCartControl item={it} categoryId={categoryId} categoryTitle={categoryTitle} lang={lang} />
+          )}
         </div>
       )}
     </div>
