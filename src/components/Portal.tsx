@@ -17,11 +17,11 @@ const NAV_LABELS = { gmaps: 'Google Maps', waze: 'Waze', amaps: 'Apple Maps' }
 const I18N: Record<Lang, {
   brand: ReactNode; tagline: string; navigate: string; menu: string; instagram: string
   facebook: string; review: string; loyalty: string; soon: string; team: string
-  footer: string; scrollCue: string
+  footer: string; scrollCue: string; accessibility: string
 }> = {
-  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', facebook: 'פייסבוק', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', footer: '© אייכה בר', scrollCue: 'ביקורות' },
-  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', facebook: 'Facebook', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', footer: '© Ayeka Bar', scrollCue: 'Reviews' },
-  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', facebook: 'فيسبوك', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', footer: '© אייכה בר', scrollCue: 'التقييمات' },
+  he: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'חריש · ישראל', navigate: 'ניווט אלינו', menu: 'תפריט דיגיטלי', instagram: 'אינסטגרם', facebook: 'פייסבוק', review: 'השארת ביקורת', loyalty: 'מועדון נאמנות', soon: 'בקרוב', team: 'הצוות שלנו', footer: '© אייכה בר', scrollCue: 'ביקורות', accessibility: 'הצהרת נגישות' },
+  en: { brand: 'Ayeka Bar', tagline: 'Harish · Israel', navigate: 'Navigate to us', menu: 'Digital menu', instagram: 'Instagram', facebook: 'Facebook', review: 'Leave a review', loyalty: 'Loyalty Club', soon: 'Coming soon', team: 'Our team', footer: '© Ayeka Bar', scrollCue: 'Reviews', accessibility: 'Accessibility statement' },
+  ar: { brand: <>אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר</>, tagline: 'حريش · إسرائيل', navigate: 'الوصول إلينا', menu: 'القائمة الرقمية', instagram: 'إنستغرام', facebook: 'فيسبوك', review: 'اترك تقييماً', loyalty: 'نادي الولاء', soon: 'قريباً', team: 'طاقمنا', footer: '© אייכה בר', scrollCue: 'التقييمات', accessibility: 'بيان إمكانية الوصول' },
 }
 
 const ICONS = {
@@ -198,7 +198,10 @@ export default function Portal({
           <Arrow />
         </a>
 
-        <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)', margin: 0 }}>{t.footer}</p>
+        <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)' }}>
+          <p style={{ margin: '0 0 6px' }}>{t.footer}</p>
+          <Link href="/accessibility" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{t.accessibility}</Link>
+        </div>
       </div>
     </main>
   )

@@ -13,7 +13,11 @@
   --neon-2:    #38e1ff;
   --text:      #f5f3ef;
   --text-dim:  #a8a5b0;
-  --text-faint:#6a6776;
+  /* Was #6a6776 — measured 3.3–3.6:1 against --bg/--bg-elev, below WCAG AA's
+     4.5:1 for normal-size text (2026-09-01 accessibility pass). Same hue,
+     lightened until it cleared 4.5:1 on both backgrounds with a small
+     margin (5.3:1 / 4.9:1) rather than sitting exactly on the line. */
+  --text-faint:#858293;
   --line:      rgba(245,243,239,0.08);
   --line-strong:rgba(245,243,239,0.14);
   --glow:      0 0 24px rgba(255,94,58,0.45);
@@ -22,6 +26,23 @@
 
 *, *::before, *::after {
   box-sizing: border-box;
+}
+
+/* Accessibility baseline (2026-09-01): a real, visible keyboard-focus
+   indicator on every element, full stop. A grep across src/ found ~16
+   components setting `outline: 'none'` inline (mostly on text inputs) with
+   no replacement focus style — meaning a keyboard user tabbing through
+   those has no way to see where they are, a WCAG 2.4.7 (AA) failure.
+   Inline `style` always wins over a plain CSS rule for the same property,
+   so overriding it file-by-file would mean touching all 16 (and every
+   future one); `!important` here is the correct tool for exactly this
+   case — a single, global, purely-additive safety net. `outline` never
+   affects layout (unlike `border`), so this cannot shift anything on
+   click; `:focus-visible` (not `:focus`) means it only shows for keyboard/
+   programmatic focus, never on a mouse click. */
+:focus-visible {
+  outline: 2px solid var(--neon-2) !important;
+  outline-offset: 2px !important;
 }
 
 html { background: var(--bg); }
