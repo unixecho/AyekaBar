@@ -23,7 +23,7 @@ import { useCart } from './CartProvider'
 // a ResizeObserver rather than on a fixed set of dependencies.
 
 export default function DinerStrip({ lang }: { lang: Lang }) {
-  const { cart, ready, activeDinerId, setActiveDinerId, dispatch } = useCart()
+  const { cart, ready, activeDinerId, setActiveDinerId, dispatch, spotlight } = useCart()
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
 
   if (!ready || cart.lines.length === 0) return null
@@ -45,37 +45,44 @@ export default function DinerStrip({ lang }: { lang: Lang }) {
   return (
     <>
       {/* A radiogroup, not a row of buttons: exactly one is chosen at a time,
-          and a screen reader should say so. */}
-      <div className="cart-whostrip" role="radiogroup" aria-label={CART_UI.addingFor[lang]}>
+          and a screen reader should say so. The label is now its own centred
+          line above the chips (see .cart-whostrip in cart.css for why), so
+          the radios live in their own row inside it — the `radiogroup` role
+          moves down to that row, because a group whose children are a label
+          AND the radios describes itself less clearly than one that contains
+          only radios. */}
+      <div className="cart-whostrip" data-spotlight={spotlight}>
         <span className="cart-whostrip-label" aria-hidden>{CART_UI.addingFor[lang]}:</span>
 
-        <button
-          type="button" className="cart-who" role="radio"
-          aria-checked={activeDinerId === null}
-          data-on={activeDinerId === null}
-          onClick={() => { haptic('select'); setActiveDinerId(null) }}
-          style={whoStyle(TABLE_COLOUR, activeDinerId === null)}
-        >
-          <Dot colour={TABLE_COLOUR} />{CART_UI.table[lang]}
-        </button>
-
-        {cart.diners.map((d) => (
+        <div className="cart-whostrip-row" role="radiogroup" aria-label={CART_UI.addingFor[lang]}>
           <button
-            key={d.id} type="button" className="cart-who" role="radio"
-            aria-checked={activeDinerId === d.id}
-            data-on={activeDinerId === d.id}
-            onClick={() => { haptic('select'); setActiveDinerId(d.id) }}
-            style={whoStyle(d.colour, activeDinerId === d.id)}
+            type="button" className="cart-who" role="radio"
+            aria-checked={activeDinerId === null}
+            data-on={activeDinerId === null}
+            onClick={() => { haptic('select'); setActiveDinerId(null) }}
+            style={whoStyle(TABLE_COLOUR, activeDinerId === null)}
           >
-            <Dot colour={d.colour} />{d.name}
+            <Dot colour={TABLE_COLOUR} />{CART_UI.table[lang]}
           </button>
-        ))}
 
-        {cart.diners.length < MAX_DINERS && (
-          <button type="button" className="cart-who" onClick={askForDiner} aria-label={CART_UI.addDiner[lang]}>
-            + {CART_UI.addDiner[lang]}
-          </button>
-        )}
+          {cart.diners.map((d) => (
+            <button
+              key={d.id} type="button" className="cart-who" role="radio"
+              aria-checked={activeDinerId === d.id}
+              data-on={activeDinerId === d.id}
+              onClick={() => { haptic('select'); setActiveDinerId(d.id) }}
+              style={whoStyle(d.colour, activeDinerId === d.id)}
+            >
+              <Dot colour={d.colour} />{d.name}
+            </button>
+          ))}
+
+          {cart.diners.length < MAX_DINERS && (
+            <button type="button" className="cart-who" onClick={askForDiner} aria-label={CART_UI.addDiner[lang]}>
+              + {CART_UI.addDiner[lang]}
+            </button>
+          )}
+        </div>
       </div>
 
       <PromptSheet request={prompt} onClose={() => setPrompt(null)} />

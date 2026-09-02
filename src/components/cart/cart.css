@@ -61,16 +61,23 @@
   display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
 }
 
-/* ---- The floating button ---- */
-/* Pinned to a PHYSICAL corner, not a logical one: house rule (CLAUDE.md) —
-   floating UI stays where the thumb learned to find it, whichever way the
-   text runs. */
+/* ---- The floating button ----
+   BOTTOM-LEFT, and physically left in every language — the house rule is
+   that fixed chrome keeps the same physical corner regardless of text
+   direction, so this is `left`, not `inset-inline-start`.
+
+   It moved here from the right on 2026-09-02 for a concrete reason, not a
+   preference: the accessibility widget parks itself bottom-right on every
+   page, and two floating circles fighting for one thumb-corner means one of
+   them gets tapped by accident. The cart is the one we control, so the cart
+   moved. If the widget is ever removed (see the accessibility plan), this
+   corner stays as it is — the cart is not going back to sharing. */
 .cart-fab-wrap {
   position: fixed;
-  right: 16px;
+  left: 16px;
   bottom: calc(env(safe-area-inset-bottom) + 16px);
   z-index: 120;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
 }
 
 .cart-fab {
@@ -132,17 +139,33 @@
 /* ---- The active-diner strip, under the category chips ---- */
 /* Only rendered once at least one diner has been named. Until then there is
    nothing to choose between and a control offering one option is noise. */
+/* The label sits on its own centred line above the people, rather than
+   inline at the start of a scrolling row. Inline, it was the first thing to
+   scroll out of sight the moment a table named three diners — so the one
+   piece of text explaining what the row IS disappeared exactly when the row
+   got complicated enough to need explaining. */
 .cart-whostrip {
-  display: flex; align-items: center; gap: 6px;
-  overflow-x: auto; scrollbar-width: none;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
   padding: 0 14px 10px;
   max-width: 720px; margin: 0 auto;
 }
-.cart-whostrip::-webkit-scrollbar { display: none; }
 .cart-whostrip-label {
-  flex: 0 0 auto; font-size: 0.74rem; font-weight: 600; color: var(--text-faint);
-  padding-inline-end: 2px;
+  font-size: 0.74rem; font-weight: 600; color: var(--text-faint);
+  text-align: center;
 }
+.cart-whostrip-row {
+  display: flex; align-items: center; gap: 6px;
+  max-width: 100%;
+  overflow-x: auto; scrollbar-width: none;
+  /* `safe center` is the whole trick: centred while the chips fit, and
+     falling back to start-aligned once they overflow. Plain `center` on a
+     scrolling row clips the first chip off the leading edge with no way to
+     reach it. The unprefixed `flex-start` before it is the fallback for any
+     engine that does not understand safe alignment. */
+  justify-content: flex-start;
+  justify-content: safe center;
+}
+.cart-whostrip-row::-webkit-scrollbar { display: none; }
 .cart-who {
   flex: 0 0 auto; min-height: 32px;
   padding: 5px 12px; border-radius: 999px;
@@ -319,4 +342,124 @@
   .cart-fab-wrap[data-pop='true'] .cart-fab,
   .cart-fab-badge[data-bump='true'] { animation: none !important; }
   .cart-add, .cart-step-btn, .cart-who, .cart-chip, .cart-choice { transition: none !important; }
+}
+
+/* ---- Read-out paging (photographable pages, not a scrolling list) ----
+   See ReadoutPages in CartSheet.tsx for why this exists: a waiter now
+   photographs the customer's screen, and a photo of a scrolling list loses
+   whatever was below the fold. The host is a plain column so the measuring
+   pass sees the same box the real pass will. */
+.cart-readout-pagehost {
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 0;
+}
+
+.cart-pager {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 4px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.cart-pager-btn {
+  /* 44px is the iOS minimum touch target, and this one gets pressed with a
+     waiter standing over the table waiting — it is not a place to save
+     pixels. */
+  min-height: 44px; min-width: 88px;
+  padding: 0 16px; border-radius: 12px;
+  border: 1px solid var(--line-strong); background: var(--bg-elev);
+  color: var(--text); font: inherit; font-weight: 700; font-size: 0.9rem;
+  cursor: pointer;
+  transition: opacity .2s var(--ease);
+}
+.cart-pager-btn:disabled { opacity: 0.35; cursor: default; }
+.cart-pager-count {
+  font-size: 0.9rem; font-weight: 800; color: var(--text-dim);
+  font-variant-numeric: tabular-nums; flex: 0 0 auto;
+}
+
+/* ---- The one-time walkthrough ----
+   See CartTutorial.tsx for why this is a pause rather than a tooltip. The
+   scrim holds the blur and NEVER animates (house rule: animating a
+   backdrop-filter recomputes the blur over the whole viewport every frame);
+   the card is a sibling that does the moving. */
+.cart-tut-scrim {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(6, 6, 12, 0.62);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: grid; place-items: center;
+  padding: calc(env(safe-area-inset-top) + 18px) 18px calc(env(safe-area-inset-bottom) + 18px);
+  /* Opacity only — no transform, so the blur is not re-rasterised mid-flight. */
+  animation: fade-in .26s var(--ease);
+}
+
+.cart-tut-card {
+  width: 100%; max-width: 420px;
+  /* On a 280px Fold in landscape there is very little height; the card
+     scrolls rather than overflowing the screen, same rule as the sheets. */
+  max-height: 100%; overflow-y: auto;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 22px;
+  padding: 22px 20px 20px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  animation: cart-tut-in .42s var(--ease) backwards;
+}
+@keyframes cart-tut-in {
+  from { opacity: 0; transform: translateY(18px) scale(.96) }
+  to   { opacity: 1; transform: none }
+}
+
+.cart-tut-glyph { font-size: 2.6rem; line-height: 1; margin-bottom: 6px; }
+.cart-tut-title {
+  margin: 0 0 14px; font-size: 1.25rem; font-weight: 800; color: var(--text);
+}
+
+.cart-tut-list {
+  list-style: none; margin: 0 0 14px; padding: 0;
+  display: flex; flex-direction: column; gap: 12px;
+  text-align: start;
+}
+.cart-tut-item {
+  display: flex; align-items: flex-start; gap: 11px;
+  font-size: 0.92rem; line-height: 1.55; color: var(--text-dim);
+  animation: rise-in .45s var(--ease) backwards;
+}
+.cart-tut-icon { flex: 0 0 auto; font-size: 1.2rem; line-height: 1.3; }
+
+.cart-tut-privacy {
+  margin: 0 0 16px; font-size: 0.76rem; line-height: 1.5; color: var(--text-faint);
+  border-top: 1px solid var(--line); padding-top: 12px;
+}
+
+.cart-tut-cta {
+  width: 100%; min-height: 50px; border: 0; border-radius: 15px;
+  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+  color: #fff; font: inherit; font-weight: 800; font-size: 1rem;
+  cursor: pointer;
+}
+
+/* ---- The hand-off: the diner strip lights up once the card closes ----
+   A hint, not a state — it retires itself after SPOTLIGHT_MS. Outline rather
+   than border/padding so nothing reflows while it pulses. */
+.cart-whostrip[data-spotlight='true'] {
+  border-radius: 14px;
+  animation: cart-spotlight 1.6s var(--ease) 3;
+}
+@keyframes cart-spotlight {
+  0%, 100% { outline: 2px solid rgba(255, 94, 58, 0); outline-offset: 4px; }
+  45%      { outline: 2px solid rgba(255, 94, 58, 0.75); outline-offset: 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cart-tut-scrim, .cart-tut-card, .cart-tut-item { animation: none !important; }
+  /* The spotlight still has to DO its job for a reduced-motion visitor —
+     they were promised the strip would be findable. A steady ring, held for
+     the same window, instead of a pulse. */
+  .cart-whostrip[data-spotlight='true'] {
+    animation: none !important;
+    outline: 2px solid rgba(255, 94, 58, 0.75);
+    outline-offset: 4px;
+  }
 }

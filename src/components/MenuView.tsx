@@ -11,6 +11,7 @@ import { applyHappyHour, isHappyHourActive, type HappyHour, type DiscountedItem 
 import LanguageSwitch from '@/components/LanguageSwitch'
 import CartProvider, { type CartActionAvailability } from '@/components/cart/CartProvider'
 import CartFab from '@/components/cart/CartFab'
+import CartTutorial from '@/components/cart/CartTutorial'
 import CartSheet from '@/components/cart/CartSheet'
 import DinerStrip from '@/components/cart/DinerStrip'
 import AddToCartControl from '@/components/cart/AddToCartControl'
@@ -268,6 +269,10 @@ export default function MenuView({
         <>
           <CartFab lang={lang} />
           <CartSheet lang={lang} />
+          {/* The one-time walkthrough. Mounted here rather than inside the FAB
+              because closing it is what SUMMONS the FAB — it has to outlive
+              the thing it introduces. */}
+          <CartTutorial lang={lang} />
         </>
       )}
     </div>

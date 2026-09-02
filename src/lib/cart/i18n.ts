@@ -135,6 +135,60 @@ export const CART_UI = {
   showAll:  { he: 'הצגת כל ההזמנה', en: 'Show the whole order', ar: 'عرض الطلب كاملاً' },
   showRound:{ he: 'הצגת החדש בלבד',  en: 'Show only what is new', ar: 'عرض الجديد فقط' },
 
+  // ── The one-time tutorial ────────────────────────────────────
+  // Shown once, the first time something lands in the cart — the moment the
+  // cart stops being an abstraction and starts being a thing on the screen.
+  // Not on arrival: a modal in front of a menu nobody has read yet is an
+  // obstacle, not an explanation.
+  tutorialTitle: {
+    he: 'בנינו לכם עגלה',
+    en: 'You’ve started an order',
+    ar: 'لقد بدأت طلباً',
+  },
+  tutorialCart: {
+    he: 'ההזמנה נשמרת בכפתור שלמטה משמאל. אפשר להמשיך לדפדף — הכל נשמר.',
+    en: 'Your order lives in the button at the bottom-left. Keep browsing — it all stays.',
+    ar: 'طلبك موجود في الزر أسفل اليسار. تابع التصفّح — كل شيء محفوظ.',
+  },
+  tutorialSplit: {
+    he: 'אוכלים כמה אנשים? הוסיפו שמות למעלה וכל פריט ישויך לסועד הנכון.',
+    en: 'Eating as a group? Add names at the top and each item goes to the right person.',
+    ar: 'مجموعة؟ أضف الأسماء في الأعلى وسيُسند كل صنف للشخص الصحيح.',
+  },
+  tutorialShow: {
+    he: 'בסוף — פותחים את העגלה ומראים למלצר. לא צריך לזכור כלום.',
+    en: 'At the end, open the cart and show the waiter. Nothing to memorise.',
+    ar: 'في النهاية، افتح السلة واعرضها على النادل. لا داعي لحفظ أي شيء.',
+  },
+  tutorialCta: { he: 'הבנתי', en: 'Got it', ar: 'فهمت' },
+  /** The private note stays private — worth saying once, because "the bar can
+   *  see what I am typing" is the assumption people arrive with. */
+  tutorialPrivacy: {
+    he: 'הרשימה נשמרת רק במכשיר שלכם ולא נשלחת לשום מקום.',
+    en: 'The list stays on your device and is not sent anywhere.',
+    ar: 'تبقى القائمة على جهازك ولا تُرسل إلى أي مكان.',
+  },
+
+  // ── Paging the read-out ──────────────────────────────────────
+  // "the waiter will take pictures of the order from the customer's phone
+  // from now" (2026-09-02) — so a long order stops being one scrolling list
+  // and becomes whole pages, each of which fits on screen and photographs
+  // in one shot. A photo of a scrolling list silently loses whatever was
+  // below the fold, and nobody finds out until the drinks arrive wrong.
+  prevPage: { he: 'הקודם', en: 'Previous', ar: 'السابق' },
+  nextPage: { he: 'הבא',   en: 'Next',     ar: 'التالي' },
+  /** Assembled as "<page> N <pageOfMid> M" for the accessible name. The
+   *  visible indicator is the bare "N / M", pinned LTR — it is an arithmetic
+   *  expression, and the bidi algorithm would render it "M / N" inside the
+   *  Hebrew and Arabic sheets, which says the opposite of what is true. */
+  page:      { he: 'עמוד', en: 'Page', ar: 'صفحة' },
+  pageOfMid: { he: 'מתוך', en: 'of',   ar: 'من' },
+  photoHint: {
+    he: 'ההזמנה מחולקת לעמודים כדי שכל עמוד ייכנס לצילום אחד.',
+    en: 'The order is split into pages so each one fits in a single photo.',
+    ar: 'الطلب مقسّم إلى صفحات ليتّسع كل منها في صورة واحدة.',
+  },
+
   // ── Ordering for several people at once ─────────────────────
   forWhomMulti: { he: 'עבור מי? אפשר לבחור כמה', en: 'For whom? You can pick several', ar: 'لمن؟ يمكنك اختيار عدة' },
   pickAtLeastOne: {

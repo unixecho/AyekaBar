@@ -24,7 +24,7 @@
 // project's "no banner needed yet" status.
 
 import {
-  CART_STORAGE_KEY, CART_TTL_MS, DINER_COLOURS, EMPTY_CART, MAX_DINERS, MAX_LINES,
+  CART_STORAGE_KEY, CART_TUTORIAL_KEY, CART_TTL_MS, DINER_COLOURS, EMPTY_CART, MAX_DINERS, MAX_LINES,
   MAX_NAME_LEN, MAX_NOTE_LEN, MAX_QTY,
   type Cart, type CartDiner, type CartLine, type CartOptionChoice, type StoredCart,
 } from './types'
@@ -225,5 +225,35 @@ export function clearCart(): void {
     window.localStorage.removeItem(CART_STORAGE_KEY)
   } catch {
     /* see saveCart */
+  }
+}
+
+// ── The one-time tutorial flag ────────────────────────────────────────
+// Same defensive posture as everything else in this file: localStorage is the
+// DEVICE's memory, not ours, and every access is wrapped because a private
+// tab, a full quota or a browser with storage disabled all throw rather than
+// return null. Failing to read the flag means the tutorial shows again, which
+// is a mildly annoying outcome; failing loudly would break the menu, which is
+// not. So both helpers swallow.
+
+/** Has this device already been walked through the cart? */
+export function tutorialSeen(): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    return window.localStorage.getItem(CART_TUTORIAL_KEY) === '1'
+  } catch {
+    // Cannot tell — assume SEEN. A visitor whose browser refuses storage
+    // would otherwise be shown the same modal on every single add, which is
+    // far worse than never seeing it at all.
+    return true
+  }
+}
+
+export function markTutorialSeen(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(CART_TUTORIAL_KEY, '1')
+  } catch {
+    /* Nothing to do and nothing worth saying. */
   }
 }

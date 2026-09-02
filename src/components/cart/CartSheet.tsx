@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import PromptSheet, { type PromptRequest } from '@/components/PromptSheet'
 import { haptic } from '@/lib/haptics'
@@ -243,11 +243,11 @@ export default function CartSheet({ lang }: { lang: Lang }) {
                 >{readoutAll ? CART_UI.showRound[lang] : CART_UI.showAll[lang]}</button>
               )}
 
-              {readoutGroups
-                .filter((g) => g.lines.length > 0)
-                .map((g) => (
-                  <ReadoutGroup key={g.diner?.id ?? '~table'} group={g} lang={lang} split={split} />
-                ))}
+              <ReadoutPages
+                groups={readoutGroups.filter((g) => g.lines.length > 0)}
+                lang={lang}
+                split={split}
+              />
             </>
           ) : empty ? (
             <div style={{ padding: '28px 8px', textAlign: 'center' }}>
@@ -479,10 +479,273 @@ function LineRow({
   )
 }
 
+/**
+ * The read-out, cut into whole pages instead of one scrolling list.
+ *
+ * ── WHY THIS EXISTS ─────────────────────────────────────────────────
+ * "the waiter will take pictures of the order from the customer's phone from
+ * now" (2026-09-02). A photograph captures what is on the screen and nothing
+ * else, so a list that scrolls silently loses everything below the fold —
+ * and nobody discovers it until the wrong drinks arrive. Pages fix that by
+ * construction: every page is, by definition, a screen that fits.
+ *
+ * ── HOW THE PAGES ARE DECIDED ───────────────────────────────────────
+ * By MEASUREMENT, not by a guessed items-per-page number. A group's height
+ * depends on the name, how many lines it has, whether any line has a note or
+ * options, and the font the device actually rendered — none of which is
+ * knowable up front, and all of which differ between a 280px Fold and a
+ * tablet. So it renders everything once, measures, then slices:
+ *
+ *   1. First pass (`pages === null`) renders every group and measures each.
+ *   2. `overhead` is whatever else shares the scroll area (the hint line, the
+ *      show-all chip, the pager bar) — derived as scrollHeight minus the sum
+ *      of the group heights, so it never has to be kept in sync by hand.
+ *   3. Groups are then packed greedily into pages that fit the remaining
+ *      height, and only the current page renders.
+ *
+ * A GROUP IS NEVER SPLIT ACROSS PAGES. One person's order arriving half on
+ * page 1 and half on page 2 is precisely the confusion this is meant to end.
+ * A single group taller than a whole page gets its own page and is allowed to
+ * scroll — at that point the customer has ordered more for one person than a
+ * phone screen can hold, and a photograph was never going to work anyway.
+ *
+ * WHEN IT ALL FITS, THIS RENDERS NOTHING EXTRA. One page means no pager, no
+ * hint, no behaviour change at all — which is the common case and must stay
+ * invisible.
+ */
+function ReadoutPages({ groups, lang, split }: {
+  groups: DinerGroup[]
+  lang: Lang
+  split: boolean
+}) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const [pages, setPages] = useState<number[][] | null>(null)
+  /** The height one page is allowed to occupy. Pinned onto the host once
+   *  paginated — see the ResizeObserver below for why that is load-bearing
+   *  and not just tidy. */
+  const [pageHeight, setPageHeight] = useState<number | null>(null)
+  const [page, setPage] = useState(0)
+  /** Space the pager bar and its hint take out of the scroll area. Starts as
+   *  an estimate because neither is in the DOM on the pass that decides
+   *  whether they are needed at all, then corrects itself against reality —
+   *  see the correction effect below. */
+  const [reserve, setReserve] = useState(PAGER_RESERVE_PX)
+  const corrections = useRef(0)
+
+  // What the pagination depends on. Re-measuring on every render would loop;
+  // re-measuring only when the CONTENT changes is what makes this settle.
+  const signature = groups.map((g) => `${g.diner?.id ?? '~'}:${g.lines.length}`).join('|')
+
+  useLayoutEffect(() => {
+    setPages(null)
+    setPageHeight(null)
+    setPage(0)
+  }, [signature])
+
+  // Re-measure when the sheet itself changes size — rotating the phone, or
+  // the keyboard closing, changes how much fits on a page.
+  //
+  // ⚠️ THIS WAS AN INFINITE RESET LOOP AND THE GUARD IS THE FIX. The sheet
+  // panel is content-sized under a max-height, so turning to a shorter page
+  // shrank the panel, which resized the scroller, which fired this observer,
+  // which re-measured and sent the customer straight back to page 1 — the
+  // "next" button appeared to do nothing at all. Two things stop it:
+  //
+  //   1. `pageHeight` below pins every page to the same height, so paging no
+  //      longer changes the panel's size. (It is also simply better: pages
+  //      that are all one size photograph consistently.)
+  //   2. This observer ignores anything smaller than a real layout change, so
+  //      sub-pixel reflow and scrollbar appearance cannot retrigger it.
+  useEffect(() => {
+    const scroller = hostRef.current?.closest('.sheet-scroll') as HTMLElement | null
+    if (!scroller) return
+    let last = scroller.clientHeight
+    const ro = new ResizeObserver(() => {
+      const now = scroller.clientHeight
+      if (Math.abs(now - last) < RESIZE_EPSILON_PX) return
+      last = now
+      setPages(null)
+      setPageHeight(null)
+      setPage(0)
+    })
+    ro.observe(scroller)
+    return () => ro.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (pages !== null) return
+    const host = hostRef.current
+    const scroller = host?.closest('.sheet-scroll') as HTMLElement | null
+    if (!host || !scroller) return
+
+    const els = Array.from(host.querySelectorAll<HTMLElement>('[data-readout-group]'))
+    if (els.length === 0) { setPages([]); return }
+
+    const heights = els.map((el) => el.getBoundingClientRect().height)
+    const GAP = 8 // .sheet-scroll's own row gap
+    const groupsTotal = heights.reduce((a, b) => a + b, 0) + GAP * Math.max(0, heights.length - 1)
+    // Everything in the scroll area that is NOT a group. Derived rather than
+    // hard-coded so adding a line of copy above can never silently break the
+    // arithmetic.
+    const overhead = Math.max(0, scroller.scrollHeight - groupsTotal)
+    // The pager bar only exists once there is more than one page, so reserve
+    // for it up front or the first measurement is optimistic by ~48px and the
+    // last page ends up one row too tall.
+    const avail = scroller.clientHeight - overhead - reserve
+
+    if (avail <= 0 || groupsTotal <= avail) {
+      // Everything fits: one page, and no pinned height — the sheet keeps
+      // sizing itself to the content exactly as it always did.
+      setPages([Array.from(heights.keys())])
+      setPageHeight(null)
+      return
+    }
+
+    const out: number[][] = []
+    let current: number[] = []
+    let used = 0
+    heights.forEach((h, i) => {
+      const cost = h + (current.length ? GAP : 0)
+      if (current.length > 0 && used + cost > avail) {
+        out.push(current)
+        current = [i]
+        used = h
+      } else {
+        current.push(i)
+        used += cost
+      }
+    })
+    if (current.length) out.push(current)
+    setPages(out)
+    // Every page now occupies this exact height. Without it, a short last
+    // page shrinks the panel and the ResizeObserver above resets the pager —
+    // see its comment. It also stops the sheet jumping about as the waiter
+    // pages through, which matters when they are photographing it.
+    setPageHeight(avail)
+  }, [pages, signature, reserve])
+
+  // ── Correcting the reserve against reality ────────────────────────
+  // The first estimate was wrong in production and the symptom was exact: 46px
+  // of overflow on every page, because the estimate covered the pager bar but
+  // not the "split into pages" hint underneath it. Rather than grow a magic
+  // number until it stops being wrong — which would break again the next time
+  // a line of copy is added — this measures what the non-group content ACTUALLY
+  // occupies now that it is rendered, and re-paginates once with the true
+  // figure.
+  //
+  // Bounded by `corrections`: a measurement that feeds back into the layout it
+  // measures can oscillate, and two passes is enough to settle a value that
+  // only depends on a fixed bar plus a fixed line of text. After that it stops
+  // and lives with a page that is a few pixels generous.
+  useLayoutEffect(() => {
+    if (pages === null || pages.length <= 1) return
+    const host = hostRef.current
+    const scroller = host?.closest('.sheet-scroll') as HTMLElement | null
+    if (!host || !scroller) return
+    if (corrections.current >= MAX_RESERVE_CORRECTIONS) return
+
+    const hostH = host.getBoundingClientRect().height
+    const actual = Math.round(scroller.scrollHeight - hostH)
+    if (Math.abs(actual - reserve) <= RESERVE_TOLERANCE_PX) return
+
+    corrections.current += 1
+    setReserve(actual)
+    setPages(null)
+    setPageHeight(null)
+  }, [pages, reserve])
+
+  // A content change starts the correction budget over — a different order can
+  // legitimately need a different reserve.
+  useLayoutEffect(() => { corrections.current = 0 }, [signature])
+
+  // First pass, and the fits-on-one-page case: render everything plainly.
+  const measuring = pages === null
+  const single = pages !== null && pages.length <= 1
+  const visible = measuring || single
+    ? groups.map((_, i) => i)
+    : (pages[Math.min(page, pages.length - 1)] ?? [])
+
+  const total = pages?.length ?? 1
+  const current = Math.min(page, total - 1)
+
+  return (
+    <>
+      <div
+        ref={hostRef}
+        className="cart-readout-pagehost"
+        style={pageHeight !== null && !measuring && total > 1 ? { minHeight: pageHeight } : undefined}
+      >
+        {visible.map((i) => (
+          <ReadoutGroup
+            key={groups[i].diner?.id ?? '~table'}
+            group={groups[i]}
+            lang={lang}
+            split={split}
+          />
+        ))}
+      </div>
+
+      {!measuring && total > 1 && (
+        <div className="cart-pager">
+          <button
+            type="button" className="cart-pager-btn press"
+            onClick={() => { haptic('tick'); setPage((p) => Math.max(0, p - 1)) }}
+            disabled={current === 0}
+          >
+            {CART_UI.prevPage[lang]}
+          </button>
+
+          <span
+            className="cart-pager-count"
+            aria-label={`${CART_UI.page[lang]} ${current + 1} ${CART_UI.pageOfMid[lang]} ${total}`}
+          >
+            {/* LTR: an arithmetic expression, not a sentence. */}
+            <span dir="ltr">{current + 1} / {total}</span>
+          </span>
+
+          <button
+            type="button" className="cart-pager-btn press"
+            onClick={() => { haptic('tick'); setPage((p) => Math.min(total - 1, p + 1)) }}
+            disabled={current === total - 1}
+          >
+            {CART_UI.nextPage[lang]}
+          </button>
+        </div>
+      )}
+
+      {!measuring && total > 1 && (
+        <p className="cart-foot-note" style={{ margin: '2px 0 0', textAlign: 'center' }}>
+          {CART_UI.photoHint[lang]}
+        </p>
+      )}
+    </>
+  )
+}
+
+/** Height held back for the pager bar during measurement — it is not in the
+ *  DOM yet on the pass that decides whether it will be needed. */
+const PAGER_RESERVE_PX = 52
+
+/** Below this, a scroller size change is reflow noise (a scrollbar arriving,
+ *  a sub-pixel rounding difference) rather than a real layout change worth
+ *  re-paginating for. */
+const RESIZE_EPSILON_PX = 24
+
+/** How close the estimated reserve has to be before it is left alone. */
+const RESERVE_TOLERANCE_PX = 4
+
+/** Ceiling on measure-adjust-remeasure rounds, so a layout that feeds back
+ *  into its own measurement can never loop. */
+const MAX_RESERVE_CORRECTIONS = 2
+
 function ReadoutGroup({ group, lang, split }: { group: DinerGroup; lang: Lang; split: boolean }) {
   const colour = group.diner?.colour ?? TABLE_COLOUR
   return (
-    <section className="cart-readout-group" style={{ borderColor: `${colour}66` }}>
+    // data-readout-group is what ReadoutPages measures to decide where the
+    // page breaks fall. Keep it on the OUTERMOST element of a group, or the
+    // measurement misses the border and padding and every page comes out one
+    // group too tall.
+    <section className="cart-readout-group" data-readout-group style={{ borderColor: `${colour}66` }}>
       {split && (
         <h3 className="cart-readout-name" style={{ display: 'flex', alignItems: 'baseline', gap: 10, color: colour }}>
           <span style={{ flex: 1, minWidth: 0 }}>

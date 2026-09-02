@@ -7,7 +7,9 @@ import type { Lang } from '@/lib/menu/types'
 import { haptic } from '@/lib/haptics'
 import { EMPTY_CART, type Cart } from '@/lib/cart/types'
 import { reduce, type AddPayload, type CartAction } from '@/lib/cart/store'
-import { loadCart, saveCart, clearCart as clearStored } from '@/lib/cart/storage'
+import {
+  loadCart, saveCart, clearCart as clearStored, tutorialSeen, markTutorialSeen,
+} from '@/lib/cart/storage'
 import './cart.css'
 
 // The one stateful piece of the cart. Everything it decides, it decides by
@@ -53,6 +55,12 @@ interface CartContextValue {
   /** Increments whenever something arrived — the badge pulses on it. Also the
    *  entire feedback for a reduced-motion visitor, who gets no flight. */
   bumpKey: number
+  /** The one-time walkthrough, open from the first add until dismissed. */
+  tutorialOpen: boolean
+  dismissTutorial: () => void
+  /** True for a few seconds after the tutorial closes, so the diner strip can
+   *  draw attention to itself while the customer is still looking for it. */
+  spotlight: boolean
   actions: CartActionAvailability
 }
 
@@ -70,6 +78,12 @@ export function useCart(): CartContextValue {
 const FLY_MS = 560
 const SAVE_DEBOUNCE_MS = 200
 
+/** How long the diner strip stays lit after the walkthrough closes. Long
+ *  enough to be noticed while the customer's eyes are still moving around the
+ *  screen, short enough that it is over before it becomes something to
+ *  ignore — a hint that never stops being a hint is just decoration. */
+const SPOTLIGHT_MS = 5200
+
 export default function CartProvider({
   lang, actions, children,
 }: {
@@ -83,6 +97,12 @@ export default function CartProvider({
   const [sheetOpen, setSheetOpen] = useState(false)
   const [activeDinerId, setActiveDinerId] = useState<string | null>(null)
   const [bumpKey, setBumpKey] = useState(0)
+  const [tutorialOpen, setTutorialOpen] = useState(false)
+  const [spotlight, setSpotlight] = useState(false)
+  // Read once on hydration and held in a ref, not state: it is consulted
+  // inside addToCart, and a stale closure over a state value would show the
+  // tutorial twice on a fast double-tap.
+  const seenTutorial = useRef(true)
 
   // Mirror of `cart`, so a handler can read the CURRENT cart, apply the
   // reducer and know whether anything actually changed — all before React has
@@ -100,6 +120,9 @@ export default function CartProvider({
     cartRef.current = restored.cart
     setCart(restored.cart)
     setSummoned(restored.summoned || restored.cart.lines.length > 0)
+    // A device that already has a cart has already been through this — the
+    // walkthrough belongs to the first add, not to every restored session.
+    seenTutorial.current = tutorialSeen() || restored.cart.lines.length > 0
     setReady(true)
   }, [])
 
@@ -201,11 +224,45 @@ export default function CartProvider({
   const addToCart = useCallback((payload: AddPayload, from?: DOMRect | null, label?: string) => {
     const next = dispatch({ type: 'add', payload })
     if (!next) return // at the cap — no animation for something that didn't happen
-    setSummoned(true)
     haptic('select')
+
+    // ── The first add is the teaching moment ──────────────────────────
+    // Everything the walkthrough describes — a button in the corner, a strip
+    // of names at the top — only exists once there is something in the cart.
+    // Shown here rather than on arrival for that reason: a modal in front of
+    // a menu nobody has read yet is an obstacle, not an explanation.
+    //
+    // The button is deliberately NOT summoned yet. It springs in when the
+    // walkthrough closes, so the customer is looking at the corner at the
+    // moment something appears there — which is the whole point of doing this
+    // as a pause rather than a tooltip nobody reads.
+    if (!seenTutorial.current) {
+      seenTutorial.current = true
+      markTutorialSeen()
+      setTutorialOpen(true)
+      return
+    }
+
+    setSummoned(true)
     if (from && label) fly(from, label)
     else setBumpKey((n) => n + 1)
   }, [dispatch, fly])
+
+  /** Close the walkthrough and hand off: the button springs in, and the diner
+   *  strip glows for long enough to be found without being nagged at. */
+  const dismissTutorial = useCallback(() => {
+    setTutorialOpen(false)
+    setSummoned(true)
+    setBumpKey((n) => n + 1)
+    setSpotlight(true)
+  }, [])
+
+  // The spotlight is a hint, not a state to live in — it retires on its own.
+  useEffect(() => {
+    if (!spotlight) return
+    const id = window.setTimeout(() => setSpotlight(false), SPOTLIGHT_MS)
+    return () => window.clearTimeout(id)
+  }, [spotlight])
 
   const openSheet = useCallback(() => setSheetOpen(true), [])
   const closeSheet = useCallback(() => setSheetOpen(false), [])
@@ -215,10 +272,12 @@ export default function CartProvider({
     dispatch, addToCart, clearAll,
     sheetOpen, openSheet, closeSheet,
     registerFab, bumpKey, actions,
+    tutorialOpen, dismissTutorial, spotlight,
   }), [
     ready, cart, lang, summoned, activeDinerId,
     dispatch, addToCart, clearAll, sheetOpen, openSheet, closeSheet,
     registerFab, bumpKey, actions,
+    tutorialOpen, dismissTutorial, spotlight,
   ])
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>

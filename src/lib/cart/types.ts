@@ -160,6 +160,15 @@ export const MAX_NOTE_LEN = 120
  *  no migration code, no half-parsed state. */
 export const CART_STORAGE_KEY = 'ayeka.menu.cart.v1'
 
+/** Whether this device has already been shown the one-time cart tutorial.
+ *
+ *  DELIBERATELY ITS OWN KEY, not a field inside the cart. The cart expires
+ *  after eight hours (below) and is cleared whenever the customer empties it
+ *  — and neither of those is a reason to explain the cart to the same person
+ *  a second time. A regular who comes in every Thursday should see this once
+ *  in their life, not once a week. */
+export const CART_TUTORIAL_KEY = 'ayeka.menu.cart.tutorial.v1'
+
 /** A cart is a single visit. Eight hours covers the longest night and still
  *  means tomorrow's customer doesn't reopen the menu to last week's round.
  *  Checked on read; an expired cart is dropped, not shown and then cleared. */
