@@ -191,7 +191,7 @@ export default function MenuView({
             <LanguageSwitch lang={lang} onChange={pickLang} variant="inline" />
           </div>
 
-          <div className="menu-brand rise" style={{ animationDelay: '90ms' }}>{brand}</div>
+          <h1 className="menu-brand rise" style={{ animationDelay: '90ms' }}>{brand}</h1>
 
           <Link className="menu-back rise" href="/" aria-label={MENU_UI.back[lang]} style={{ animationDelay: '20ms' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -245,7 +245,7 @@ export default function MenuView({
         </section>
       )}
 
-      <main className="menu-main">
+      <main id="main" className="menu-main">
         {loading ? (
           <MenuSkeleton />
         ) : !menu || categories.length === 0 ? (
@@ -291,12 +291,22 @@ function CategorySection({
 }) {
   return (
     <section className={`cat rise${open ? ' open' : ''}`} id={`cat-${cat.id}`} style={{ animationDelay: `${delay}ms` }}>
+      {/* The button is WRAPPED IN A HEADING, which is the WAI-ARIA accordion
+          pattern and not a decoration. Audited against the live site
+          2026-09-02: the menu page had ZERO headings — 95 items and nothing
+          for a screen-reader user to navigate by, so reaching the cocktails
+          meant arrowing through the food one line at a time. The heading
+          gives them the category list; the button inside it still does the
+          expanding. `.cat-h` carries no visual style of its own (see
+          globals.css) so nothing about the design moves. */}
+      <h2 className="cat-h">
       <button className="cat-head" type="button" aria-expanded={open} onClick={onToggle}>
         <span className="ic">{cat.icon ?? ''}</span>
         <span className="ttl">{loc(cat.title, lang)}</span>
         <span className="count">{cat.items.length} {MENU_UI.items[lang]}</span>
         <svg className="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
       </button>
+      </h2>
       <div className="cat-body">
         <div className="cat-body-inner">
           <div className="cat-pad">

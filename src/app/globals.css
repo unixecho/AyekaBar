@@ -1088,7 +1088,11 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 7px;
+  /* Was 7px. Widened so each dot's invisible hit area can reach the 24px
+     minimum WITHOUT overlapping its neighbour — two adjacent targets that
+     overlap are worse than one small target, because the tap becomes
+     ambiguous rather than merely fiddly. See .rw-dot::after. */
+  gap: 18px;
   margin-top: 18px;
 }
 .rw-dot {
@@ -1102,8 +1106,13 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   transition: width .4s var(--ease), background .4s var(--ease), box-shadow .4s var(--ease);
 }
 /* A 6px target fails every touch guideline; the dot stays 6px and the tappable
-   area is grown invisibly around it. */
-.rw-dot::after { content: ''; position: absolute; inset: -9px -5px; }
+   area is grown invisibly around it.
+   2026-09-02 audit: the grown area was 24x16, which still failed WCAG 2.5.8's
+   24x24 minimum on the narrow axis. Now 24 wide x 44 tall — 24 to clear the
+   criterion, 44 because that is the iOS target and there is free vertical
+   room here to give. The dot itself is untouched, so nothing looks different;
+   the gap above it grew to keep neighbouring areas from overlapping. */
+.rw-dot::after { content: ''; position: absolute; inset: -19px -9px; }
 .rw-dot.is-on {
   width: 20px;
   background: var(--neon);
@@ -1148,4 +1157,57 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
 }
 @media (prefers-reduced-motion: reduce) {
   .review-cta::after { animation: none; display: none; }
+}
+
+/* ============================================================
+   Accessibility — the code-level layer
+   ============================================================
+   Everything here came out of a real audit of the LIVE site
+   (2026-09-02), not a checklist read in the abstract. The goal is stated
+   in PLAN_ACCESSIBILITY.md: be compliant in the codebase itself, so the
+   third-party overlay is a convenience we could switch off rather than
+   the thing holding compliance up. */
+
+/* WCAG 2.4.1 Bypass Blocks (Level A). The first focusable element on every
+   page was the language switch, and on /menu a keyboard user then had to
+   pass ~120 more controls to reach the food. Visible only on focus, which
+   is the standard treatment — it is a control for people who tab, and it
+   would be furniture for everyone else. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  inset-inline-start: 8px;
+  z-index: 1000;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: var(--neon);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.95rem;
+  text-decoration: none;
+  /* Off-screen rather than display:none — a hidden element cannot be
+     focused, and this one has to be reachable by Tab. */
+  transform: translateY(-160%);
+  transition: transform .18s var(--ease);
+}
+.skip-link:focus-visible,
+.skip-link:focus {
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .skip-link { transition: none; }
+}
+
+/* The menu's category headings. The <button> inside is what carries every
+   visual style; this wrapper exists purely so the category is a HEADING in
+   the accessibility tree (WCAG 1.3.1 / 2.4.6) and must contribute nothing
+   to layout. */
+.cat-h {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
 }
