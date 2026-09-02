@@ -192,7 +192,13 @@ export default function FeedbackSheet({
   return (
     <SheetShell open={open} onClose={onClose} label={t('title')} dir={dir}>
       {phase === 'sent' ? (
-        <div className="fb-view" style={sentWrap}>
+        // Also a proper flex child of the panel, for the same reason as the
+        // form's wrapper below. `sentWrap`'s explicit `min-height: 34dvh` is
+        // what keeps this from collapsing to three short lines AND what lets
+        // it scroll if the copy ever grows: an explicit min-height (unlike
+        // the flex default of `auto`) can be shrunk against, so the overflow
+        // has somewhere to go instead of pushing the panel open.
+        <div className="fb-view" style={{ ...sentWrap, flex: '1 1 auto', overflowY: 'auto' }}>
           {/* The one moment that should feel physical. `.pop` is the same
               overshoot spring the login interstitial uses for its glyph. */}
           <div className="pop" style={{ fontSize: '2.6rem', lineHeight: 1, animationDelay: '40ms' }} aria-hidden>💬</div>
@@ -430,10 +436,33 @@ const sentBody: CSSProperties = {
   margin: '0 0 8px', fontSize: '0.9rem', color: 'var(--text-dim)', lineHeight: 1.6, maxWidth: 320,
 }
 
-/** While the form is leaving, it must not accept another tap — the send has
- *  already succeeded and a second one would be a second row. */
+/**
+ * ⚠️ THIS WRAPPER MUST STAY A FLEX COLUMN THAT FILLS THE PANEL.
+ *
+ * `.sheet-panel` is `display:flex; flex-direction:column; max-height:88dvh`,
+ * and `.sheet-scroll` only scrolls because it is a flex child with
+ * `min-height:0` inside that bounded column. The motion pass introduced this
+ * wrapper so `fb-view-out` had a box to animate — and, as a plain block div,
+ * it broke the chain: the scroll area's parent became unbounded, so it grew
+ * to content height instead of scrolling, the panel overflowed, and THE SEND
+ * BUTTON WENT OFF THE BOTTOM OF THE SCREEN. On a phone that is not a cosmetic
+ * bug, it is "I cannot submit at all" — which is exactly how it was reported.
+ *
+ * `display: contents` would fix the chain by removing the box entirely, but
+ * then there is nothing left to animate, which defeats the wrapper's whole
+ * reason for existing. So it stays a real box and joins the column properly.
+ *
+ * While the form is leaving it also stops taking taps — the send has already
+ * succeeded and a second one would be a second row.
+ */
 function leavingWrap(phase: Phase): CSSProperties {
-  return phase === 'leaving' ? { pointerEvents: 'none' } : {}
+  return {
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+    flex: '1 1 auto',
+    ...(phase === 'leaving' ? { pointerEvents: 'none' } : {}),
+  }
 }
 
 const fieldset: CSSProperties = { border: 0, margin: 0, padding: 0, minWidth: 0 }
