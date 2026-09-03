@@ -15,6 +15,7 @@ import CartTutorial from '@/components/cart/CartTutorial'
 import CartSheet from '@/components/cart/CartSheet'
 import DinerStrip from '@/components/cart/DinerStrip'
 import AddToCartControl from '@/components/cart/AddToCartControl'
+import FeedbackButton from '@/components/FeedbackButton'
 
 const POLL_MS = 30_000
 
@@ -23,11 +24,14 @@ const POLL_MS = 30_000
  *  is mounted, so a disabled cart costs a customer nothing — not a provider,
  *  not a stylesheet's worth of layout, not a localStorage read. */
 export default function MenuView({
-  initial, cartEnabled = false, cartActions = { ordering: false, call: false },
+  initial, cartEnabled = false, cartActions = { ordering: false, call: false }, feedbackEnabled = true,
 }: {
   initial: MenuData | null
   cartEnabled?: boolean
   cartActions?: CartActionAvailability
+  /** The owner's switch for the feedback box — same prop the portal takes.
+   *  See FeedbackButton's own note. */
+  feedbackEnabled?: boolean
 }) {
   const [menu, setMenu] = useState<MenuData | null>(initial)
   const [loading, setLoading] = useState(initial === null)
@@ -263,6 +267,17 @@ export default function MenuView({
           line of the footer on a short menu. Only when there is a button. */}
       <footer className="menu-footer" style={cartEnabled ? { paddingBottom: 110 } : undefined}>
         {menu ? MENU_UI.footer[lang] : ''}
+        {/* A11y backlog A14 (WCAG 2.2 3.2.6 Consistent Help): the portal has
+            had an accessibility-statement link and a feedback trigger since
+            2026-09-01; /menu had neither, only the back arrow to "/". Same
+            two links, same relative order, same footer position — a
+            "consistent help mechanism" means literally that. */}
+        <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center', gap: 16 }}>
+          <Link href="/accessibility" style={{ color: 'var(--text-faint)', textDecoration: 'underline', fontSize: '0.8rem' }}>
+            {MENU_UI.accessibility[lang]}
+          </Link>
+          <FeedbackButton lang={lang} enabled={feedbackEnabled} variant="link" />
+        </div>
       </footer>
 
       {cartEnabled && (

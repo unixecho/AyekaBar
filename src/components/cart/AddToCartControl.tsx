@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { haptic } from '@/lib/haptics'
 import { loc, type Lang, type Localized, type MenuItem } from '@/lib/menu/types'
 import type { DiscountedItem } from '@/lib/menu/variants'
@@ -121,6 +121,17 @@ export default function AddToCartControl({
 
   return (
     <>
+      {/* A11y backlog A9: a PERSISTENT live region, separate from the
+          stepper's own visible aria-live span below. That one only exists
+          once qty > 0, so it is a brand-new DOM node on the very first add —
+          and screen readers reliably announce MUTATIONS to an existing live
+          region, not the initial content of a freshly-mounted one. This span
+          never unmounts (it renders regardless of qty), so the 0→1 tap that
+          swaps "add" for the stepper is the one case this actually covers. */}
+      <span aria-live="polite" aria-atomic="true" style={srOnly}>
+        {qty > 0 ? `${name} — ${CART_UI.quantity[lang]} ${qty}` : ''}
+      </span>
+
       {qty === 0 ? (
         <button
           type="button"
@@ -162,4 +173,14 @@ export default function AddToCartControl({
       )}
     </>
   )
+}
+
+/** Visually hidden but still reachable by assistive tech — the standard
+ *  clip-path technique (`display:none`/`visibility:hidden` would pull it out
+ *  of the accessibility tree too, defeating the point). Same values as the
+ *  feedback form's honeypot wrapper, for the same reason: 1px, not 0, so
+ *  Safari never treats the box as having no size and skips it. */
+const srOnly: CSSProperties = {
+  position: 'absolute', width: 1, height: 1, overflow: 'hidden',
+  clipPath: 'inset(50%)', whiteSpace: 'nowrap', border: 0, padding: 0, margin: -1,
 }

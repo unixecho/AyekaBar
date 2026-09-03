@@ -87,6 +87,12 @@ export default function FeedbackSheet({
   // Without it React keeps the same element, the animation never restarts,
   // and the customer gets a silent no the second time around.
   const [shake, setShake] = useState(0)
+  // A11y backlog A10: whether the message field has been interacted with.
+  // aria-invalid is deliberately gated on this — an untouched, empty
+  // required field is not yet "invalid" to a screen-reader user who just
+  // opened the sheet, only once they've actually left it empty or a submit
+  // attempt was made.
+  const [messageTouched, setMessageTouched] = useState(false)
   const replaceTimer = useRef<number | null>(null)
   const footerRef = useRef<HTMLDivElement>(null)
 
@@ -103,6 +109,7 @@ export default function FeedbackSheet({
     setError(null)
     setPhase('form')
     setShake(0)
+    setMessageTouched(false)
   }, [open])
 
   // The replace timer outlives the send that started it if the customer
@@ -142,6 +149,7 @@ export default function FeedbackSheet({
     // without the button ever having to become disabled mid-press.
     if (busy) return
     if (!messageOk) {
+      setMessageTouched(true)
       fail(t('errEmpty'))
       return
     }
@@ -285,11 +293,13 @@ export default function FeedbackSheet({
                 id={`${ids}-msg`}
                 value={message}
                 onChange={(e) => setMessage(e.target.value.slice(0, MAX_MESSAGE_LEN))}
+                onBlur={() => setMessageTouched(true)}
                 placeholder={t('messagePlaceholder')}
                 rows={5}
                 maxLength={MAX_MESSAGE_LEN}
                 required
-                aria-describedby={`${ids}-count`}
+                aria-invalid={messageTouched && !messageOk}
+                aria-describedby={error ? `${ids}-count ${ids}-error` : `${ids}-count`}
                 style={textarea}
               />
               <div
@@ -370,7 +380,7 @@ export default function FeedbackSheet({
             {/* Announced, not just painted — a customer using a screen reader
                 needs to hear that the send failed. */}
             {error && (
-              <p key={shake} role="alert" className="fb-step" style={errorText}>
+              <p key={shake} id={`${ids}-error`} role="alert" className="fb-step" style={errorText}>
                 {error}
               </p>
             )}

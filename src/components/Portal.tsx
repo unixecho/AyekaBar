@@ -208,10 +208,15 @@ export default function Portal({
             §6) and is styled down to match — see FeedbackButton's own note. */}
         <FeedbackButton lang={lang} enabled={feedbackEnabled} />
 
-        <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)' }}>
+        {/* A11y backlog A6: a landmark, not a plain <div>. NOTE — this footer
+            sits inside <main> above, and per the HTML/ARIA spec a <footer>
+            nested in <main> (or article/aside/nav/section) does NOT get the
+            implicit `contentinfo` role the way a top-level one does; an
+            explicit role is what actually makes it a landmark here. */}
+        <footer role="contentinfo" style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)' }}>
           <p style={{ margin: '0 0 6px' }}>{t.footer}</p>
           <Link href="/accessibility" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{t.accessibility}</Link>
-        </div>
+        </footer>
       </div>
     </main>
   )

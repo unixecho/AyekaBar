@@ -181,6 +181,10 @@ export const MENU_UI = {
   items:   { he: 'פריטים', en: 'items', ar: 'عناصر' },
   langName:{ he: 'עברית', en: 'English', ar: 'العربية' },
   footer:  { he: 'המחירים בשקלים חדשים (₪)', en: 'Prices in NIS (₪)', ar: 'الأسعار بالشيكل الجديد (₪)' },
+  // A11y backlog A14 (WCAG 2.2 3.2.6 Consistent Help) — matches Portal.tsx's
+  // own `accessibility` string exactly, so the same word appears in the same
+  // footer position on every customer-facing page.
+  accessibility: { he: 'הצהרת נגישות', en: 'Accessibility statement', ar: 'بيان إمكانية الوصول' },
   unavailable: {
     he: 'התפריט אינו זמין כרגע. נסו שוב עוד רגע.',
     en: 'The menu isn’t available right now. Try again in a moment.',

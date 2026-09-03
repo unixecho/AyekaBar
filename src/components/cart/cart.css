@@ -80,6 +80,18 @@
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
 }
 
+/* A11y backlog A16 (WCAG 2.2, 2.4.11 Focus Not Obscured): the menu page
+   scrolls at the document level (no inner overflow container), so — same
+   idea as globals.css's `.menu-page .cat { scroll-margin-top }` for the
+   sticky HEADER — the browser needs the equivalent reservation at the
+   BOTTOM for this fixed button, or its default scroll-into-view on Tab can
+   land a freshly-focused control (the last item on the page, say) directly
+   underneath it. Scoped with :has() to only the summoned state, so pages
+   without an active cart button are unaffected. */
+html:has(.cart-fab-wrap[data-summoned='true']) {
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 86px);
+}
+
 .cart-fab {
   position: relative;
   display: inline-flex; align-items: center; gap: 10px;
