@@ -1,0 +1,138 @@
+/* ============================================================
+   The in-house accessibility widget (PLAN_ACCESSIBILITY.md §3, Phase 1).
+   Imported once, from A11yProvider.tsx — self-contained the way
+   components/cart/cart.css and components/shifts/shifts.css are.
+
+   Reuses the app's own tokens (--neon, --ease, --bg-elev, …) rather than
+   inventing a second palette, per the module's "Ayeka-only first" cut
+   (PLAN_ACCESSIBILITY.md §3.9) — a later, actually-portable build would
+   need its own neutral-fallback tokens instead; this one deliberately does
+   not, since it is not leaving this repo yet.
+   ============================================================ */
+
+/* ---- The launcher ----
+   ≥44px from the very first line — this is NEW code, so it starts where
+   the rest of the site's controls are trying to get to (A5), not where
+   they currently are. Physical corners only, matching the house rule
+   CartFab.tsx states explicitly: fixed chrome stays in the same physical
+   corner regardless of text direction. top-right is the one corner nothing
+   else on the site occupies (language switch: top-left, cart: bottom-left,
+   Negishot: bottom-right) — see A11yLauncher.tsx's own header. */
+.a11y-fab {
+  position: fixed;
+  z-index: 130;
+  width: 48px; height: 48px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 999px;
+  background: linear-gradient(135deg, var(--neon), var(--neon-soft));
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 24px rgba(255, 94, 58, 0.35);
+  cursor: pointer;
+}
+.a11y-fab-tl { left: 16px;  top: calc(env(safe-area-inset-top) + 68px); }
+.a11y-fab-tr { right: 16px; top: calc(env(safe-area-inset-top) + 16px); }
+.a11y-fab-bl { left: 16px;  bottom: calc(env(safe-area-inset-bottom) + 16px); }
+.a11y-fab-br { right: 16px; bottom: calc(env(safe-area-inset-bottom) + 16px); }
+
+/* ---- The panel's toggle switches ----
+   A real pill switch, matching the weight of the rest of the panel's
+   iOS-style controls (house rule: native-feeling controls, never a bare
+   checkbox) — but the actual state is carried by `role="switch"` +
+   `aria-checked` on the parent <button> in A11yPanel.tsx; this is paint
+   only, `aria-hidden`. */
+.a11y-switch-track {
+  position: relative;
+  width: 42px; height: 24px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background .25s var(--ease);
+  flex: 0 0 auto;
+}
+.a11y-switch-track[data-on='true'] { background: var(--neon); }
+.a11y-switch-thumb {
+  position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  transition: transform .25s var(--ease);
+}
+/* Physical LTR geometry regardless of page direction — deliberately no
+   html[dir='rtl'] override here. Found live-testing this exact rule: an
+   earlier version added one ("flip the thumb in RTL"), which combined with
+   the physical `left: 3px` base position (never itself flipped) to push
+   the thumb 15px OUTSIDE the track instead of to its other side — the
+   fix is not a different transform, it's not flipping at all. The track is
+   aria-hidden decoration inside an RTL-aware button; a pill that visually
+   flips per-language reads as broken, not as adapting, same reasoning the
+   cart's own fixed corners use. */
+.a11y-switch-track[data-on='true'] .a11y-switch-thumb { transform: translateX(18px); }
+
+/* ---- Global effect classes, written to <html> by A11yProvider ----
+   None of these use `filter`/`transform` — see apply.ts's own header for
+   why that distinction matters (containing-block hazard for every
+   `position: fixed` element on the site). */
+
+/* Font scale: this codebase's own type scale is rem-based throughout
+   (verified by reading the components before choosing this mechanism), so
+   scaling the root cascades correctly almost everywhere with no other
+   change needed. */
+html { font-size: var(--a11y-font-scale, 100%); }
+
+/* Letter/word spacing: applied on body, inherited everywhere. Low visual
+   risk — flexbox `gap`-based layouts (the vast majority of this site's
+   rows) are unaffected by spacing on text runs. */
+body {
+  letter-spacing: var(--a11y-letter-spacing, normal);
+  word-spacing: var(--a11y-word-spacing, normal);
+}
+/* Line-height: DELIBERATELY not !important (see apply.ts's LINE_HEIGHT
+   comment) — many components set a precise inline `lineHeight` for tight
+   icon+text alignment, and forcing it everywhere would break those. This
+   only reaches plain text that never had its own line-height set. An
+   honest partial fix, documented as such rather than silently no-op'd. */
+body { line-height: var(--a11y-line-height, normal); }
+
+/* Pause animations: the standard override pattern, same properties this
+   codebase's own @media (prefers-reduced-motion: reduce) blocks already
+   use elsewhere (cart.css) — this is the same idea as a manual switch, for
+   a visitor whose OS-level setting is inconvenient to reach on a shared
+   device. Reaches portalled content too (sheets, this widget's own panel)
+   since it is a class on <html>, not scoped to #a11y-scope. */
+html.a11y-motion-off *,
+html.a11y-motion-off *::before,
+html.a11y-motion-off *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+html.a11y-highlight-links a,
+html.a11y-highlight-links a:visited {
+  text-decoration: underline !important;
+  text-decoration-thickness: 2px !important;
+  text-underline-offset: 2px !important;
+}
+
+html.a11y-highlight-headings h1,
+html.a11y-highlight-headings h2,
+html.a11y-highlight-headings h3,
+html.a11y-highlight-headings h4 {
+  outline: 2px solid var(--neon) !important;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Big cursor: !important is deliberate and necessary here, not sloppy —
+   this is the one property inline styles do not automatically win against
+   when the stylesheet rule itself carries !important, and dozens of
+   components set their own inline `cursor: pointer`. */
+html.a11y-big-cursor,
+html.a11y-big-cursor * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24'%3E%3Cpath d='M4 2l15 12.2-6.2.9 3.3 7.1-2.9 1.3-3.3-7.1-4.4 4.1z' fill='%23111' stroke='%23fff' stroke-width='1.3'/%3E%3C/svg%3E") 4 4, auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .a11y-switch-thumb,
+  .a11y-switch-track { transition: none !important; }
+}
