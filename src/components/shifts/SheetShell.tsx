@@ -27,15 +27,34 @@ export default function SheetShell({
 }) {
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
+  const panelRef = useRef<HTMLDivElement>(null)
+  // A11y (WCAG 2.4.3): found 2026-09-04 — role="dialog" aria-modal="true"
+  // with NO initial focus anywhere in this file (confirmed: the only
+  // autoFocus in the whole shifts module is one caller's own textarea,
+  // ScheduleWorkspace.tsx's NoteSheet). Opening any of the four sheets
+  // built on this shell — including the central shift-edit sheet,
+  // ShiftSheet — moved focus nowhere. Fixed inside the SAME empty-deps
+  // effect below (same constraint as RolePicker.tsx's own fix — an
+  // unstable onClose already forced onCloseRef here, for exactly the
+  // reason that comment explains).
+  const returnFocusTo = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    // A caller's own autoFocus (e.g. NoteSheet's textarea) still wins if
+    // present — this only steps in when nothing inside claimed focus itself.
+    const timer = window.setTimeout(() => {
+      if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus()
+    }, 60)
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
+      window.clearTimeout(timer)
+      returnFocusTo.current?.focus?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -63,6 +82,7 @@ export default function SheetShell({
           animation: 'fade-in .22s var(--ease)',
         }} />
         <div
+          ref={panelRef} tabIndex={-1}
           onClick={(e) => e.stopPropagation()}
           style={{
             position: 'relative',
