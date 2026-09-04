@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
 import type { Tri } from '@/lib/shifts/types'
 
@@ -76,15 +76,21 @@ function Field({
   onChange: (v: string) => void; onCommit: () => void; onRevert: () => void
 }) {
   const { t } = useShifts()
+  // A11y (WCAG 3.3.2 / 4.1.2): the <label> and <input> were siblings with
+  // no htmlFor/id — the only <label> in the whole shifts module with this
+  // bug (grep-verified), used for every catalog name field (role/preset/
+  // station x 3 languages) in CatalogEditor.tsx. No accessible name at all.
+  const id = useId()
   return (
     <div>
-      <label style={{
+      <label htmlFor={id} style={{
         display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-faint)',
         marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.02em',
       }}>
         {label}{!required && <span style={{ opacity: 0.7 }}> · {t('optional')}</span>}
       </label>
       <input
+        id={id}
         value={value} disabled={disabled} dir={dir} autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onCommit}

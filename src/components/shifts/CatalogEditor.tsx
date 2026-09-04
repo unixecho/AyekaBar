@@ -44,18 +44,32 @@ function reorder<T>(list: T[], index: number, dir: -1 | 1): T[] {
   return next
 }
 
-function ReorderButtons({ index, count, onMove }: {
+// A11y (WCAG 2.4.6 / 4.1.2 quality): every glyph button below used to set
+// its aria-label to the GLYPH ITSELF ("▲"/"▼"/"−"/"＋", or a raw hex code
+// for ColorSwatches) — a valid accessible name in the strict sense (never
+// empty), but not a meaningful one; "▲" is not a word in any of this
+// app's three languages. Found 2026-09-04 auditing the shift scheduler's
+// catalog editor. Real, trilingual-consistent (Hebrew, matching the rest
+// of this module) words now, with the reorder buttons also taking the
+// item's own name so a screen reader hears "Move Waiter up", not just
+// "Move up".
+function ReorderButtons({ index, count, onMove, itemLabel }: {
   index: number; count: number; onMove: (dir: -1 | 1) => void
+  /** The catalog row's own name, e.g. "מלצר" — folded into the accessible
+   *  name so "הזזה למעלה" doesn't repeat identically across every row. */
+  itemLabel: string
 }) {
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 1 }}>
-      <MiniButton label="▲" disabled={index === 0} onClick={() => onMove(-1)} />
-      <MiniButton label="▼" disabled={index === count - 1} onClick={() => onMove(1)} />
+      <MiniButton glyph="▲" label={`הזזה למעלה — ${itemLabel}`} disabled={index === 0} onClick={() => onMove(-1)} />
+      <MiniButton glyph="▼" label={`הזזה למטה — ${itemLabel}`} disabled={index === count - 1} onClick={() => onMove(1)} />
     </span>
   )
 }
 
-function MiniButton({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
+function MiniButton({ glyph, label, disabled, onClick }: {
+  glyph: string; label: string; disabled?: boolean; onClick: () => void
+}) {
   return (
     <button
       type="button" onClick={onClick} disabled={disabled} aria-label={label}
@@ -67,27 +81,36 @@ function MiniButton({ label, disabled, onClick }: { label: string; disabled?: bo
         cursor: disabled ? 'default' : 'pointer',
       }}
     >
-      {label}
+      <span aria-hidden>{glyph}</span>
     </button>
   )
 }
 
-function Stepper({ value, onChange, disabled }: { value: number; onChange: (delta: number) => void; disabled?: boolean }) {
+function Stepper({ value, onChange, disabled, itemLabel }: {
+  value: number; onChange: (delta: number) => void; disabled?: boolean
+  /** Folded into the +/- buttons' names, same reasoning as ReorderButtons
+   *  above — "Decrease" alone doesn't say decrease WHAT once there's more
+   *  than one of these on a page. */
+  itemLabel?: string
+}) {
+  const suffix = itemLabel ? ` — ${itemLabel}` : ''
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 2, direction: 'ltr',
       border: '1px solid var(--line-strong)', borderRadius: 999, padding: 2, flex: '0 0 auto',
     }}>
-      <StepButton label="−" onClick={() => { haptic('tick'); onChange(-1) }} disabled={disabled || value === 0} />
+      <StepButton glyph="−" label={`הפחתה${suffix}`} onClick={() => { haptic('tick'); onChange(-1) }} disabled={disabled || value === 0} />
       <span style={{ minWidth: 18, textAlign: 'center', fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </span>
-      <StepButton label="＋" onClick={() => { haptic('tick'); onChange(1) }} disabled={disabled} />
+      <StepButton glyph="＋" label={`הוספה${suffix}`} onClick={() => { haptic('tick'); onChange(1) }} disabled={disabled} />
     </span>
   )
 }
 
-function StepButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+function StepButton({ glyph, label, onClick, disabled }: {
+  glyph: string; label: string; onClick: () => void; disabled?: boolean
+}) {
   return (
     <button
       type="button" onClick={onClick} disabled={disabled} aria-label={label}
@@ -97,10 +120,17 @@ function StepButton({ label, onClick, disabled }: { label: string; onClick: () =
         color: disabled ? 'var(--text-faint)' : 'var(--text)',
         font: 'inherit', fontSize: '0.82rem', fontWeight: 700, cursor: disabled ? 'default' : 'pointer', lineHeight: 1,
       }}
-    >
-      {label}
-    </button>
+    ><span aria-hidden>{glyph}</span></button>
   )
+}
+
+// A11y: names for ACCENTS (config.ts) — was aria-label={c}, the raw hex
+// string itself, which is not a word a screen reader can usefully say.
+// Real names, in the same order ACCENTS lists them.
+const ACCENT_NAME: Record<string, string> = {
+  '#ff5e3a': 'כתום', '#ff8a5c': 'אפרסק', '#fb7185': 'ורוד אלמוג',
+  '#f472b6': 'פוקסיה', '#c084fc': 'סגול', '#60a5fa': 'כחול',
+  '#38e1ff': 'תכלת', '#2dd4bf': 'טורקיז', '#4ade80': 'ירוק', '#fbbf24': 'צהוב',
 }
 
 function ColorSwatches({ value, onChange }: { value: string; onChange: (color: string) => void }) {
@@ -108,7 +138,8 @@ function ColorSwatches({ value, onChange }: { value: string; onChange: (color: s
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       {ACCENTS.map((c) => (
         <button
-          key={c} type="button" onClick={() => onChange(c)} aria-label={c}
+          key={c} type="button" onClick={() => onChange(c)} aria-label={ACCENT_NAME[c] ?? c}
+          aria-pressed={c === value}
           style={{
             width: 22, height: 22, borderRadius: 999, background: c, cursor: 'pointer',
             border: c === value ? '2px solid var(--text)' : '2px solid transparent',
@@ -120,10 +151,17 @@ function ColorSwatches({ value, onChange }: { value: string; onChange: (color: s
   )
 }
 
-function EmojiInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function EmojiInput({ value, onChange, itemLabel }: {
+  value: string; onChange: (v: string) => void
+  /** The catalog row's own name — folds into "סמל — מלצר" so a screen
+   *  reader hears which row's icon this is, not just "Symbol" repeated
+   *  identically on every row. */
+  itemLabel: string
+}) {
   return (
     <input
       value={value} maxLength={4}
+      aria-label={`סמל — ${itemLabel}`}
       onChange={(e) => onChange(e.target.value)}
       style={{
         width: 44, padding: '7px 0', borderRadius: 10, textAlign: 'center',
@@ -190,7 +228,7 @@ export function PresetCatalog({ settings, onChange }: CatalogProps) {
       {presets.map((preset, i) => (
         <div key={preset.id} style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            <ReorderButtons index={i} count={presets.length} onMove={(dir) => onChange({ presets: reorder(presets, i, dir) })} />
+            <ReorderButtons index={i} count={presets.length} itemLabel={tri(preset.name)} onMove={(dir) => onChange({ presets: reorder(presets, i, dir) })} />
             <div style={{ flex: 1 }}>
               <TriField value={preset.name} onCommit={(name) => update(preset.id, { name })} />
             </div>
@@ -277,7 +315,7 @@ function RequirementsEditor({ requirements, roles, onChange }: {
           <div key={role.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span aria-hidden>{role.emoji}</span>
             <span style={{ flex: 1, fontSize: '0.8rem', color: 'var(--text-dim)' }}>{tri(role.name)}</span>
-            <Stepper value={req?.min ?? 0} onChange={(d) => setMin(role.id, d)} />
+            <Stepper value={req?.min ?? 0} onChange={(d) => setMin(role.id, d)} itemLabel={tri(role.name)} />
           </div>
         )
       })}
@@ -333,8 +371,8 @@ export function RoleCatalog({ settings, onChange }: CatalogProps) {
       {roles.map((role, i) => (
         <div key={role.id} style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            <ReorderButtons index={i} count={roles.length} onMove={(dir) => onChange({ roles: reorder(roles, i, dir) })} />
-            <EmojiInput value={role.emoji} onChange={(emoji) => update(role.id, { emoji })} />
+            <ReorderButtons index={i} count={roles.length} itemLabel={tri(role.name)} onMove={(dir) => onChange({ roles: reorder(roles, i, dir) })} />
+            <EmojiInput value={role.emoji} onChange={(emoji) => update(role.id, { emoji })} itemLabel={tri(role.name)} />
             <div style={{ flex: 1 }}>
               <TriField value={role.name} onCommit={(name) => update(role.id, { name })} />
             </div>
@@ -409,8 +447,8 @@ export function StationCatalog({ settings, onChange }: CatalogProps) {
       {stations.map((station, i) => (
         <div key={station.id} style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            <ReorderButtons index={i} count={stations.length} onMove={(dir) => onChange({ stations: reorder(stations, i, dir) })} />
-            <EmojiInput value={station.emoji} onChange={(emoji) => update(station.id, { emoji })} />
+            <ReorderButtons index={i} count={stations.length} itemLabel={tri(station.name)} onMove={(dir) => onChange({ stations: reorder(stations, i, dir) })} />
+            <EmojiInput value={station.emoji} onChange={(emoji) => update(station.id, { emoji })} itemLabel={tri(station.name)} />
             <div style={{ flex: 1 }}>
               <TriField value={station.name} onCommit={(name) => update(station.id, { name })} />
             </div>
