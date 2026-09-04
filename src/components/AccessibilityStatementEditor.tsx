@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type CSSProperties } from 'react'
+import { useId, useState, type CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import type { AccessibilityStatement } from '@/lib/settings/keys'
 
@@ -32,6 +32,13 @@ export default function AccessibilityStatementEditor({ initial }: { initial: Acc
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  // A11y (WCAG 3.3.2 / 4.1.2): every <label> on this page was an
+  // unassociated sibling of its <input>/<textarea> — no htmlFor/id
+  // anywhere in the file. contactName/contactPhone/contactEmail had NO
+  // fallback at all (not even a placeholder), so those three had ZERO
+  // accessible name — on the exact page whose job is producing the
+  // legally-required accessibility statement. Found 2026-09-04.
+  const idBase = useId()
 
   function set(key: keyof AccessibilityStatement, v: string) {
     setValues((prev) => ({ ...prev, [key]: v }))
@@ -65,42 +72,47 @@ export default function AccessibilityStatementEditor({ initial }: { initial: Acc
         <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', margin: 0, lineHeight: 1.6 }}>{T.hint}</p>
       </div>
 
-      {FIELDS.map((f) => (
-        <div key={f.key}>
-          <label style={label}>{f.label}</label>
-          {f.area ? (
-            <textarea
-              value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}
-              placeholder={f.placeholder} rows={2} maxLength={600} style={textarea}
-            />
-          ) : (
-            <input
-              value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}
-              placeholder={f.placeholder} maxLength={600} style={input}
-            />
-          )}
-        </div>
-      ))}
+      {FIELDS.map((f) => {
+        const id = `${idBase}-${f.key}`
+        return (
+          <div key={f.key}>
+            <label htmlFor={id} style={label}>{f.label}</label>
+            {f.area ? (
+              <textarea
+                id={id}
+                value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}
+                placeholder={f.placeholder} rows={2} maxLength={600} style={textarea}
+              />
+            ) : (
+              <input
+                id={id}
+                value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}
+                placeholder={f.placeholder} maxLength={600} style={input}
+              />
+            )}
+          </div>
+        )
+      })}
 
       <div style={{ borderTop: '1px solid var(--line)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text)' }}>{T.contactHeading}</span>
         <div>
-          <label style={label}>{T.contactName}</label>
-          <input value={values.contactName ?? ''} onChange={(e) => set('contactName', e.target.value)} style={input} />
+          <label htmlFor={`${idBase}-contactName`} style={label}>{T.contactName}</label>
+          <input id={`${idBase}-contactName`} value={values.contactName ?? ''} onChange={(e) => set('contactName', e.target.value)} style={input} />
         </div>
         <div>
-          <label style={label}>{T.contactPhone}</label>
-          <input value={values.contactPhone ?? ''} onChange={(e) => set('contactPhone', e.target.value)} dir="ltr" style={input} />
+          <label htmlFor={`${idBase}-contactPhone`} style={label}>{T.contactPhone}</label>
+          <input id={`${idBase}-contactPhone`} value={values.contactPhone ?? ''} onChange={(e) => set('contactPhone', e.target.value)} dir="ltr" style={input} />
         </div>
         <div>
-          <label style={label}>{T.contactEmail}</label>
-          <input value={values.contactEmail ?? ''} onChange={(e) => set('contactEmail', e.target.value)} dir="ltr" style={input} />
+          <label htmlFor={`${idBase}-contactEmail`} style={label}>{T.contactEmail}</label>
+          <input id={`${idBase}-contactEmail`} value={values.contactEmail ?? ''} onChange={(e) => set('contactEmail', e.target.value)} dir="ltr" style={input} />
         </div>
       </div>
 
       <div>
-        <label style={label}>{T.exemptionNote}</label>
-        <input value={values.exemptionNote ?? ''} onChange={(e) => set('exemptionNote', e.target.value)} placeholder={T.exemptionNotePh} style={input} />
+        <label htmlFor={`${idBase}-exemptionNote`} style={label}>{T.exemptionNote}</label>
+        <input id={`${idBase}-exemptionNote`} value={values.exemptionNote ?? ''} onChange={(e) => set('exemptionNote', e.target.value)} placeholder={T.exemptionNotePh} style={input} />
       </div>
 
       {error && <p style={{ color: '#ff6b6b', fontSize: '0.82rem', margin: 0 }}>{error}</p>}
