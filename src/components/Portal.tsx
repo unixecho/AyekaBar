@@ -215,7 +215,7 @@ export default function Portal({
             explicit role is what actually makes it a landmark here. */}
         <footer role="contentinfo" style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)' }}>
           <p style={{ margin: '0 0 6px' }}>{t.footer}</p>
-          <Link href="/accessibility" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{t.accessibility}</Link>
+          <Link href="/accessibility" className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{t.accessibility}</Link>
         </footer>
       </div>
     </main>

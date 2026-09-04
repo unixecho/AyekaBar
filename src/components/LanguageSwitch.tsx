@@ -59,7 +59,8 @@ export default function LanguageSwitch({
         className="press"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
         style={{
-          width: 38, height: 38, display: 'grid', placeItems: 'center', borderRadius: 12,
+          // A11y backlog A5 (WCAG 2.2 2.5.8 Target Size Minimum): was 38x38.
+          width: 44, height: 44, display: 'grid', placeItems: 'center', borderRadius: 12,
           border: `1px solid ${open ? 'var(--neon-2)' : 'var(--line)'}`,
           background: open ? 'rgba(56,225,255,0.06)' : 'rgba(255,255,255,0.02)',
           color: 'var(--text)', cursor: 'pointer',
@@ -76,7 +77,8 @@ export default function LanguageSwitch({
 
       {open && (
         <div role="menu" style={{
-          position: 'absolute', top: 46, left: 0, minWidth: 132,
+          // top: 52, not 46 — keeps the same ~8px gap now the button is 44px tall (was 38).
+          position: 'absolute', top: 52, left: 0, minWidth: 132,
           background: 'var(--bg-elev-2)', border: '1px solid var(--line-strong)',
           borderRadius: 14, padding: 6, boxShadow: '0 18px 40px rgba(0,0,0,0.55)',
           display: 'flex', flexDirection: 'column', gap: 2,
@@ -92,7 +94,12 @@ export default function LanguageSwitch({
                   boxShadow: active ? 'inset 0 0 0 1px rgba(255,94,58,0.3)' : 'none',
                   color: active ? 'var(--text)' : 'var(--text-dim)',
                   textAlign: 'start', font: 'inherit', fontWeight: 500,
-                  padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
+                  // A11y backlog A5 (WCAG 2.2 2.5.8): was 9px 12px padding,
+                  // ~37px tall — found live-testing, not in the original
+                  // audit's file list.
+                  padding: '9px 12px', minHeight: 44, boxSizing: 'border-box',
+                  display: 'flex', alignItems: 'center', width: '100%',
+                  borderRadius: 10, cursor: 'pointer',
                 }}
               >
                 {LANG_NAMES[l]}

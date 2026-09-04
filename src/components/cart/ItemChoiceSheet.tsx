@@ -263,7 +263,11 @@ export default function ItemChoiceSheet({
 
           <fieldset style={fieldsetStyle}>
             <legend className="cart-choice-label">{CART_UI.quantity[lang]}</legend>
-            <div className="cart-line-step" style={{ height: 42 }}>
+            {/* No fixed height here on purpose (was 42, hand-tuned before
+                A5's fix to .cart-line-step button) — letting it size to its
+                own buttons is what keeps this in sync with the 44px they
+                are now, same as CartSheet.tsx's own use of this class. */}
+            <div className="cart-line-step">
               <button
                 type="button" onClick={() => { haptic('tick'); setQty((q) => Math.max(1, q - 1)) }}
                 aria-label={CART_UI.removeOne[lang]}

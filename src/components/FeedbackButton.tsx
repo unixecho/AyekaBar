@@ -43,7 +43,7 @@ export default function FeedbackButton({
       {variant === 'link' ? (
         <button
           type="button"
-          className="press"
+          className="press tap44"
           onClick={() => { haptic(); setOpen(true) }}
           aria-haspopup="dialog"
           aria-expanded={open}
@@ -98,8 +98,10 @@ const icWrap: CSSProperties = {
  *  (Portal.tsx / MenuView.tsx) — same size, same underline, same muted
  *  color — so the two sit as visible equals in a footer, not one styled
  *  like an afterthought next to the other. */
+// No padding/margin here on purpose — left for the .tap44 CSS class to set
+// (an inline style value would win over the class and silently cancel it).
 const linkBtn: CSSProperties = {
-  border: 0, background: 'none', padding: 0, margin: 0,
+  border: 0, background: 'none',
   color: 'var(--text-faint)', textDecoration: 'underline',
   font: 'inherit', fontSize: '0.8rem', cursor: 'pointer',
 }

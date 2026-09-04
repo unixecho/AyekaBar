@@ -167,6 +167,23 @@ html[dir="ltr"][data-nav="back"] .page-enter    { animation-name: page-in-from-l
 .press { transition: transform .12s var(--ease), filter .12s ease; }
 .press:active { transform: scale(.96); filter: brightness(1.18); }
 
+/* A11y backlog A5 (WCAG 2.2 2.5.8 Target Size Minimum): a short standalone
+   link — not embedded in a run of body text, so the spec's "inline in a
+   sentence" exception does not apply to it — grown to a real 44px-tall tap
+   zone via padding + an equal negative margin, same technique the review
+   carousel's dots already use (see .rw-dot::after), so nothing visually
+   shifts and no surrounding layout changes. Used for the accessibility
+   statement link (Portal.tsx, MenuView.tsx), the review wall's "see all
+   reviews" link (ReviewWall.tsx), and the feedback box's footer-link
+   variant (FeedbackButton.tsx).
+   !important on purpose: this is a narrow, single-purpose utility whose
+   whole point is "these exact values always apply" — found live-testing
+   that .rw-count's own `margin-top: 7px` (globals.css, later in this same
+   file) would otherwise win the cascade for that one side and visually
+   push the link's text down 15px instead of only growing its invisible
+   tap area. */
+.tap44 { display: inline-block !important; padding: 15px 8px !important; margin: -15px -8px !important; }
+
 /* ---- Shared entrance reveals (page/section presentation) ----
    .rise: fade + rise up, for text/cards/rows. .pop: spring scale-in, for
    round icons/logos/tiles. Both use fill-mode "backwards" so the element
@@ -317,7 +334,8 @@ html[data-vt="running"] .page-enter .menu-page .item-name {
 
 .menu-back {
   position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-  width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px;
+  /* A11y backlog A5 (WCAG 2.2 2.5.8): was 38x38. */
+  width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px;
   color: var(--text-dim); text-decoration: none; border: 1px solid var(--line); background: rgba(255,255,255,0.02);
   transition: color .25s var(--ease), border-color .25s var(--ease), background .25s var(--ease);
 }
@@ -721,7 +739,11 @@ html[dir="ltr"] .menu-back svg { transform: scaleX(-1); }
 .menu-chips { display: flex; gap: 8px; overflow-x: auto; scroll-behavior: smooth; padding: 6px 50% 12px; scrollbar-width: none; -ms-overflow-style: none; }
 .menu-chips::-webkit-scrollbar { display: none; }
 .menu-chips.fits { justify-content: center; padding: 6px 14px 12px; }
-.menu-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); color: var(--text-dim); font: inherit; font-weight: 500; font-size: 0.92rem; cursor: pointer; transition: color .25s var(--ease), border-color .25s var(--ease), background .25s var(--ease), box-shadow .3s var(--ease); }
+/* A11y backlog A5 (WCAG 2.2 2.5.8): min-height added — computed to ~42-46px
+   depending on font metrics with no floor, so the shortest rendering (a
+   short category name at the smaller end of that range) could land under
+   44px. An explicit floor makes it deterministic instead of incidental. */
+.menu-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 8px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); color: var(--text-dim); font: inherit; font-weight: 500; font-size: 0.92rem; cursor: pointer; transition: color .25s var(--ease), border-color .25s var(--ease), background .25s var(--ease), box-shadow .3s var(--ease); }
 .menu-chip .ic { font-size: 1rem; }
 .menu-chip:hover { color: var(--text); border-color: var(--line-strong); }
 .menu-chip.active { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--neon), var(--neon-soft)); box-shadow: var(--glow); }
@@ -950,7 +972,10 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   top: 50%;
   transform: translateY(-50%);
   z-index: 2;
-  width: 38px; height: 38px;
+  /* A11y backlog A5 (WCAG 2.2 2.5.8): was 38x38 below 720px — the ≥720px
+     media query below already set 44x44, so mobile (the majority of this
+     site's traffic) was the one size actually failing. */
+  width: 44px; height: 44px;
   display: grid; place-items: center;
   padding: 0;
   border-radius: 50%;
@@ -1123,7 +1148,8 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
 @media (min-width: 720px) {
   .rw-card { width: 340px; }
   .rw-track { gap: 16px; }
-  .rw-arrow { width: 44px; height: 44px; }
+  /* .rw-arrow's own 44x44 now matches the base rule above (both sizes
+     cleared A5 together) — nothing left to override here but the spacing. */
   .rw-arrow-back { left: 18px; }
   .rw-arrow-fwd  { right: 18px; }
 }
@@ -1179,6 +1205,15 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   inset-inline-start: 8px;
   z-index: 1000;
   padding: 12px 18px;
+  /* Exempt from A5/2.5.8 in the strict sense (off-screen until keyboard
+     focus, so a pointer user never meets it as a tap target at all) — but
+     once revealed it IS tappable by a switch-control/assistive-touch user
+     who reached it via keyboard, so cheap insurance rather than relying on
+     the exemption. */
+  min-height: 44px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
   border-radius: 12px;
   background: var(--neon);
   color: #fff;

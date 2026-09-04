@@ -410,7 +410,11 @@ export default function ReviewWall({ block, lang }: { block: PortalReviewsBlock;
             reviews exist is not something the wall discloses. `block.count`
             still round-trips through the settings API for a future editor,
             it just isn't rendered here. */}
-        <a className="rw-count" href={block.url} target="_blank" rel="noopener noreferrer">
+        {/* A11y backlog A5 (WCAG 2.2 2.5.8): a standalone link, not inline in
+            a sentence, so the spec's inline-text exception doesn't cover it
+            — tap44 grows its real hit area to 44px without moving anything
+            visually (same technique as Portal's/menu's footer links). */}
+        <a className="rw-count tap44" href={block.url} target="_blank" rel="noopener noreferrer">
           {t.onGoogle}
         </a>
       </header>

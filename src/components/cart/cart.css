@@ -13,9 +13,12 @@
 
 .cart-add,
 .cart-step {
-  /* 44px is the tap target; the visible control can be smaller than the box
-     around it but must never be smaller than this. */
-  min-height: 40px;
+  /* A11y backlog A5 (WCAG 2.2 2.5.8): 44px is the tap target; the visible
+     control can be smaller than the box around it but must never be
+     smaller than this. Found 2026-09-03: this comment already said 44
+     while the value below said 40 — the box itself was 4px short of what
+     it claimed. Fixed to match. */
+  min-height: 44px;
   flex: 0 0 auto;
   font: inherit;
   direction: ltr; /* − 2 + reads the same in Hebrew, Arabic and English */
@@ -43,7 +46,14 @@
   box-shadow: 0 0 16px rgba(255, 94, 58, 0.34);
 }
 .cart-step-btn {
-  width: 38px; height: 40px; border: 0; background: transparent;
+  /* A11y backlog A5 (WCAG 2.2 2.5.8): was 38x40 — the actual tappable
+     button, not just the pill around it (the parent .cart-step's
+     min-height:44px alone did not fix this; each button inside it is its
+     own separate tap target and was still short on both axes). This is
+     very likely the largest single contributor to the "116 sub-44px
+     targets on /menu" the 2026-09-02 audit counted — two of these render
+     on every menu row that already has an item in the cart. */
+  width: 44px; height: 44px; border: 0; background: transparent;
   color: #fff; font: inherit; font-size: 1.25rem; font-weight: 700; line-height: 1;
   cursor: pointer; display: grid; place-items: center;
   transition: background .16s var(--ease);
@@ -179,6 +189,7 @@ html:has(.cart-fab-wrap[data-summoned='true']) {
 }
 .cart-whostrip-row::-webkit-scrollbar { display: none; }
 .cart-who {
+  position: relative; /* anchors the ::after hit-area grow below */
   flex: 0 0 auto; min-height: 32px;
   padding: 5px 12px; border-radius: 999px;
   border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03);
@@ -186,6 +197,15 @@ html:has(.cart-fab-wrap[data-summoned='true']) {
   cursor: pointer; white-space: nowrap;
   transition: color .2s var(--ease), border-color .2s var(--ease), background .2s var(--ease);
 }
+/* A11y backlog A5 (WCAG 2.2 2.5.8): found live-testing with real cart data,
+   not in the original file-list audit. This chip HAS a visible
+   background/border, unlike the plain-text links .tap44 covers elsewhere —
+   padding would grow the background along with the tap area, visibly
+   bloating a chip that lives in the sticky header where every extra pixel
+   pushes the whole menu down on every scroll. Same fix as .rw-dot::after
+   instead: an invisible pseudo-element extends the real hit area to 44px
+   tall without the pill's own paint changing at all. */
+.cart-who::after { content: ''; position: absolute; inset: -6px 0; }
 /* The selected state's COLOUR comes from the diner (inline, per person) —
    only the weight is set here. A blanket orange gradient would override the
    one thing this control now exists to show. */
@@ -199,13 +219,15 @@ html:has(.cart-fab-wrap[data-summoned='true']) {
 }
 .cart-sheet-title { margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--text); flex: 1; }
 .cart-sheet-icon-btn {
-  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 999px;
+  /* A11y backlog A5 (WCAG 2.2 2.5.8): was 36x36 — found live-testing the
+     open cart sheet with real data, not in the original file-list audit. */
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 999px;
   border: 1px solid var(--line-strong); background: transparent;
   color: var(--text-dim); display: grid; place-items: center; cursor: pointer;
   font: inherit; font-size: 0.78rem; font-weight: 700;
 }
 .cart-sheet-icon-btn svg { width: 17px; height: 17px; }
-.cart-sheet-icon-btn[data-danger='true'] { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.35); width: auto; padding: 0 12px; }
+.cart-sheet-icon-btn[data-danger='true'] { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.35); width: auto; padding: 0 14px; }
 
 .cart-group { border: 1px solid var(--line); border-radius: 14px; background: var(--bg-elev); overflow: hidden; flex: 0 0 auto; }
 .cart-group[data-table='true'] { border-color: var(--line-strong); }
@@ -248,8 +270,13 @@ html:has(.cart-fab-wrap[data-summoned='true']) {
 .cart-line-price { flex: 0 0 auto; font-size: 0.88rem; font-weight: 700; color: var(--text); direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; padding-top: 2px; }
 
 .cart-line-tools { display: flex; align-items: center; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+/* A11y backlog A5 (WCAG 2.2 2.5.8): min-height was 30px — found
+   live-testing the open cart sheet with real data. `.cart-line-tools`
+   (the row these sit in) already has flex-wrap:wrap, so growing the
+   height here has no horizontal-fit consequence — worst case a row wraps
+   one line taller, which is a fine trade for a real tap target. */
 .cart-chip {
-  min-height: 30px; padding: 3px 10px; border-radius: 999px;
+  min-height: 44px; padding: 3px 10px; box-sizing: border-box; border-radius: 999px;
   border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.03);
   color: var(--text-dim); font: inherit; font-size: 0.75rem; font-weight: 600;
   cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
@@ -258,11 +285,13 @@ html:has(.cart-fab-wrap[data-summoned='true']) {
 .cart-chip[data-assigned='true'] { color: var(--neon-2); border-color: rgba(56, 225, 255, 0.4); }
 .cart-chip[data-danger='true'] { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3); }
 
-/* Compact stepper inside a cart row — smaller than the menu's, because here
-   it sits next to three other controls. */
+/* Stepper inside a cart row. Was captioned "compact... smaller than the
+   menu's, because here it sits next to three other controls" and sized
+   32x30 — same A5 fix as .cart-chip above, same reasoning (the row wraps,
+   so height has no horizontal cost). */
 .cart-line-step { display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid var(--line-strong); overflow: hidden; direction: ltr; }
 .cart-line-step button {
-  width: 32px; height: 30px; border: 0; background: transparent; color: var(--text);
+  width: 44px; height: 44px; border: 0; background: transparent; color: var(--text);
   font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; display: grid; place-items: center;
 }
 .cart-line-step button:active { background: rgba(255, 255, 255, 0.06); }
@@ -329,8 +358,11 @@ html:has(.cart-fab-wrap[data-summoned='true']) {
 /* ---- Choice sheet ---- */
 .cart-choice-label { font-size: 0.82rem; font-weight: 700; color: var(--text-dim); margin: 12px 0 6px; }
 .cart-choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
+/* A11y backlog A5 (WCAG 2.2 2.5.8): min-height was 42px, 2px short — found
+   live-testing the item choice sheet with real data. .cart-choice-row
+   already wraps, so no horizontal-fit cost. */
 .cart-choice {
-  min-height: 42px; padding: 8px 14px; border-radius: 12px;
+  min-height: 44px; box-sizing: border-box; padding: 8px 14px; border-radius: 12px;
   border: 1px solid var(--line-strong); background: var(--bg-elev);
   color: var(--text-dim); font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
   display: inline-flex; align-items: center; gap: 8px;

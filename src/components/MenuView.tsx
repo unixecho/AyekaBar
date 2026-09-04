@@ -273,7 +273,7 @@ export default function MenuView({
             two links, same relative order, same footer position — a
             "consistent help mechanism" means literally that. */}
         <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center', gap: 16 }}>
-          <Link href="/accessibility" style={{ color: 'var(--text-faint)', textDecoration: 'underline', fontSize: '0.8rem' }}>
+          <Link href="/accessibility" className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline', fontSize: '0.8rem' }}>
             {MENU_UI.accessibility[lang]}
           </Link>
           <FeedbackButton lang={lang} enabled={feedbackEnabled} variant="link" />
