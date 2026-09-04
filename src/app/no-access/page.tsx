@@ -41,7 +41,7 @@ export default function NoAccessPage() {
   }
 
   return (
-    <main id="main" style={{
+    <main id="main" tabIndex={-1} style={{
       minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 'calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 24px)',
       position: 'relative',

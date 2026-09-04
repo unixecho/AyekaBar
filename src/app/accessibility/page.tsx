@@ -22,7 +22,7 @@ export default async function AccessibilityPage() {
   const hasContact = s.contactName || s.contactPhone || s.contactEmail
 
   return (
-    <main id="main" style={{ minHeight: '100dvh', padding: '32px 20px 60px', position: 'relative' }} dir="rtl" lang="he">
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '32px 20px 60px', position: 'relative' }} dir="rtl" lang="he">
       <div className="app-bg" aria-hidden />
       <div className="app-scrim" aria-hidden />
 

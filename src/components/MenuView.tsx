@@ -265,7 +265,7 @@ export default function MenuView({
         </section>
       )}
 
-      <main id="main" className="menu-main">
+      <main id="main" tabIndex={-1} className="menu-main">
         {loading ? (
           <MenuSkeleton />
         ) : !menu || categories.length === 0 ? (

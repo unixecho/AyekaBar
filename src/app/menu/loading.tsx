@@ -23,7 +23,7 @@ export default function MenuLoading() {
         </div>
       </div>
 
-      <main id="main" className="menu-main">
+      <main id="main" tabIndex={-1} className="menu-main">
         {[0, 1, 2, 3, 4].map((i) => (
           <section className="cat" key={i}>
             <div className="cat-head" style={{ cursor: 'default' }}>

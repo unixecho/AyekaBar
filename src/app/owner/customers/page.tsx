@@ -18,7 +18,7 @@ export default async function OwnerCustomersPage() {
   if (!isOp(me)) redirect('/no-access')
 
   return (
-    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       {/* Parent is /owner/loyalty (see rewards/page.tsx's own note) — reached
           through the loyalty screen's tile grid, not the dashboard directly. */}
       <OwnerHeader backHref="/owner/loyalty" right={<SignOutButton />} />

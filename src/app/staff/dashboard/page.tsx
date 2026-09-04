@@ -31,7 +31,7 @@ export default async function StaffDashboardPage() {
   const meta = badgeMeta(me.badge, me.role)
 
   return (
-    <main id="main" style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
       <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 24, textAlign: 'center' }}>
         {/* Header */}
         <div className="rise" style={{ animationDelay: '20ms', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>

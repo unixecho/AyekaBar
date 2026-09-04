@@ -18,7 +18,7 @@ export default async function OwnerRewardsPage() {
   if (!isOp(me)) redirect('/no-access')
 
   return (
-    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       {/* Parent is /owner/loyalty, not the dashboard — this page is reached
           through the loyalty screen's own tile grid, and a back button that
           skips straight to the dashboard would jump over the page the owner

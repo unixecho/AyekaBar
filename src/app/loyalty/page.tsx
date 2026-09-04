@@ -12,7 +12,7 @@ export default async function LoyaltyLandingPage() {
   const enabled = await getLoyaltyEnabled()
 
   return (
-    <main id="main" style={{
+    <main id="main" tabIndex={-1} style={{
       minHeight: '100dvh',
       display: 'flex',
       flexDirection: 'column',

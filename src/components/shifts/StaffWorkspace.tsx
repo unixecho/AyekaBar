@@ -47,7 +47,7 @@ export default function StaffWorkspace() {
     && db.assignments.some((a) => a.id === s.assignmentId))
 
   return (
-    <main id="main" style={{ minHeight: '100dvh', padding: '20px 16px 40px', maxWidth: 1180, margin: '0 auto' }}>
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '20px 16px 40px', maxWidth: 1180, margin: '0 auto' }}>
       <OwnerHeader right={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <LangSwitch />

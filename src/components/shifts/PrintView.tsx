@@ -38,7 +38,7 @@ export default function PrintView({ weekStart }: { weekStart: ISODate }) {
   }
 
   return (
-    <main id="main" className="sh-print" style={{ padding: '20px 16px 40px', maxWidth: 1400, margin: '0 auto' }}>
+    <main id="main" tabIndex={-1} className="sh-print" style={{ padding: '20px 16px 40px', maxWidth: 1400, margin: '0 auto' }}>
       <div className="sh-noprint" style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {/* 2026-08-30: this screen had no way back at all — this is a print
             sheet, viewed on-screen before committing it to paper, and printed

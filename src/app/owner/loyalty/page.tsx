@@ -68,7 +68,7 @@ export default async function OwnerLoyaltyPage() {
   ])
 
   return (
-    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       <OwnerHeader backHref="/owner/dashboard" right={<SignOutButton />} />
 
       {/* The switch first: it decides whether anything below it is live. */}

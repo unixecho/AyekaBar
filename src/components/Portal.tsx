@@ -73,7 +73,7 @@ export default function Portal({
   const delay = () => `${260 + (d++) * 85}ms`
 
   return (
-    <main id="main" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 'calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px)', position: 'relative' }}>
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 'calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px)', position: 'relative' }}>
       <div className="app-bg" aria-hidden />
       <div className="app-scrim" aria-hidden />
 
