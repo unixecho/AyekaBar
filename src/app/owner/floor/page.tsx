@@ -33,7 +33,7 @@ export default async function OwnerFloorPage() {
   if (!canManageFloor(me)) redirect('/no-access')
 
   return (
-    <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 1100, margin: '0 auto' }}>
+    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 1100, margin: '0 auto' }}>
       <OwnerHeader backHref="/owner/dashboard" right={<SignOutButton />} />
 
       <div className="rise" style={{ animationDelay: '80ms', marginBottom: 16 }}>

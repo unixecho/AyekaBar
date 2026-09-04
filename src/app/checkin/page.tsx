@@ -181,7 +181,7 @@ function GoogleSignInPrompt({ token }: { token: string }) {
 
 export default function CheckinPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
+    <main id="main" className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm">
         <Suspense fallback={
           <div className="text-center">

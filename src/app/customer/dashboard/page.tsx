@@ -125,7 +125,7 @@ export default async function CustomerDashboardPage() {
     : 100
 
   return (
-    <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 440, margin: '0 auto' }}>
+    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 440, margin: '0 auto' }}>
       {/* Header */}
       <div className="rise" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, animationDelay: '20ms' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

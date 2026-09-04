@@ -1,6 +1,6 @@
 export default function CustomerDashboardLoading() {
   return (
-    <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 440, margin: '0 auto' }}>
+    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 440, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="sk" style={{ width: 32, height: 32, borderRadius: 999 }} />

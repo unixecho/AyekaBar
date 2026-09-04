@@ -2,7 +2,7 @@ import OwnerHeaderSkeleton from '@/components/OwnerHeaderSkeleton'
 
 export default function OwnerStaffLoading() {
   return (
-    <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       <OwnerHeaderSkeleton />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

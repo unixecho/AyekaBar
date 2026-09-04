@@ -10,7 +10,7 @@ import OwnerHeaderSkeleton from '@/components/OwnerHeaderSkeleton'
 
 export default function OwnerDashboardLoading() {
   return (
-    <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       <OwnerHeaderSkeleton />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7, marginBottom: 16 }}>

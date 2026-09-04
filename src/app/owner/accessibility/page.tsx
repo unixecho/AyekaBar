@@ -29,7 +29,7 @@ export default async function OwnerAccessibilityPage() {
   const statement = await getAccessibilityStatement()
 
   return (
-    <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       <OwnerHeader backHref="/owner/dashboard" right={<SignOutButton />} />
       <AccessibilityStatementEditor initial={statement} />
     </main>

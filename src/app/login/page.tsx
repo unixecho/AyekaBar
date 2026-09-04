@@ -58,7 +58,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={pageStyle}>
+    <main id="main" style={pageStyle}>
       <div style={cardStyle}>
         <div className="rise" style={{ textAlign: 'center', animationDelay: '40ms' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

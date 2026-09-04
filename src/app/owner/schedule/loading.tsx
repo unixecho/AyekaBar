@@ -3,7 +3,7 @@
 
 export default function Loading() {
   return (
-    <main style={{ minHeight: '100dvh', padding: '20px 16px', maxWidth: 1180, margin: '0 auto' }} aria-busy="true">
+    <main id="main" style={{ minHeight: '100dvh', padding: '20px 16px', maxWidth: 1180, margin: '0 auto' }} aria-busy="true">
       <div className="sk" style={{ height: 44, borderRadius: 14, marginBottom: 16 }} />
       <div className="sk" style={{ height: 120, borderRadius: 18, marginBottom: 14 }} />
       <div className="sk" style={{ height: 40, borderRadius: 12, marginBottom: 14 }} />

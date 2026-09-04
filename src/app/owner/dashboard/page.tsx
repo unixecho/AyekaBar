@@ -74,7 +74,7 @@ export default async function OwnerDashboardPage() {
   const overallDemoMode = signals.some((s) => s.id === OVERALL_DEMO_SIGNAL_ID)
 
   return (
-    <main style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+    <main id="main" style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       <OwnerHeader right={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>ניהול</span>
