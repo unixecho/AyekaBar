@@ -30,6 +30,11 @@ const T = {
   subtitle: 'מה לקוחות כתבו לנו מהפורטל — על הבר ועל האתר.',
   boxOpen: 'תיבת המשוב פתוחה',
   boxClosed: 'תיבת המשוב סגורה',
+  // A11y (WCAG 4.1.2): the switch's accessible name must not itself assert
+  // a state — aria-checked already carries that, and a label reading "the
+  // box is open" while aria-checked=false would contradict itself. Matches
+  // the neutral-subject pattern in MenuCartCard.tsx / LoyaltyToggle.tsx.
+  boxLabel: 'תיבת המשוב מלקוחות',
   boxHint: 'כשהתיבה סגורה, הכפתור נעלם מהפורטל וגם שליחה ישירה נדחית.',
   all: 'הכל',
   new: 'חדשים',
@@ -186,7 +191,7 @@ export default function FeedbackInbox() {
         <button
           type="button" role="switch"
           aria-checked={enabled === true}
-          aria-label={T.boxOpen}
+          aria-label={T.boxLabel}
           onClick={toggleBox}
           disabled={enabled === null}
           className="press"
@@ -226,6 +231,7 @@ export default function FeedbackInbox() {
         {(['new', 'read', 'resolved', 'all'] as StatusFilter[]).map((s) => (
           <button
             key={s} type="button" className="press"
+            aria-pressed={status === s}
             onClick={() => { setStatus(s); setItems([]) }}
             style={chip(status === s, s === 'all' ? undefined : STATUS_META[s].color)}
           >
@@ -242,6 +248,7 @@ export default function FeedbackInbox() {
         {(['all', 'business', 'technical'] as CategoryFilter[]).map((c) => (
           <button
             key={c} type="button" className="press"
+            aria-pressed={category === c}
             onClick={() => { setCategory(c); setItems([]) }}
             style={chip(category === c, c === 'all' ? undefined : CATEGORY_META[c].color)}
           >

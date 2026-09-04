@@ -1,5 +1,8 @@
 import Link from 'next/link'
 import { getLoyaltyEnabled } from '@/lib/settings/server'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'מועדון נאמנות · אייכה בר' }
 
 const REWARDS = [
   { pts: 10, label: 'כוס בירה חינם', icon: '🍺' },

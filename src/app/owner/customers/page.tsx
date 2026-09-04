@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import CustomerManager from '@/components/CustomerManager'
 import SignOutButton from '@/components/SignOutButton'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'לקוחות ונקודות · אייכה בר' }
 
 export default async function OwnerCustomersPage() {
   const supabase = createClient()

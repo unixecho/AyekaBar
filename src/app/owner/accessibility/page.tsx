@@ -5,6 +5,9 @@ import OwnerHeader from '@/components/OwnerHeader'
 import SignOutButton from '@/components/SignOutButton'
 import AccessibilityStatementEditor from '@/components/AccessibilityStatementEditor'
 import { getAccessibilityStatement } from '@/lib/settings/server'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'הצהרת נגישות (ניהול) · אייכה בר' }
 
 // The owner-facing editor for the public /accessibility statement.
 // 2026-09-01: "don't show the customer any missing information... every

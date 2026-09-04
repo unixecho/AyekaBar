@@ -76,8 +76,8 @@ export default function RewardsManager() {
       <form onSubmit={add} className="rise" style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10, animationDelay: '60ms' }}>
         <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text)' }}>פרס חדש</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <input value={nameHe} onChange={(e) => setNameHe(e.target.value)} placeholder="שם הפרס" required style={{ ...input, flex: 1 }} />
-          <input value={points} onChange={(e) => setPoints(e.target.value)} inputMode="numeric" placeholder="נקודות" dir="ltr" required style={{ ...input, width: 96 }} />
+          <input value={nameHe} onChange={(e) => setNameHe(e.target.value)} placeholder="שם הפרס" aria-label="שם הפרס" required style={{ ...input, flex: 1 }} />
+          <input value={points} onChange={(e) => setPoints(e.target.value)} inputMode="numeric" placeholder="נקודות" aria-label="נקודות" dir="ltr" required style={{ ...input, width: 96 }} />
         </div>
         {err && <p style={{ color: '#ff6b6b', fontSize: '0.82rem', margin: 0 }}>{err}</p>}
         <button type="submit" disabled={adding} className="press" style={primary}>{adding ? 'מוסיף…' : 'הוספת פרס'}</button>
@@ -94,8 +94,10 @@ export default function RewardsManager() {
             <div key={r.id} className="rise" style={{ ...card, opacity: busyId === r.id ? 0.55 : (r.active ? 1 : 0.6), animationDelay: `${Math.min(i, 8) * 40}ms` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input defaultValue={r.reward_name_he ?? ''} onBlur={(e) => { if (e.target.value.trim() !== (r.reward_name_he ?? '')) patch(r.id, { reward_name_he: e.target.value }) }}
+                  aria-label={`שם הפרס: ${r.reward_name_he || 'פרס ללא שם'}`}
                   style={{ ...input, flex: 1, fontWeight: 600 }} />
                 <input defaultValue={String(r.required_points)} onBlur={(e) => { const p = Number(e.target.value); if (p && p !== r.required_points) patch(r.id, { required_points: p }) }}
+                  aria-label={`נקודות נדרשות עבור ${r.reward_name_he || 'הפרס'}`}
                   inputMode="numeric" dir="ltr" style={{ ...input, width: 74 }} />
                 <span style={{ color: 'var(--neon-soft)', fontWeight: 700, fontSize: '0.85rem' }}>✦</span>
               </div>

@@ -9,6 +9,9 @@ import SignOutButton from '@/components/SignOutButton'
 import { readDashboardSignals, OVERALL_DEMO_SIGNAL_ID } from '@/lib/owner/signals'
 import { readDashboardDetails } from '@/lib/owner/signal-details'
 import { readShiftStatus } from '@/lib/owner/shift-status'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'לוח בקרה · אייכה בר' }
 
 // ── The dashboard, rebuilt 2026-08-29 ─────────────────────────────────
 // "the main dashboard will now become the beating heart for the business."

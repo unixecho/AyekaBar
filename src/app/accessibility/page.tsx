@@ -1,5 +1,8 @@
 import Link from 'next/link'
 import { getAccessibilityStatement, getAccessibilityStatementUpdatedAt } from '@/lib/settings/server'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'הצהרת נגישות · אייכה בר' }
 
 // The accessibility statement (הצהרת נגישות) required by Israel's Equal
 // Rights for Persons with Disabilities regulations (תקנות נגישות השירות) —

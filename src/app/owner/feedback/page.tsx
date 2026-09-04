@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import SignOutButton from '@/components/SignOutButton'
 import FeedbackInbox from '@/components/FeedbackInbox'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'משוב מלקוחות · אייכה בר' }
 
 // The owner's feedback queue (PLAN_CUSTOMER_FEEDBACK.md §5). The dashboard's
 // `feedback-new` signal deep-links here, and — like the accessibility

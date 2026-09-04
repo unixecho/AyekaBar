@@ -6,6 +6,9 @@ import { badgeMeta } from '@/lib/staff/badges'
 import { canEditMenu } from '@/lib/staff/access'
 import QRDisplay from '@/components/QRDisplay'
 import SignOutButton from '@/components/SignOutButton'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'אזור הצוות · אייכה בר' }
 
 export default async function StaffDashboardPage() {
   const supabase = createClient()

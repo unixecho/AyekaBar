@@ -31,6 +31,9 @@ export default function LoginPage() {
   const [authOpen, setAuthOpen] = useState(false)
   const [authBusy, setAuthBusy] = useState(false)
 
+  // A11y (WCAG 2.4.2): see no-access/page.tsx's identical comment.
+  useEffect(() => { document.title = `${T.tagline} · אייכה בר` }, [])
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     // Supabase bounces OAuth failures back with these — including the

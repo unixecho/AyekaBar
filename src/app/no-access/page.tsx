@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 // Where anyone signed in but not authorized lands. Reached from middleware,
 // from every /owner/* page's server-side re-check, and from /auth/callback.
@@ -25,6 +25,11 @@ const T = {
 export default function NoAccessPage() {
   const supabase = createClient()
   const [busy, setBusy] = useState(false)
+
+  // A11y (WCAG 2.4.2): 'use client' pages can't export Next's `metadata`,
+  // so the page title falls back to the site-wide "אייכה · בר" from
+  // layout.tsx unless set imperatively here.
+  useEffect(() => { document.title = 'אין הרשאת גישה · אייכה בר' }, [])
 
   /** Sign out first, so the account chooser genuinely offers a switch instead
    *  of silently reusing the account that was just refused. */

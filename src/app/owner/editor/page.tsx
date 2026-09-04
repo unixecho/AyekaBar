@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import MenuEditor from '@/components/MenuEditor'
 import SignOutButton from '@/components/SignOutButton'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'עריכת התפריט · אייכה בר' }
 
 export default async function OwnerEditorPage() {
   const supabase = createClient()

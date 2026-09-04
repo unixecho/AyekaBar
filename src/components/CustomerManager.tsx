@@ -66,7 +66,7 @@ export default function CustomerManager() {
       </div>
 
       {/* search */}
-      <input value={q} onChange={(e) => { setOffset(0); setQ(e.target.value) }} placeholder="חיפוש לפי שם, אימייל או טלפון…" className="rise" style={{ ...input, animationDelay: '150ms' }} />
+      <input value={q} onChange={(e) => { setOffset(0); setQ(e.target.value) }} placeholder="חיפוש לפי שם, אימייל או טלפון…" aria-label="חיפוש לקוחות לפי שם, אימייל או טלפון" type="search" className="rise" style={{ ...input, animationDelay: '150ms' }} />
 
       {/* list */}
       {list === null ? (
@@ -152,8 +152,8 @@ function CustomerDetail({ id, onBack, onStats }: { id: string; onBack: () => voi
       <div className="rise" style={{ ...card, animationDelay: '100ms' }}>
         <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text)', marginBottom: 8 }}>עדכון נקודות ידני</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <input value={delta} onChange={(e) => setDelta(e.target.value)} inputMode="numeric" placeholder="כמות" dir="ltr" style={{ ...input, width: 90 }} />
-          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="סיבה (רשות)" style={{ ...input, flex: 1 }} />
+          <input value={delta} onChange={(e) => setDelta(e.target.value)} inputMode="numeric" placeholder="כמות" aria-label="כמות נקודות לעדכון" dir="ltr" style={{ ...input, width: 90 }} />
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="סיבה (רשות)" aria-label="סיבה (רשות)" style={{ ...input, flex: 1 }} />
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <button onClick={() => adjust(1)} disabled={busy} className="press" style={{ ...primary, flex: 1 }}>＋ הוספה</button>

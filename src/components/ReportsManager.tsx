@@ -111,12 +111,14 @@ function NotifyScopeToggle() {
         <div role="group" style={{ display: 'flex', gap: 6 }}>
           <button
             style={allWaiters ? primary : ghost} disabled={busy}
+            aria-pressed={allWaiters === true}
             onClick={() => !allWaiters && void set(true)}
           >
             כל המלצרים
           </button>
           <button
             style={!allWaiters ? primary : ghost} disabled={busy}
+            aria-pressed={allWaiters === false}
             onClick={() => allWaiters && void set(false)}
           >
             רק בעל/ת השולחן

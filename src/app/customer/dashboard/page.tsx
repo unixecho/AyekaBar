@@ -4,6 +4,9 @@ import PointsCard from '@/components/PointsCard'
 import RewardsList from '@/components/RewardsList'
 import SignOutButton from '@/components/SignOutButton'
 import AccountControls from '@/components/AccountControls'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'האזור האישי שלי · אייכה בר' }
 
 interface CustomerRow {
   id: string

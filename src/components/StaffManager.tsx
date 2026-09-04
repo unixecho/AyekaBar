@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useId } from 'react'
 import { BADGE_OPTIONS, badgeMeta, isManagement } from '@/lib/staff/badges'
 import { accessLabel } from '@/lib/staff/access'
 import RolePicker from '@/components/RolePicker'
@@ -326,19 +326,19 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
 
         {mode === 'account' ? (
           <input
-            type="email" required dir="ltr" value={email}
+            type="email" required dir="ltr" value={email} autoComplete="email"
             onChange={(e) => setEmail(e.target.value)} placeholder={T.emailPh}
             style={inputStyle}
           />
         ) : (
           <div style={{ display: 'flex', gap: 8 }}>
             <input
-              type="text" required value={firstName} maxLength={60}
+              type="text" required value={firstName} maxLength={60} autoComplete="given-name"
               onChange={(e) => setFirstName(e.target.value)} placeholder={T.firstNamePh}
               style={{ ...inputStyle, flex: 1 }}
             />
             <input
-              type="text" value={lastName} maxLength={60}
+              type="text" value={lastName} maxLength={60} autoComplete="family-name"
               onChange={(e) => setLastName(e.target.value)} placeholder={T.lastNamePh}
               style={{ ...inputStyle, flex: 1 }}
             />
@@ -523,6 +523,11 @@ function MemberRow({
   onToggleSchedulable: () => void
   onRemove: () => void
 }) {
+  // Must run before the early return below (Rules of Hooks) — used to
+  // associate the display-name <label> with its <input>, which the JSX
+  // renders as two separate elements with nothing else linking them.
+  const displayNameId = useId()
+
   // A shimmer, not a dimmed row, while a remove/restore/edit is in flight —
   // "skeleton loading... no refresh needed upon removal," 2026-08-30. The
   // row still occupies its slot (no layout jump when it resolves), it just
@@ -664,10 +669,11 @@ function MemberRow({
           offered to a row that cannot appear on the public page at all. */}
       {!pending && !offline && (
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 5 }}>
+          <label htmlFor={displayNameId} style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 5 }}>
             {T.displayNameLabel}
           </label>
           <DisplayNameField
+            id={displayNameId}
             value={m.display_name ?? ''}
             placeholder={name}
             disabled={busy}
@@ -760,7 +766,13 @@ function RemovedMemberRow({ m, busy, onRestore }: { m: Member; busy: boolean; on
           <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
           <span style={{
             display: 'flex', alignItems: 'center', gap: 5,
-            background: `${meta.color}14`, border: `1px solid ${meta.color}33`, color: `${meta.color}bb`,
+            background: `${meta.color}14`, border: `1px solid ${meta.color}33`,
+            // WCAG 1.4.3: was `${meta.color}bb` (73% alpha) — several
+            // badges (general_manager, manager, bartender, waiter) landed
+            // under 4.5:1 against this badge's own tinted background.
+            // Full-opacity matches the other two badge chips in this file
+            // (the active roster's MemberRow, lines 568/600 above).
+            color: meta.color,
             borderRadius: 999, padding: '2px 8px', fontSize: '0.7rem', fontWeight: 700,
           }}>
             <span>{meta.emoji}</span>{meta.he}
@@ -847,6 +859,10 @@ function RealNameFields({ first, last, disabled, onCommit }: {
     >
       <input
         value={draftFirst} disabled={disabled} maxLength={60} placeholder={T.firstNamePh}
+        // A11y: the visible <label> above this pair (T.realNameLabel) labels
+        // the GROUP, not either individual input — each still needs its own
+        // accessible name to distinguish first from last.
+        aria-label={`${T.realNameLabel} — ${T.firstNamePh}`}
         onChange={(e) => setDraftFirst(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur()
@@ -856,6 +872,7 @@ function RealNameFields({ first, last, disabled, onCommit }: {
       />
       <input
         value={draftLast} disabled={disabled} maxLength={60} placeholder={T.lastNamePh}
+        aria-label={`${T.realNameLabel} — ${T.lastNamePh}`}
         onChange={(e) => setDraftLast(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur()
@@ -869,8 +886,8 @@ function RealNameFields({ first, last, disabled, onCommit }: {
 
 /** Local draft + explicit commit on blur/Enter, so every keystroke isn't a
  *  PATCH. Empty clears the override back to the Google name. */
-function DisplayNameField({ value, placeholder, disabled, onCommit }: {
-  value: string; placeholder: string; disabled: boolean
+function DisplayNameField({ id, value, placeholder, disabled, onCommit }: {
+  id?: string; value: string; placeholder: string; disabled: boolean
   onCommit: (name: string | null) => void
 }) {
   const [draft, setDraft] = useState(value)
@@ -884,6 +901,7 @@ function DisplayNameField({ value, placeholder, disabled, onCommit }: {
 
   return (
     <input
+      id={id}
       value={draft} disabled={disabled} placeholder={placeholder} maxLength={60}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -913,6 +931,7 @@ function AddEmailField({ disabled, onCommit }: { disabled: boolean; onCommit: (e
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [invalid, setInvalid] = useState(false)
+  const errorId = useId()
 
   if (!open) {
     return (
@@ -941,7 +960,8 @@ function AddEmailField({ disabled, onCommit }: { disabled: boolean; onCommit: (e
       <div style={{ display: 'flex', gap: 8 }}>
         <input
           type="email" dir="ltr" autoFocus value={draft} disabled={disabled}
-          placeholder={T.addEmailPh}
+          placeholder={T.addEmailPh} aria-label={T.addEmail} autoComplete="email"
+          aria-invalid={invalid} aria-describedby={invalid ? errorId : undefined}
           onChange={(e) => { setDraft(e.target.value); setInvalid(false) }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commit()
@@ -966,7 +986,7 @@ function AddEmailField({ disabled, onCommit }: { disabled: boolean; onCommit: (e
         </button>
       </div>
       {invalid && (
-        <p style={{ fontSize: '0.72rem', color: '#ff6b6b', margin: 0 }}>{T.addEmailInvalid}</p>
+        <p id={errorId} role="alert" style={{ fontSize: '0.72rem', color: '#ff6b6b', margin: 0 }}>{T.addEmailInvalid}</p>
       )}
     </div>
   )

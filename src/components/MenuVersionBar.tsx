@@ -261,7 +261,7 @@ export default function MenuVersionBar() {
         <p style={{ fontSize: '0.76rem', color: 'var(--text-faint)', margin: '3px 0 0', lineHeight: 1.5 }}>{T.hint}</p>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div role="radiogroup" aria-label={T.label} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {variants === null
           ? <div className="sk" style={{ width: 150, height: 36, borderRadius: 999 }} />
           : variants.map((v) => {

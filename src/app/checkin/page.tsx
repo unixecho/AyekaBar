@@ -184,6 +184,9 @@ function GoogleSignInPrompt({ token }: { token: string }) {
 }
 
 export default function CheckinPage() {
+  // A11y (WCAG 2.4.2): see no-access/page.tsx's identical comment.
+  useEffect(() => { document.title = "צ'ק-אין · אייכה בר" }, [])
+
   return (
     <main id="main" tabIndex={-1} className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm">

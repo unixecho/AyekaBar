@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import RewardsManager from '@/components/RewardsManager'
 import SignOutButton from '@/components/SignOutButton'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'פרסים · אייכה בר' }
 
 export default async function OwnerRewardsPage() {
   const supabase = createClient()

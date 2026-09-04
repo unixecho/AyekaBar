@@ -5,6 +5,9 @@ import OwnerHeader from '@/components/OwnerHeader'
 import PortalLinksEditor from '@/components/PortalLinksEditor'
 import SignOutButton from '@/components/SignOutButton'
 import { getPortalLinks } from '@/lib/settings/server'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'קישורי פורטל · אייכה בר' }
 
 // Split out of /owner/dashboard on 2026-08-29. Six URL fields that are edited
 // roughly never and read by every visitor to the portal — exactly the shape of

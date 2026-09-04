@@ -6,6 +6,9 @@ import OwnerHeader from '@/components/OwnerHeader'
 import LoyaltyToggle from '@/components/LoyaltyToggle'
 import SignOutButton from '@/components/SignOutButton'
 import { getLoyaltyEnabled, getLoyaltyVisible } from '@/lib/settings/server'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'ניהול מועדון נאמנות · אייכה בר' }
 
 // Split out of /owner/dashboard on 2026-08-29. The club's on/off switch used
 // to sit on the dashboard while the two screens it governs — customers and

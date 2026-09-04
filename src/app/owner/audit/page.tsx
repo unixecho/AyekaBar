@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import AuditLog from '@/components/AuditLog'
 import SignOutButton from '@/components/SignOutButton'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'יומן פעולות · אייכה בר' }
 
 export default async function OwnerAuditPage() {
   const supabase = createClient()

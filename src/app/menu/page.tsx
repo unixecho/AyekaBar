@@ -1,6 +1,9 @@
 import { fetchMenu } from '@/lib/menu/fetch'
 import { getCartActionFlags, getMenuCartEnabled, getCustomerFeedbackEnabled } from '@/lib/settings/server'
 import MenuView from '@/components/MenuView'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'תפריט · אייכה בר' }
 
 // Always render fresh from the published menu (owner may publish mid-service).
 export const dynamic = 'force-dynamic'

@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import StaffManager from '@/components/StaffManager'
 import SignOutButton from '@/components/SignOutButton'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'צוות · אייכה בר' }
 
 // Split out of /owner/dashboard on 2026-08-29. The roster was the longest
 // thing on that page by a wide margin — every other control sat above a list
