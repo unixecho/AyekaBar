@@ -199,12 +199,18 @@ function WarningRow({ w, shifts, dismissed = false, onDismiss, onOpenShift }: {
         type="button" className="press"
         onClick={() => onDismiss(w.id, !dismissed)}
         title={dismissed ? t('restore') : t('dismiss')}
+        // A11y (WCAG 4.1.2): title alone becomes the accessible DESCRIPTION,
+        // not the name, once the button has real content — its accessible
+        // name was falling back to the glyph itself ("↺"/"✕"). Worse than
+        // the catalog editor's own glyph-button bug (that one at least set
+        // aria-label) — found 2026-09-04.
+        aria-label={dismissed ? t('restore') : t('dismiss')}
         style={{
           flex: '0 0 auto', border: 'none', background: 'none', cursor: 'pointer',
           color: 'var(--text-faint)', fontSize: '0.9rem', padding: '4px 6px',
         }}
       >
-        {dismissed ? '↺' : '✕'}
+        <span aria-hidden>{dismissed ? '↺' : '✕'}</span>
       </button>
     </div>
   )

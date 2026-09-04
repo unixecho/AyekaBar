@@ -26,6 +26,11 @@ const T = {
   icon: 'אייקון', he: 'עברית', en: 'English', ar: 'العربية',
   name: 'שם', note: 'תיאור', price: 'מחיר (מספר, טווח כמו 30/34, או ריק)',
   catTitle: 'שם הקטגוריה', catNote: 'הערת קטגוריה',
+  // A11y (WCAG 4.1.2 / 3.1.2): the category/item expand-collapse toggles had
+  // no aria-label/aria-expanded at all, and the reorder arrows' aria-labels
+  // were hardcoded English ("up"/"down") in an otherwise all-Hebrew RTL
+  // app — found 2026-09-04.
+  expand: 'הרחבה', collapse: 'כיווץ', moveUp: 'הזזה למעלה', moveDown: 'הזזה למטה',
   mustTry: 'חובה לטעום', badgeNew: 'חדש', sold: 'אזל',
   // Out-of-stock overview (2026-08-20) — "put all the items marked out of
   // stock in the same category for the managers to return it to the menu
@@ -262,10 +267,11 @@ export default function MenuEditor() {
               <input value={cat.icon ?? ''} onChange={(e) => edit((d) => { d[ci].icon = e.target.value })}
                 aria-label={T.icon} style={{ ...input, width: 46, textAlign: 'center', fontSize: '1.1rem' }} />
               <input value={cat.title?.he ?? ''} onChange={(e) => edit((d) => { d[ci].title = { ...d[ci].title, he: e.target.value } })}
-                placeholder={T.catTitle} style={{ ...input, flex: 1, fontWeight: 700 }} />
-              <button onClick={() => moveCat(ci, -1)} className="press" style={iconBtn} aria-label="up">↑</button>
-              <button onClick={() => moveCat(ci, 1)} className="press" style={iconBtn} aria-label="down">↓</button>
-              <button onClick={() => setOpenCat(open ? null : cat.id)} className="press" style={iconBtn}>{open ? '▾' : '▸'}</button>
+                aria-label={T.catTitle} placeholder={T.catTitle} style={{ ...input, flex: 1, fontWeight: 700 }} />
+              <button onClick={() => moveCat(ci, -1)} className="press" style={iconBtn} aria-label={T.moveUp}>↑</button>
+              <button onClick={() => moveCat(ci, 1)} className="press" style={iconBtn} aria-label={T.moveDown}>↓</button>
+              <button onClick={() => setOpenCat(open ? null : cat.id)} className="press" style={iconBtn}
+                aria-expanded={open} aria-label={open ? T.collapse : T.expand}>{open ? '▾' : '▸'}</button>
             </div>
 
             {open && (
@@ -359,11 +365,12 @@ function ItemEditor({ item, onChange, onDelete, onUp, onDown }: {
   return (
     <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 10, background: 'var(--bg-elev-2)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input value={item.he ?? ''} onChange={(e) => onChange({ he: e.target.value })} placeholder={T.name} style={{ ...input, flex: 1 }} />
-        <input value={priceToInput(item.price)} onChange={(e) => onChange({ price: inputToPrice(e.target.value) })} placeholder="₪" dir="ltr" style={{ ...input, width: 84 }} />
-        <button onClick={onUp} className="press" style={iconBtn} aria-label="up">↑</button>
-        <button onClick={onDown} className="press" style={iconBtn} aria-label="down">↓</button>
-        <button onClick={() => setOpen((v) => !v)} className="press" style={iconBtn}>{open ? '▾' : '▸'}</button>
+        <input value={item.he ?? ''} onChange={(e) => onChange({ he: e.target.value })} aria-label={T.name} placeholder={T.name} style={{ ...input, flex: 1 }} />
+        <input value={priceToInput(item.price)} onChange={(e) => onChange({ price: inputToPrice(e.target.value) })} aria-label={T.price} placeholder="₪" dir="ltr" style={{ ...input, width: 84 }} />
+        <button onClick={onUp} className="press" style={iconBtn} aria-label={T.moveUp}>↑</button>
+        <button onClick={onDown} className="press" style={iconBtn} aria-label={T.moveDown}>↓</button>
+        <button onClick={() => setOpen((v) => !v)} className="press" style={iconBtn}
+          aria-expanded={open} aria-label={open ? T.collapse : T.expand}>{open ? '▾' : '▸'}</button>
       </div>
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
@@ -417,12 +424,18 @@ function LangRow({ label, value, onChange, skipHe }: {
 }) {
   const v = value ?? {}
   const set = (lang: keyof Localized, s: string) => onChange({ ...v, [lang]: s || undefined })
+  // A11y (WCAG 1.3.1 / 3.3.2): the group's own label was a bare <span>, not
+  // linked to any of the three inputs — each one's only textual cue was a
+  // language-name placeholder ("עברית"/"English"/"العربية"), which
+  // disappears the moment there's a value and never said WHAT field this
+  // is to begin with. Each input's aria-label now combines both — found
+  // 2026-09-04.
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
       <span style={{ fontSize: '0.72rem', color: 'var(--text-faint)' }}>{label}</span>
-      {!skipHe && <input value={v.he ?? ''} onChange={(e) => set('he', e.target.value)} placeholder={T.he} style={input} />}
-      <input value={v.en ?? ''} onChange={(e) => set('en', e.target.value)} placeholder={T.en} dir="ltr" style={input} />
-      <input value={v.ar ?? ''} onChange={(e) => set('ar', e.target.value)} placeholder={T.ar} dir="rtl" style={input} />
+      {!skipHe && <input value={v.he ?? ''} onChange={(e) => set('he', e.target.value)} aria-label={`${label} — ${T.he}`} placeholder={T.he} style={input} />}
+      <input value={v.en ?? ''} onChange={(e) => set('en', e.target.value)} aria-label={`${label} — ${T.en}`} placeholder={T.en} dir="ltr" style={input} />
+      <input value={v.ar ?? ''} onChange={(e) => set('ar', e.target.value)} aria-label={`${label} — ${T.ar}`} placeholder={T.ar} dir="rtl" style={input} />
     </div>
   )
 }
