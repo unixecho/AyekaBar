@@ -89,15 +89,29 @@ function Sheet({ value, customInitial, onClose, onPick }: {
   // deps, and reach the current callback through a ref.
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
+  // A11y (WCAG 2.4.3): this sheet set NO initial focus at all — found
+  // 2026-09-04. Added inside the SAME empty-deps effect the comment above
+  // already insists on (the sheet mounts fresh each time it opens, per the
+  // parent's `{open && <Sheet .../>}`, so a mount-time-only capture/focus
+  // is exactly correct here and carries none of the per-keystroke-rerun
+  // risk that comment warns about — deps stay empty, nothing new depends
+  // on `custom`). Focuses the sheet's own content box, not a specific
+  // child button — deliberately, so this fix cannot reach into the custom
+  // text input on every re-render the way the bug above did.
+  const returnFocusTo = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    const timer = window.setTimeout(() => sheetRef.current?.focus(), 60)
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
+      window.clearTimeout(timer)
+      returnFocusTo.current?.focus?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -117,7 +131,7 @@ function Sheet({ value, customInitial, onClose, onPick }: {
         }}
       >
         <div
-          ref={sheetRef} onClick={(e) => e.stopPropagation()}
+          ref={sheetRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}
           style={{
             width: '100%', maxWidth: 460,
             background: 'var(--bg-elev-2)',

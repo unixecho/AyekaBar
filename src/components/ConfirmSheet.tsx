@@ -28,9 +28,18 @@ export default function ConfirmSheet({
   onClose: () => void
 }) {
   const confirmRef = useRef<HTMLButtonElement>(null)
+  // A11y (WCAG 2.4.3): found 2026-09-04 — this sheet focused its confirm
+  // button on open but never gave focus BACK anywhere on close. Since
+  // `if (!request) return null` unmounts the whole subtree synchronously,
+  // the previously-focused element (whatever opened this sheet, across its
+  // 18+ call sites) is removed from the DOM and the browser drops focus to
+  // <body> on every dismissal — Escape, backdrop click, Cancel, or a
+  // successful confirm. Same fix as SheetShell.tsx's own returnFocusTo.
+  const returnFocusTo = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!request) return
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
@@ -41,6 +50,7 @@ export default function ConfirmSheet({
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
+      returnFocusTo.current?.focus?.()
     }
   }, [request, onClose])
 

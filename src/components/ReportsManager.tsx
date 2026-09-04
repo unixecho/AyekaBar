@@ -11,7 +11,7 @@
 // the session start/stop + receipts-browser half, which is what was asked
 // for. The report-generation half is real, separate follow-up work.
 
-import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 
 interface Receipt {
@@ -325,6 +325,29 @@ function ReceiptDetailSheet({ id, onClose }: { id: string; onClose: () => void }
   // into the generic "not found" copy next time, which told nobody
   // whether the request failed, came back non-ok, or genuinely had no row.
   const [fetchError, setFetchError] = useState<string | null>(null)
+  // A11y (WCAG 2.4.3): found 2026-09-04 — this dialog had role="dialog"
+  // aria-modal="true" with NEITHER an Escape handler NOR initial-focus
+  // management, unlike ConfirmSheet.tsx/PromptSheet.tsx (its siblings in
+  // the same "sheet over a scrim" family). A keyboard user could only
+  // close it by tabbing all the way to "סגירה".
+  const panelRef = useRef<HTMLDivElement>(null)
+  const returnFocusTo = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const timer = window.setTimeout(() => panelRef.current?.focus(), 60)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+      window.clearTimeout(timer)
+      returnFocusTo.current?.focus?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -363,7 +386,7 @@ function ReceiptDetailSheet({ id, onClose }: { id: string; onClose: () => void }
   // containing block again, regardless of what changes above it later.
   return createPortal(
     <div
-      role="dialog" aria-modal="true" onClick={onClose}
+      role="dialog" aria-modal="true" aria-label="פרטי קבלה" onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 200,
         background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
@@ -375,7 +398,7 @@ function ReceiptDetailSheet({ id, onClose }: { id: string; onClose: () => void }
         onClick={(e) => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 460, padding: '0 10px calc(env(safe-area-inset-bottom) + 10px)', animation: 'sheet-up .34s var(--ease)' }}
       >
-        <div style={{ background: 'var(--bg-elev-2)', border: '1px solid var(--line-strong)', borderRadius: 18, overflow: 'hidden', padding: 18, maxHeight: '80vh', overflowY: 'auto' }}>
+        <div ref={panelRef} tabIndex={-1} style={{ background: 'var(--bg-elev-2)', border: '1px solid var(--line-strong)', borderRadius: 18, overflow: 'hidden', padding: 18, maxHeight: '80vh', overflowY: 'auto' }}>
           {detail === undefined && <div className="sk" style={{ height: 160, borderRadius: 10 }} />}
           {detail === null && (
             <p style={{ color: 'var(--text-dim)', textAlign: 'center' }}>

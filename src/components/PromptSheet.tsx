@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import ModalPortal from '@/components/ModalPortal'
 
 // iOS-style single-line text input, replacing window.prompt().
@@ -38,10 +38,18 @@ export default function PromptSheet({
 }) {
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  // A11y (WCAG 2.4.3): same fix as ConfirmSheet.tsx's own returnFocusTo —
+  // this sheet autofocused its input on open but never gave focus back on
+  // close, so every dismissal (Escape, backdrop, Cancel, confirm) dropped
+  // keyboard focus to <body> across all of this sheet's call sites (floor
+  // naming, diner naming, the cart's per-line note).
+  const returnFocusTo = useRef<HTMLElement | null>(null)
+  const titleId = useId()
 
   useEffect(() => {
     if (!request) return
     setValue(request.defaultValue ?? '')
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
@@ -53,6 +61,7 @@ export default function PromptSheet({
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
       window.clearTimeout(t)
+      returnFocusTo.current?.focus?.()
     }
   }, [request, onClose])
 
@@ -87,7 +96,7 @@ export default function PromptSheet({
             borderRadius: 18, overflow: 'hidden', marginBottom: 8,
           }}>
             <div style={{ padding: '18px 18px 14px', textAlign: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
+              <h3 id={titleId} style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
                 {request.title}
               </h3>
               {request.body && (
@@ -95,8 +104,14 @@ export default function PromptSheet({
                   {request.body}
                 </p>
               )}
+              {/* A11y (WCAG 3.3.2 / 4.1.2): had value/placeholder/onChange
+                  but no id/aria-label/label — placeholder alone isn't a
+                  valid accessible name (it disappears the moment there's
+                  a value). aria-labelledby ties it to the dialog's own
+                  title, which is already exactly what this field is for. */}
               <input
                 ref={inputRef}
+                aria-labelledby={titleId}
                 value={value}
                 placeholder={request.placeholder}
                 onChange={(e) => setValue(e.target.value)}
