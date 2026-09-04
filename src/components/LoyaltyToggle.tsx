@@ -151,7 +151,8 @@ function Row({ label, description, checked, busy, onToggle }: {
         onClick={onToggle} disabled={busy} className="press"
         style={{
           flex: '0 0 auto', width: 52, height: 30, borderRadius: 999, cursor: 'pointer',
-          border: `1px solid ${checked ? 'transparent' : 'var(--line-strong)'}`,
+          // WCAG 1.4.11: was var(--line-strong) for the OFF-state track border.
+          border: `1px solid ${checked ? 'transparent' : 'var(--line-interactive)'}`,
           background: checked
             ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))'
             : 'var(--bg-elev-2)',
@@ -167,6 +168,10 @@ function Row({ label, description, checked, busy, onToggle }: {
         {/* knob moves to the physical right when on, in RTL and LTR alike */}
         <span aria-hidden style={{
           width: 22, height: 22, borderRadius: 999, background: '#fff',
+          // WCAG 1.4.11: same fix as Switch.tsx/MenuCartCard.tsx — a solid
+          // dark ring gives the knob real contrast against the ON-state
+          // gradient (≈8.5:1 vs. white's own 2.3-3.0:1).
+          border: '2px solid var(--bg)', boxSizing: 'border-box',
           boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
           transform: `translateX(${checked ? 22 : 0}px)`,
           transition: 'transform .28s var(--ease)',

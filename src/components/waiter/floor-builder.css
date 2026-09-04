@@ -29,7 +29,14 @@
   transition: border-color .18s var(--ease), color .18s var(--ease), background-color .18s var(--ease);
 }
 .fb-tab:hover { border-color: var(--line-strong); color: var(--text); }
-.fb-tab.on { border-color: var(--neon); color: var(--neon); background: var(--neon-soft); }
+/* WCAG 1.4.3: was background:var(--neon-soft) with color:var(--neon) --
+   two near-identical warm oranges, computed at ~1.3:1 (worst text-contrast
+   figure in the whole 2026-09-04 audit). --neon-soft is used ~80 other
+   times sitewide, always as text-on-dark or under white/var(--bg) text in
+   a gradient -- never as a background under --neon text -- confirming
+   this was an isolated bug, not intent. Dark background keeps the
+   "selected tab glows orange" language the border/text already carry. */
+.fb-tab.on { border-color: var(--neon); color: var(--neon); background: var(--bg); }
 .fb-tab--add { border-style: dashed; color: var(--text-faint); }
 /* An unconfigured floor is a real state, not a styling detail: it is the one
    thing telling the owner "you have not drawn this room yet". */
@@ -103,7 +110,12 @@
   position: absolute; transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 1px;
-  border: 1px solid var(--line-strong); border-radius: 10px;
+  /* WCAG 1.4.11: was var(--line-strong), ≈1.47:1 against the canvas — a
+     low-vision user could not distinguish an unselected table/prop from
+     empty canvas. This border is the primary way this diagram element is
+     identified at all (the fill is only ≈1.1:1 from the canvas too, but
+     the border alone now gives real definition). */
+  border: 1px solid var(--line-interactive); border-radius: 10px;
   background: var(--bg-elev-2); color: var(--text);
   cursor: grab; touch-action: none;
   transition: box-shadow .18s var(--ease), border-color .18s var(--ease);
@@ -227,7 +239,8 @@
   font: inherit; font-size: 0.76rem; font-weight: 600; cursor: pointer;
   transition: border-color .18s var(--ease), color .18s var(--ease), background-color .18s var(--ease);
 }
-.fb-seg-b.on { border-color: var(--neon); color: var(--neon); background: var(--neon-soft); }
+/* Same WCAG 1.4.3 fix as .fb-tab.on above -- identical bug, same cause. */
+.fb-seg-b.on { border-color: var(--neon); color: var(--neon); background: var(--bg); }
 .fb-seg-b:disabled { opacity: .5; cursor: not-allowed; }
 
 .fb-steppers { display: flex; gap: 8px; }

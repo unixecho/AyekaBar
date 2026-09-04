@@ -93,6 +93,6 @@ const inputStyle: React.CSSProperties = {
 const saveBtnStyle: React.CSSProperties = {
   width: '100%', padding: '11px 0', borderRadius: 11, border: 'none',
   background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-  boxShadow: 'var(--glow)', color: '#fff', fontSize: '0.95rem',
+  boxShadow: 'var(--glow)', color: 'var(--bg)', fontSize: '0.95rem',
   fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
 }

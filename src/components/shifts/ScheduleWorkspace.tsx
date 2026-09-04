@@ -171,7 +171,7 @@ export default function ScheduleWorkspace() {
               background: isPublished && !dirty
                 ? 'var(--bg-elev-2)'
                 : 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-              color: isPublished && !dirty ? 'var(--text-faint)' : '#fff',
+              color: isPublished && !dirty ? 'var(--text-faint)' : 'var(--bg)',
               font: 'inherit', fontSize: '0.9rem', fontWeight: 700,
               cursor: publishing ? 'default' : 'pointer',
               boxShadow: isPublished && !dirty ? 'none' : 'var(--glow)',

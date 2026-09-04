@@ -127,5 +127,5 @@ const textarea: CSSProperties = { ...input, resize: 'vertical', lineHeight: 1.5 
 const primary: CSSProperties = {
   padding: '12px 22px', borderRadius: 12, border: 'none',
   background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-  color: '#fff', fontWeight: 700, fontSize: '0.92rem', fontFamily: 'inherit', cursor: 'pointer',
+  color: 'var(--bg)', fontWeight: 700, fontSize: '0.92rem', fontFamily: 'inherit', cursor: 'pointer',
 }

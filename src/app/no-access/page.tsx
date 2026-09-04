@@ -83,7 +83,7 @@ export default function NoAccessPage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
           width: '100%', marginTop: 24, padding: '15px 18px', borderRadius: 15,
           border: 'none', background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-          boxShadow: 'var(--glow)', color: '#fff', fontSize: '1rem', fontWeight: 700,
+          boxShadow: 'var(--glow)', color: 'var(--bg)', fontSize: '1rem', fontWeight: 700,
           textDecoration: 'none', animation: 'rise-in .6s var(--ease) .28s backwards',
         }}>
           <svg viewBox="0 0 24 24" width={19} height={19} fill="none" stroke="currentColor"

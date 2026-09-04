@@ -82,7 +82,7 @@ export default function QRDisplay() {
       <button onClick={fetchNewToken} style={{
         padding: '10px 24px', borderRadius: 12, border: 'none',
         background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-        color: '#fff', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
+        color: 'var(--bg)', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
       }}>נסה שוב</button>
     </div>
   )

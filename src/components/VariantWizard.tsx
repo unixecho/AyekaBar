@@ -457,7 +457,7 @@ const ghostBtn: CSSProperties = {
 const primary: CSSProperties = {
   width: '100%', padding: '14px 0', borderRadius: 14, border: 'none',
   background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-  boxShadow: 'var(--glow)', color: '#fff', fontSize: '1rem',
+  boxShadow: 'var(--glow)', color: 'var(--bg)', fontSize: '1rem',
   fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
 }
 const cancel: CSSProperties = {

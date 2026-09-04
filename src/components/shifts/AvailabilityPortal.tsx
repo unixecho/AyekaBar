@@ -137,7 +137,7 @@ export default function AvailabilityPortal({ weekStart }: { weekStart: ISODate }
         style={{
           width: '100%', marginTop: 10, padding: '13px 0', borderRadius: 14, border: 'none',
           background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-          color: '#fff', font: 'inherit', fontSize: '0.92rem', fontWeight: 700,
+          color: 'var(--bg)', font: 'inherit', fontSize: '0.92rem', fontWeight: 700,
           cursor: busy ? 'default' : 'pointer', boxShadow: 'var(--glow)',
         }}
       >

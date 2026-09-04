@@ -218,7 +218,7 @@ export default function StaffWorkspace() {
                         style={{
                           padding: '8px 14px', borderRadius: 999, border: 'none',
                           background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-                          color: '#fff', font: 'inherit', fontSize: '0.78rem', fontWeight: 700,
+                          color: 'var(--bg)', font: 'inherit', fontSize: '0.78rem', fontWeight: 700,
                           cursor: 'pointer',
                         }}
                       >

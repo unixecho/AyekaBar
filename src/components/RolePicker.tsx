@@ -190,7 +190,7 @@ function Sheet({ value, customInitial, onClose, onPick }: {
                   background: trimmed
                     ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))'
                     : 'var(--bg-elev)',
-                  color: trimmed ? '#fff' : 'var(--text-faint)',
+                  color: trimmed ? 'var(--bg)' : 'var(--text-faint)',
                   fontSize: '0.9rem', fontWeight: 700, fontFamily: 'inherit',
                   cursor: trimmed ? 'pointer' : 'default',
                   boxShadow: trimmed ? 'var(--glow)' : 'none',

@@ -138,7 +138,8 @@ const input: CSSProperties = {
 }
 const primaryBtn: CSSProperties = {
   flex: 1, padding: '11px 0', borderRadius: 10, border: 'none',
-  background: 'var(--neon)', color: '#fff', fontSize: '0.9rem', fontWeight: 700,
+  // WCAG 1.4.3: white on solid --neon computes to 3.04:1, under 4.5:1.
+  background: 'var(--neon)', color: 'var(--bg)', fontSize: '0.9rem', fontWeight: 700,
   fontFamily: 'inherit', cursor: 'pointer',
 }
 const secondaryBtn: CSSProperties = {

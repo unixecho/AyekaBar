@@ -112,7 +112,8 @@ export default function MenuCartCard() {
           className="press"
           style={{
             flex: '0 0 auto', width: 52, height: 30, borderRadius: 999, cursor: 'pointer',
-            border: `1px solid ${hot ? 'transparent' : 'var(--line-strong)'}`,
+            // WCAG 1.4.11: was var(--line-strong) for the OFF-state track border.
+            border: `1px solid ${hot ? 'transparent' : 'var(--line-interactive)'}`,
             background: hot
               ? 'linear-gradient(135deg, var(--neon-2), #7defff)'
               : 'var(--bg-elev-2)',
@@ -126,6 +127,11 @@ export default function MenuCartCard() {
         >
           <span aria-hidden style={{
             width: 22, height: 22, borderRadius: 999, background: '#fff',
+            // WCAG 1.4.11: white knob on the ON-state cyan gradient
+            // computed to 1.34:1-1.57:1 (the worst of every toggle in the
+            // app) — a solid dark ring gives the boundary real contrast
+            // (≈9-10:1) at no cost to the off-state, same fix as Switch.tsx.
+            border: '2px solid var(--bg)', boxSizing: 'border-box',
             boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
             transform: `translateX(${hot ? 22 : 0}px)`,
             transition: 'transform .28s var(--ease)',

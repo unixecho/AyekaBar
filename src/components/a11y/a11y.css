@@ -25,7 +25,12 @@
   display: grid; place-items: center;
   border: 0; border-radius: 999px;
   background: linear-gradient(135deg, var(--neon), var(--neon-soft));
-  color: #fff;
+  /* WCAG 1.4.3: found in a same-day second-pass audit of this exact
+     widget -- white on this gradient computes to 2.32:1-3.04:1, under
+     4.5:1. Ironic for the launcher of an accessibility tool, fixed
+     immediately. Same fix applied sitewide wherever this gradient
+     carries icon/text content. */
+  color: var(--bg);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 24px rgba(255, 94, 58, 0.35);
   cursor: pointer;
 }

@@ -56,7 +56,7 @@ export default function PrintView({ weekStart }: { weekStart: ISODate }) {
           style={{
             padding: '12px 20px', borderRadius: 13, border: 'none',
             background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-            color: '#fff', font: 'inherit', fontSize: '0.9rem', fontWeight: 700,
+            color: 'var(--bg)', font: 'inherit', fontSize: '0.9rem', fontWeight: 700,
             cursor: 'pointer', boxShadow: 'var(--glow)',
           }}
         >

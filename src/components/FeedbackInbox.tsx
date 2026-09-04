@@ -192,7 +192,9 @@ export default function FeedbackInbox() {
           className="press"
           style={{
             flex: '0 0 auto', width: 52, height: 30, borderRadius: 999, cursor: 'pointer',
-            border: `1px solid ${enabled ? 'transparent' : 'var(--line-strong)'}`,
+            // WCAG 1.4.11: was var(--line-strong) (~1.1-1.5:1 against the
+            // track fill) for the OFF-state boundary.
+            border: `1px solid ${enabled ? 'transparent' : 'var(--line-interactive)'}`,
             background: enabled
               ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))'
               : 'var(--bg-elev-2)',
@@ -205,6 +207,11 @@ export default function FeedbackInbox() {
         >
           <span aria-hidden style={{
             width: 22, height: 22, borderRadius: 999, background: '#fff',
+            // WCAG 1.4.11: same fix as the other three switch
+            // implementations in this app (Switch.tsx, MenuCartCard.tsx,
+            // LoyaltyToggle.tsx) — a solid dark ring gives the knob real
+            // contrast against the ON-state gradient track.
+            border: '2px solid var(--bg)', boxSizing: 'border-box',
             boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
             transform: `translateX(${enabled ? 22 : 0}px)`,
             transition: 'transform .28s var(--ease)',

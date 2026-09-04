@@ -438,7 +438,7 @@ const restoreBtn: CSSProperties = { flex: '0 0 auto', padding: '7px 11px', borde
 const input: CSSProperties = { padding: '9px 11px', borderRadius: 9, border: '1px solid var(--line-strong)', background: 'var(--bg-elev-2)', color: 'var(--text)', fontSize: '0.92rem', fontFamily: 'inherit', outline: 'none', width: '100%' }
 const iconBtn: CSSProperties = { width: 32, height: 32, flex: '0 0 auto', borderRadius: 8, border: '1px solid var(--line-strong)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'inherit' }
 const ghost: CSSProperties = { padding: '8px 13px', borderRadius: 10, border: '1px solid var(--line-strong)', background: 'transparent', color: 'var(--text-dim)', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', textDecoration: 'none', display: 'inline-block' }
-const primary: CSSProperties = { padding: '8px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))', boxShadow: 'var(--glow)', color: '#fff', fontSize: '0.9rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }
+const primary: CSSProperties = { padding: '8px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))', boxShadow: 'var(--glow)', color: 'var(--bg)', fontSize: '0.9rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }
 const chk: CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--text-dim)', cursor: 'pointer' }
 // Same look as `chk`, as a <button role="switch"> instead of a <label>+checkbox
 // — the iOS-style Switch replaces every native checkbox in the owner surface.

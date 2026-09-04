@@ -489,6 +489,6 @@ const ghost: CSSProperties = {
 const applyBtn: CSSProperties = {
   padding: '9px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
   background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-  boxShadow: 'var(--glow)', color: '#fff', fontSize: '0.82rem',
+  boxShadow: 'var(--glow)', color: 'var(--bg)', fontSize: '0.82rem',
   fontWeight: 700, fontFamily: 'inherit', flex: '0 0 auto', whiteSpace: 'nowrap',
 }

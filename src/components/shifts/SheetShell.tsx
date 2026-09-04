@@ -117,7 +117,7 @@ export default function SheetShell({
 export const sheetPrimary = (enabled = true) => ({
   flex: 1, padding: '13px 0', borderRadius: 14, border: 'none',
   background: enabled ? 'linear-gradient(135deg, var(--neon), var(--neon-soft))' : 'var(--bg-elev)',
-  color: enabled ? '#fff' : 'var(--text-faint)',
+  color: enabled ? 'var(--bg)' : 'var(--text-faint)',
   fontSize: '0.95rem', fontWeight: 700, fontFamily: 'inherit',
   cursor: enabled ? 'pointer' : 'default',
   boxShadow: enabled ? 'var(--glow)' : 'none',

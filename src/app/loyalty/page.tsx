@@ -105,7 +105,7 @@ export default async function LoyaltyLandingPage() {
               textAlign: 'center',
               fontSize: '1.05rem',
               fontWeight: 700,
-              color: '#fff',
+              color: 'var(--bg)', // WCAG 1.4.3: white on this gradient is 2.3-3.0:1
               textDecoration: 'none',
               animationDelay: '540ms',
             }}>

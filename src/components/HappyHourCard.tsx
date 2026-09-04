@@ -104,7 +104,7 @@ export default function HappyHourCard({ categories }: { categories: MenuCategory
           style={{
             flex: 1, padding: '10px 0', borderRadius: 11, border: 'none',
             background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-            boxShadow: 'var(--glow)', color: '#fff', fontSize: '0.9rem',
+            boxShadow: 'var(--glow)', color: 'var(--bg)', fontSize: '0.9rem',
             fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
           }}>
           {configured ? T.edit : T.setup}
