@@ -217,6 +217,29 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
     setDrag({ ...drag, x: p.x + drag.dx, y: p.y + drag.dy, moved: true })
   }
 
+  // A11y (WCAG 2.2 2.5.7 Dragging Movements — tracked as A17). The table/prop
+  // divs below carry NO other way to move than the pointer handlers above —
+  // confirmed drag-only, no keyboard/single-pointer alternative anywhere in
+  // this file. This is that alternative: arrow keys nudge the focused object
+  // one grid cell at a time, running through snapWithGrowth — the SAME
+  // collision-aware, room-growing function the mouse path already calls on
+  // release (onObjectUp below) — so a keyboard move can never overlap a
+  // neighbour or fall outside the room any more than a mouse move can.
+  function onObjectKeyDown(e: React.KeyboardEvent, kind: 'table' | 'prop', obj: FloorTable | FloorProp) {
+    if (!canManage || !isPlaced(obj)) return
+    const STEP: Partial<Record<string, [number, number]>> = {
+      ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+    }
+    const delta = STEP[e.key]
+    if (!delta) return
+    e.preventDefault()
+    const c = cellSize(canvas)
+    const spot = snapWithGrowth(obj.pos_x! + delta[0] * c.pw, obj.pos_y! + delta[1] * c.ph, obj, obj.id)
+    haptic('tick')
+    if (kind === 'table') patchTable(obj.id, { pos_x: spot.x, pos_y: spot.y })
+    else patchProp(obj.id, { pos_x: spot.x, pos_y: spot.y })
+  }
+
   function onObjectUp(e: React.PointerEvent) {
     if (!drag) return
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* gone */ }
@@ -537,6 +560,18 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
               backgroundSize: `${100 / cols}% ${100 / rows}%`,
             }} />
 
+            {/* Referenced by every table/prop's aria-describedby below — one
+                shared instruction rather than repeating it on every object a
+                screen-reader user tabs past. Visually hidden the same way
+                the site's own skip-link is (off-screen, not display:none,
+                so it stays in the accessibility tree). */}
+            <p id="fb-kbd-hint" style={{
+              position: 'absolute', width: 1, height: 1, overflow: 'hidden',
+              clipPath: 'inset(50%)', whiteSpace: 'nowrap', margin: -1, padding: 0, border: 0,
+            }}>
+              נבחר. חצים להזזה ברשת.
+            </p>
+
             {dropPreview && (
               <div className="fb-preview" aria-hidden="true" style={{
                 left: `${dropPreview.x}%`, top: `${dropPreview.y}%`,
@@ -562,6 +597,14 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
                   onPointerMove={onObjectMove}
                   onPointerUp={onObjectUp}
                   onPointerCancel={() => setDrag(null)}
+                  /* A17: keyboard alternative to the drag above. */
+                  tabIndex={canManage ? 0 : -1}
+                  role="button"
+                  aria-pressed={sel?.kind === 'prop' && sel.id === p.id}
+                  aria-label={p.label || PROP_HE[p.kind]}
+                  aria-describedby="fb-kbd-hint"
+                  onFocus={() => setSel({ kind: 'prop', id: p.id })}
+                  onKeyDown={(e) => onObjectKeyDown(e, 'prop', p)}
                 >
                   {isLandmark(p.kind) && <b aria-hidden="true">{PROP_GLYPH[p.kind]}</b>}
                   <span>{p.label || PROP_HE[p.kind]}</span>
@@ -587,6 +630,14 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
                   onPointerMove={onObjectMove}
                   onPointerUp={onObjectUp}
                   onPointerCancel={() => setDrag(null)}
+                  /* A17: keyboard alternative to the drag above. */
+                  tabIndex={canManage ? 0 : -1}
+                  role="button"
+                  aria-pressed={sel?.kind === 'table' && sel.id === t.id}
+                  aria-label={tableName(t)}
+                  aria-describedby="fb-kbd-hint"
+                  onFocus={() => setSel({ kind: 'table', id: t.id })}
+                  onKeyDown={(e) => onObjectKeyDown(e, 'table', t)}
                 >
                   <b>{tableName(t)}</b>
                   {t.label_kind && (
