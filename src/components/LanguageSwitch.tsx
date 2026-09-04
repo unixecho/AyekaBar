@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 
 // One language switcher for the whole site. The portal, menu and team page
 // each had their own — a globe with a dropdown, a globe with CSS-class styling,
@@ -20,6 +20,15 @@ export const LANG_NAMES: Record<Lang, string> = {
 
 const ORDER: Lang[] = ['he', 'en', 'ar']
 
+// A11y (WCAG 3.1.2 Language of Parts): was a hardcoded "Language" — every
+// other user-facing string in the app is trilingual per house convention,
+// this one was missed. Announced in whichever language is CURRENTLY
+// active, matching how a screen reader is already reading the rest of
+// the page at the moment it reaches this control.
+const TRIGGER_LABEL: Record<Lang, string> = {
+  he: 'שינוי שפה', en: 'Change language', ar: 'تغيير اللغة',
+}
+
 export default function LanguageSwitch({
   lang,
   onChange,
@@ -32,6 +41,20 @@ export default function LanguageSwitch({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+
+  // A11y (WCAG 2.4.3): none of the three ways to dismiss this dropdown
+  // (outside click, Escape, picking a language) ever returned focus to the
+  // trigger — found 2026-09-04. The trigger button is never conditionally
+  // rendered, so — unlike ConfirmSheet/PromptSheet's "capture whatever was
+  // focused, restore it" — this can just focus the trigger directly on
+  // every dismissal path, since that trigger is realistically what had
+  // focus before the menu opened in every real case (a click on it, or a
+  // Tab-then-Enter/Space to it).
+  const closeAndReturnFocus = useCallback(() => {
+    setOpen(false)
+    triggerRef.current?.focus()
+  }, [])
 
   // Close on outside click — must check containment, not just "any click",
   // or the click that OPENS the menu closes it again in the same tick.
@@ -39,14 +62,14 @@ export default function LanguageSwitch({
     const onClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeAndReturnFocus() }
     document.addEventListener('click', onClick)
     document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('click', onClick)
       document.removeEventListener('keydown', onKey)
     }
-  }, [])
+  }, [closeAndReturnFocus])
 
   const wrap: CSSProperties = variant === 'fixed'
     ? { position: 'fixed', left: 14, top: 'calc(env(safe-area-inset-top) + 14px)', zIndex: 50 }
@@ -55,7 +78,8 @@ export default function LanguageSwitch({
   return (
     <div ref={ref} style={wrap}>
       <button
-        aria-label="Language" aria-expanded={open} aria-haspopup="menu"
+        ref={triggerRef}
+        aria-label={TRIGGER_LABEL[lang]} aria-expanded={open} aria-haspopup="menu"
         className="press"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
         style={{
@@ -88,7 +112,7 @@ export default function LanguageSwitch({
             const active = l === lang
             return (
               <button
-                key={l} role="menuitem" onClick={() => { onChange(l); setOpen(false) }}
+                key={l} role="menuitem" onClick={() => { onChange(l); closeAndReturnFocus() }}
                 style={{
                   border: 0, background: active ? 'rgba(255,94,58,0.14)' : 'transparent',
                   boxShadow: active ? 'inset 0 0 0 1px rgba(255,94,58,0.3)' : 'none',
