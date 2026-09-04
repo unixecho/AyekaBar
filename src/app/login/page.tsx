@@ -71,8 +71,9 @@ export default function LoginPage() {
         <button onClick={() => setAuthOpen(true)} className="press rise" style={{ ...googleBtnStyle, animationDelay: '160ms' }}>
           <GoogleG size={18} />{T.google}
         </button>
+        {/* A11y (WCAG 4.1.3): plain text, never announced. */}
         {error && !authOpen && (
-          <p style={{ color: '#ff6b6b', fontSize: '0.85rem', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>{error}</p>
+          <p role="alert" style={{ color: '#ff6b6b', fontSize: '0.85rem', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>{error}</p>
         )}
 
         <p className="rise" style={{ color: 'var(--text-faint)', fontSize: '0.8rem', textAlign: 'center', margin: 0, lineHeight: 1.5, animationDelay: '230ms' }}>

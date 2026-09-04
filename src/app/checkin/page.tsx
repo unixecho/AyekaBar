@@ -96,9 +96,13 @@ function CheckinContent() {
   }
 
   if (status === 'error') {
+    // A11y (WCAG 4.1.3): this replaces the page's content via client-side
+    // state (checking → error), not a real navigation, so a screen-reader
+    // user already on the page needs to be told the check-in failed --
+    // found 2026-09-04.
     return (
-      <div className="text-center space-y-6">
-        <div className="text-5xl">⚠️</div>
+      <div className="text-center space-y-6" role="alert">
+        <div className="text-5xl" aria-hidden>⚠️</div>
         <div className="space-y-2">
           <h2 className="text-xl font-bold text-red-400">שגיאה</h2>
           <p className="text-zinc-400">{message}</p>
