@@ -233,10 +233,26 @@ export default function MenuView({
         </div>
       )}
 
+      {/* A11y (WCAG 4.1.3): a persistent, visually-hidden announcer — the
+          banner below is aria-live="polite" too, but it's conditionally
+          MOUNTED, so the window opening mid-visit renders a brand-new node
+          with content already inside it. Screen readers reliably announce
+          MUTATIONS to an existing live region, not the arrival of one —
+          same class of gap A9 fixed for the cart's first add. Found
+          2026-09-04. This span always exists; only its text changes. */}
+      <span aria-live="polite" aria-atomic="true" style={srOnly}>
+        {happyActive && happyHour ? `${MENU_UI.happyHour[lang]}: ${MENU_UI.happyHourSub[lang]}` : ''}
+      </span>
+
       {/* Happy hour leads the page when it's live — centred, ahead of every
-          category, because a discount nobody notices may as well not exist. */}
+          category, because a discount nobody notices may as well not exist.
+          Plain now, not aria-live — the persistent span above owns the
+          announcement; this section stays a normal, fully-discoverable
+          part of the page (its own <h2>, reachable by heading navigation)
+          for a visitor who lands here fresh, mid-window, and never heard
+          any live announcement at all. */}
       {happyActive && happyHour && (
-        <section className="menu-hh rise" style={{ animationDelay: '150ms' }} aria-live="polite">
+        <section className="menu-hh rise" style={{ animationDelay: '150ms' }}>
           <span className="menu-hh-glow" aria-hidden />
           <span className="menu-hh-emoji" aria-hidden>🍹</span>
           <h2 className="menu-hh-title">{MENU_UI.happyHour[lang]}</h2>
@@ -403,6 +419,12 @@ function ItemRow({
           {price && (
             <div className="price">
               {wasPrice && (
+                // A11y (WCAG 1.3.1): `title` alone is mouse-hover-only and
+                // unreliable on screen readers — the strikethrough is
+                // CSS-only, so a screen-reader user heard two numbers with
+                // no indication which was the old one. Real (visually
+                // hidden) text now says so directly; `title` stays for a
+                // sighted mouse user hovering it. Found 2026-09-04.
                 <span
                   title={MENU_UI.wasPrice[lang]}
                   style={{
@@ -410,7 +432,7 @@ function ItemRow({
                     color: 'var(--text-faint)', textDecoration: 'line-through',
                     lineHeight: 1.1, marginBottom: 1,
                   }}
-                >{wasPrice}₪</span>
+                ><span style={srOnly}>{MENU_UI.wasPrice[lang]}: </span>{wasPrice}₪</span>
               )}
               <span style={wasPrice ? { color: 'var(--neon-soft)' } : undefined}>
                 {price}<span className="cur">₪</span>
@@ -428,6 +450,13 @@ function ItemRow({
       )}
     </div>
   )
+}
+
+/** Visually hidden but still reachable by assistive tech — same technique
+ *  (and same values) as AddToCartControl.tsx's own srOnly. */
+const srOnly: CSSProperties = {
+  position: 'absolute', width: 1, height: 1, overflow: 'hidden',
+  clipPath: 'inset(50%)', whiteSpace: 'nowrap', border: 0, padding: 0, margin: -1,
 }
 
 function MenuSkeleton() {

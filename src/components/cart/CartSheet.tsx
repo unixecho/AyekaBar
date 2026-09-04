@@ -442,10 +442,16 @@ function LineRow({
           {/* A note can be added when the line is created but, until this
               existed, never corrected — the only way to fix a typo in
               "בלי קרח" was to delete the line and rebuild it. */}
+          {/* A11y (WCAG 2.5.3 Label in Name): aria-label was always
+              CART_UI.noteAria ("Note for this item"), but the VISIBLE text
+              switches to noteEdit ("Edit note") once line.note is set —
+              "Edit" never appeared in the accessible name, so the visible
+              label wasn't a substring of it. Found 2026-09-04. Now both
+              read the same string. */}
           <button
             type="button" className="cart-chip press"
             data-assigned={!!line.note}
-            aria-label={`${CART_UI.noteAria[lang]} — ${name}`}
+            aria-label={`${line.note ? CART_UI.noteEdit[lang] : CART_UI.note[lang]} — ${name}`}
             onClick={onEditNote}
           >
             <span aria-hidden>✎</span>{line.note ? CART_UI.noteEdit[lang] : CART_UI.note[lang]}
@@ -695,8 +701,14 @@ function ReadoutPages({ groups, lang, split }: {
             {CART_UI.prevPage[lang]}
           </button>
 
+          {/* A11y (WCAG 4.1.3): Prev/Next swapped which diner's page was
+              visible with no aria-live — the aria-label updated but
+              nothing prompted a screen reader to re-announce it. Not
+              covered by A9's fix (that one only wrapped stepper
+              quantities). Found 2026-09-04. */}
           <span
             className="cart-pager-count"
+            aria-live="polite" aria-atomic="true"
             aria-label={`${CART_UI.page[lang]} ${current + 1} ${CART_UI.pageOfMid[lang]} ${total}`}
           >
             {/* LTR: an arithmetic expression, not a sentence. */}
