@@ -29,6 +29,14 @@ export default function AccountControls({ firstName, lastName, phone }: Props) {
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null)
 
   async function save() {
+    // A11y (WCAG 2.4.3): the in-flight guard belongs HERE, not on the
+    // button's `disabled` — same fix FeedbackSheet.tsx's own send button
+    // already documents: disabling a button that currently has focus
+    // blurs it in every browser, so a keyboard user who pressed this would
+    // be dropped to <body> at the exact moment the result needs
+    // announcing. Found 2026-09-04 — the exact anti-pattern was already
+    // fixed once elsewhere in this app and never brought here.
+    if (saving) return
     setSaving(true)
     setSaveError(null)
     try {
@@ -58,11 +66,16 @@ export default function AccountControls({ firstName, lastName, phone }: Props) {
   }
 
   function requestDelete() {
+    // Guards re-entry now that the row button is aria-disabled rather than
+    // disabled (see save()'s own comment for why) — a second click while
+    // deleting must not re-open the confirm sheet.
+    if (deleting) return
     setConfirmRequest({
       title: 'למחוק את החשבון?',
       body: 'הנקודות, ההיסטוריה והפרופיל שלך יימחקו לצמיתות. אי אפשר לבטל את זה.',
       confirmLabel: 'מחק את החשבון שלי',
       onConfirm: async () => {
+        if (deleting) return
         setDeleting(true)
         try {
           const res = await fetch('/api/customer/profile', { method: 'DELETE' })
@@ -85,16 +98,24 @@ export default function AccountControls({ firstName, lastName, phone }: Props) {
       {!editing ? (
         <button type="button" className="press" onClick={() => setEditing(true)} style={rowBtn}>
           <span>ערוך פרטים</span>
-          <span style={chev}>‹</span>
+          <span aria-hidden style={chev}>‹</span>
         </button>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0 10px' }}>
-          <input value={first} onChange={(e) => setFirst(e.target.value)} placeholder="שם פרטי" maxLength={60} style={input} />
-          <input value={last} onChange={(e) => setLast(e.target.value)} placeholder="שם משפחה" maxLength={60} style={input} />
-          <input value={phoneVal} onChange={(e) => setPhoneVal(e.target.value)} placeholder="טלפון (רשות)" dir="ltr" maxLength={30} style={input} />
-          {saveError && <span style={{ color: '#ff6b6b', fontSize: '0.82rem' }}>{saveError}</span>}
+          {/* A11y (WCAG 1.3.5): no autocomplete at all — FeedbackSheet.tsx's
+              email field already does this correctly, these three just
+              hadn't been brought in line. Found 2026-09-04. */}
+          <input value={first} onChange={(e) => setFirst(e.target.value)} autoComplete="given-name" placeholder="שם פרטי" maxLength={60} style={input} />
+          <input value={last} onChange={(e) => setLast(e.target.value)} autoComplete="family-name" placeholder="שם משפחה" maxLength={60} style={input} />
+          <input value={phoneVal} onChange={(e) => setPhoneVal(e.target.value)} autoComplete="tel" placeholder="טלפון (רשות)" dir="ltr" maxLength={30} style={input} />
+          {/* A11y (WCAG 4.1.3): plain text, never announced. */}
+          {saveError && <span role="alert" style={{ color: '#ff6b6b', fontSize: '0.82rem' }}>{saveError}</span>}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="press" disabled={saving || !first.trim()} onClick={save} style={{ ...primaryBtn, opacity: saving || !first.trim() ? 0.5 : 1 }}>
+            <button
+              type="button" className="press" disabled={!first.trim()}
+              aria-disabled={saving} aria-busy={saving}
+              onClick={save} style={{ ...primaryBtn, opacity: saving || !first.trim() ? 0.5 : 1, cursor: saving ? 'progress' : primaryBtn.cursor }}
+            >
               {saving ? 'שומר...' : 'שמור'}
             </button>
             <button type="button" className="press" onClick={() => { setEditing(false); setSaveError(null); setFirst(firstName ?? ''); setLast(lastName ?? ''); setPhoneVal(phone ?? '') }} style={secondaryBtn}>
@@ -106,12 +127,16 @@ export default function AccountControls({ firstName, lastName, phone }: Props) {
 
       <button type="button" className="press" onClick={downloadData} style={rowBtn}>
         <span>הורד את הנתונים שלי</span>
-        <span style={chev}>‹</span>
+        <span aria-hidden style={chev}>‹</span>
       </button>
 
-      <button type="button" className="press" onClick={requestDelete} disabled={deleting} style={{ ...rowBtn, color: '#ff6b6b', opacity: deleting ? 0.6 : 1 }}>
+      <button
+        type="button" className="press" onClick={requestDelete}
+        aria-disabled={deleting} aria-busy={deleting}
+        style={{ ...rowBtn, color: '#ff6b6b', opacity: deleting ? 0.6 : 1, cursor: deleting ? 'progress' : rowBtn.cursor }}
+      >
         <span>{deleting ? 'מוחק...' : 'מחק את החשבון שלי'}</span>
-        <span style={chev}>‹</span>
+        <span aria-hidden style={chev}>‹</span>
       </button>
 
       <ConfirmSheet request={confirmRequest} onClose={() => setConfirmRequest(null)} />

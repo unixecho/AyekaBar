@@ -18,11 +18,15 @@ export default function PointsCard({
       {/* Points balance */}
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-sm text-zinc-500 mb-1">הנקודות שלך</p>
+          {/* A11y (WCAG 1.4.3): text-zinc-500/600 computed to ~2.3-4.1:1,
+              under 4.5:1 -- raw Tailwind colors on this card were never
+              covered by the app's own --text-* contrast pass. Found
+              2026-09-04. */}
+          <p className="text-sm mb-1" style={{ color: 'var(--text-faint)' }}>הנקודות שלך</p>
           <p className="text-5xl font-bold tabular-nums text-amber-400">{points}</p>
         </div>
         <div className="text-left">
-          <p className="text-xs text-zinc-600">סה"כ ביקורים</p>
+          <p className="text-xs" style={{ color: 'var(--text-faint)' }}>סה"כ ביקורים</p>
           <p className="text-2xl font-semibold text-zinc-300 text-right">{totalVisits}</p>
         </div>
       </div>
@@ -30,7 +34,7 @@ export default function PointsCard({
       {/* Progress to next reward */}
       {nextRewardName && nextRewardPoints && (
         <div className="space-y-2">
-          <div className="flex justify-between text-xs text-zinc-500">
+          <div className="flex justify-between text-xs" style={{ color: 'var(--text-faint)' }}>
             <span>הפרס הבא: {nextRewardName}</span>
             <span>{points}/{nextRewardPoints}</span>
           </div>
@@ -40,7 +44,7 @@ export default function PointsCard({
               style={{ width: `${Math.min(progress, 100)}%` }}
             />
           </div>
-          <p className="text-xs text-zinc-600">
+          <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
             עוד {nextRewardPoints - points} ביקורים לפרס הבא
           </p>
         </div>

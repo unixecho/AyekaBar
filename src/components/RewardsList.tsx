@@ -21,6 +21,11 @@ export default function RewardsList({ rewards, customerPoints }: RewardsListProp
   const [error, setError] = useState<string | null>(null)
 
   async function handleRedeem(reward: Reward) {
+    // A11y (WCAG 2.4.3): re-entry was already guarded here, so switching the
+    // button below from `disabled` to `aria-disabled` (same fix
+    // FeedbackSheet.tsx's send button already documents — disabling a
+    // focused button blurs it) needed no new guard, just the style change.
+    // Found 2026-09-04.
     if (!reward.unlocked || redeeming) return
     setRedeeming(reward.id)
     setError(null)
@@ -48,8 +53,13 @@ export default function RewardsList({ rewards, customerPoints }: RewardsListProp
   }
 
   if (rewards.length === 0) {
+    // A11y (WCAG 1.4.3): text-zinc-600 directly on the page background
+    // computed to ~2.3-2.6:1, well under 4.5:1 -- this component uses raw
+    // Tailwind colors instead of the app's own audited --text-* tokens, so
+    // it never got the 2026-09-01 contrast pass those tokens document.
+    // Found 2026-09-04.
     return (
-      <p className="text-sm text-zinc-600 text-center py-4">
+      <p className="text-sm text-center py-4" style={{ color: 'var(--text-faint)' }}>
         אין פרסים פעילים כרגע
       </p>
     )
@@ -57,8 +67,9 @@ export default function RewardsList({ rewards, customerPoints }: RewardsListProp
 
   return (
     <div className="space-y-3">
+      {/* A11y (WCAG 4.1.3): plain text, never announced. */}
       {error && (
-        <p className="text-sm text-red-400 text-center">{error}</p>
+        <p role="alert" className="text-sm text-red-400 text-center">{error}</p>
       )}
 
       {rewards.map((reward) => {
@@ -77,10 +88,14 @@ export default function RewardsList({ rewards, customerPoints }: RewardsListProp
             `}
           >
             <div className="space-y-0.5">
-              <p className={`font-semibold ${reward.unlocked ? 'text-zinc-100' : 'text-zinc-500'}`}>
+              {/* A11y (WCAG 1.4.3): text-zinc-500 computed to ~3.7-4.1:1,
+                  under 4.5:1 -- same root cause as the empty-state fix
+                  above (raw Tailwind colors, never covered by the app's
+                  own contrast pass). */}
+              <p className="font-semibold" style={{ color: reward.unlocked ? 'var(--text)' : 'var(--text-faint)' }}>
                 {reward.rewardNameHe ?? reward.rewardName}
               </p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
                 {reward.requiredPoints} נקודות
               </p>
             </div>
@@ -91,14 +106,15 @@ export default function RewardsList({ rewards, customerPoints }: RewardsListProp
               ) : reward.unlocked ? (
                 <button
                   onClick={() => handleRedeem(reward)}
-                  disabled={!!isRedeeming}
-                  className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-50 transition"
+                  aria-disabled={isRedeeming} aria-busy={isRedeeming}
+                  className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400 transition"
+                  style={{ opacity: isRedeeming ? 0.5 : 1, cursor: isRedeeming ? 'progress' : 'pointer' }}
                 >
                   {isRedeeming ? '...' : 'פדה'}
                 </button>
               ) : (
-                <div className="flex items-center gap-1 text-zinc-600">
-                  <span className="text-sm">🔒</span>
+                <div className="flex items-center gap-1" style={{ color: 'var(--text-faint)' }}>
+                  <span className="text-sm" aria-hidden>🔒</span>
                   <span className="text-xs">{reward.requiredPoints - customerPoints} נוספות</span>
                 </div>
               )}
