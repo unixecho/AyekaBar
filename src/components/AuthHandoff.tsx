@@ -1,10 +1,25 @@
 'use client'
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import ModalPortal from '@/components/ModalPortal'
 
 const EASE = 'cubic-bezier(0.22,1,0.36,1)'
 const SPRING = 'cubic-bezier(.34,1.56,.64,1)'
 const EXIT_MS = 240
+
+// A11y: was a role="dialog" that did none of the things a dialog role
+// promises — no initial focus, no Tab trap, no Escape handler, no focus
+// restore. Found 2026-09-04 auditing this exact primary sign-in surface
+// (used on /login and mid-flow on /checkin): opening it left focus on the
+// trigger button, so Tab moved through the rest of the now-visually-hidden
+// page (fully covered by this component's own opaque background) before
+// ever reaching "המשך עם Google"/"לא עכשיו". Ported SheetShell.tsx's
+// pattern (the app's own reference implementation) rather than reusing it
+// directly — this is a full-viewport takeover, not a bottom sheet, so the
+// DOM/CSS shell differs, but the focus-management logic is identical.
+const FOCUSABLE = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+  'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+].join(',')
 
 const COPY = {
   he: {
@@ -40,6 +55,8 @@ export function AuthHandoff({
   const t = COPY[lang]
   const [shown, setShown] = useState(open)
   const [closing, setClosing] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const returnFocusTo = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (open) { setShown(true); setClosing(false); return }
@@ -48,11 +65,66 @@ export function AuthHandoff({
     return () => clearTimeout(id)
   }, [open])
 
+  const focusables = useCallback((): HTMLElement[] => {
+    const el = containerRef.current
+    if (!el) return []
+    return Array.from(el.querySelectorAll<HTMLElement>(FOCUSABLE))
+      .filter((f) => f.offsetParent !== null || f === document.activeElement)
+  }, [])
+
+  // Scroll lock + initial focus + focus restore. Keyed on `open` (not
+  // `shown`) so closing hands focus back immediately — the same instant the
+  // customer pressed Escape/"לא עכשיו" — rather than waiting out the
+  // EXIT_MS fade.
+  useEffect(() => {
+    if (!open) return
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const timer = window.setTimeout(() => {
+      const list = focusables()
+      ;(list[0] ?? containerRef.current)?.focus()
+    }, 60)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.clearTimeout(timer)
+      const active = document.activeElement
+      if (!active || active === document.body || containerRef.current?.contains(active)) {
+        returnFocusTo.current?.focus?.()
+      }
+    }
+  }, [open, focusables])
+
+  // Escape + Tab wrap. Active for the whole `shown` window (covers the
+  // closing fade too) rather than just `open`, so a keyboard user pressing
+  // Tab during the exit animation still can't escape into the page behind
+  // an overlay that's still visually there.
+  useEffect(() => {
+    if (!shown) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return }
+      if (e.key !== 'Tab') return
+      const list = focusables()
+      if (!list.length) return
+      const first = list[0]
+      const last = list[list.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      const inside = !!containerRef.current?.contains(active)
+      if (e.shiftKey) {
+        if (active === first || !inside) { e.preventDefault(); last.focus() }
+      } else if (active === last || !inside) {
+        e.preventDefault(); first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [shown, onClose, focusables])
+
   if (!shown) return null
 
   return (
     <ModalPortal>
-      <div role="dialog" aria-modal="true" aria-label={t.aria} style={{
+      <div ref={containerRef} role="dialog" aria-modal="true" aria-label={t.aria} tabIndex={-1} style={{
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'radial-gradient(ellipse 80% 40% at 85% -5%, rgba(255,94,58,0.14), transparent 60%), var(--bg)',
         color: 'var(--text)', display: 'flex', flexDirection: 'column',
@@ -104,7 +176,9 @@ export function AuthHandoff({
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: `rise-in .5s ${EASE} .55s backwards` }}>
-          {error && <div style={{ fontSize: 13, fontWeight: 500, color: '#ff6b6b', textAlign: 'center' }}>{error}</div>}
+          {/* WCAG 4.1.3: was plain text, never announced to a screen-reader
+              user on this exact sign-in surface. */}
+          {error && <div role="alert" style={{ fontSize: 13, fontWeight: 500, color: '#ff6b6b', textAlign: 'center' }}>{error}</div>}
           <button onClick={onContinue} disabled={busy} className="press" style={{
             width: '100%', borderRadius: 12, padding: 15, fontSize: 15, fontWeight: 700, border: 0,
             fontFamily: 'inherit', background: '#fff', color: '#1a1c1e', cursor: 'pointer',
