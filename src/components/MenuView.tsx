@@ -304,6 +304,24 @@ function CategorySection({
   badges: Record<string, { he?: string; en?: string; ar?: string }>; delay: number; onToggle: () => void
   cartEnabled: boolean
 }) {
+  // A11y: a closed category was ONLY hidden visually (0-height grid track +
+  // overflow:hidden) — every item row's real <button> (add-to-cart, the
+  // stepper) stayed fully keyboard-focusable while invisible. Found
+  // 2026-09-04: a keyboard user tabbing sequentially, rather than via the
+  // category headings, passed through every closed category's entire
+  // button set before reaching the next visible control — the exact
+  // failure mode CartFab.tsx's own header already documents and guards
+  // against for its own hidden state (aria-hidden + tabIndex=-1 on top of
+  // opacity:0), just never applied here. `inert` does both jobs in one
+  // attribute — removes the whole closed subtree from the tab order AND
+  // the accessibility tree — set imperatively via a ref rather than as a
+  // JSX prop, since this codebase's TS/React version doesn't have `inert`
+  // in its JSX attribute typings.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.inert = !open
+  }, [open])
+
   return (
     <section className={`cat rise${open ? ' open' : ''}`} id={`cat-${cat.id}`} style={{ animationDelay: `${delay}ms` }}>
       {/* The button is WRAPPED IN A HEADING, which is the WAI-ARIA accordion
@@ -322,7 +340,7 @@ function CategorySection({
         <svg className="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
       </button>
       </h2>
-      <div className="cat-body">
+      <div className="cat-body" ref={bodyRef}>
         <div className="cat-body-inner">
           <div className="cat-pad">
             {/* Test the RESOLVED string, not the object: a note of `{}` or

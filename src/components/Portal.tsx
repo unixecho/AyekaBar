@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 import { PORTAL_LINKS_DEFAULT, type PortalLinkKey } from '@/lib/settings/keys'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
@@ -59,6 +59,14 @@ export default function Portal({
 }) {
   const [lang, setLang] = useLanguage()
   const [navOpen, setNavOpen] = useState(false)
+  // A11y: same bug as the menu's category accordion (MenuView.tsx) — closed
+  // only visually (0fr grid track + overflow:hidden), so the three
+  // Maps/Waze/Apple-Maps links stayed tabbable and invisible between the
+  // Navigate and Menu buttons. `inert` set imperatively, same reasoning.
+  const navRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (navRef.current) navRef.current.inert = !navOpen
+  }, [navOpen])
   const t = I18N[lang]
 
   let d = 0
@@ -97,7 +105,7 @@ export default function Portal({
               <span style={{ flex: 1, textAlign: 'start' }}>{t.navigate}</span>
               <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-faint)', transform: navOpen ? 'rotate(180deg)' : 'none', transition: 'transform .3s var(--ease)' }}><path d="M6 9l6 6 6-6" /></svg>
             </button>
-            <div style={{ display: 'grid', gridTemplateRows: navOpen ? '1fr' : '0fr', transition: 'grid-template-rows .4s var(--ease)' }}>
+            <div ref={navRef} style={{ display: 'grid', gridTemplateRows: navOpen ? '1fr' : '0fr', transition: 'grid-template-rows .4s var(--ease)' }}>
               <div style={{ overflow: 'hidden' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 2px' }}>
                   {(['gmaps', 'waze', 'amaps'] as const).map((p) => (
