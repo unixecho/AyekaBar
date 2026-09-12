@@ -15,6 +15,17 @@ export const metadata: Metadata = { title: 'הצהרת נגישות · אייכ�
 // if it actually has content — a real visitor never sees a "[להשלמה]"
 // placeholder. Whatever's still missing surfaces instead as a dashboard
 // signal pointing the owner at the editor (src/lib/owner/signals.ts).
+//
+// 2026-09-12: rewrote "מה בוצע" and added "מה נבדק ואיך" (both hardcoded,
+// not owner-editable — this is a factual record of the actual engineering
+// work, not a business-facing field). PLAN_ACCESSIBILITY.md §1.3 item A11
+// flagged the previous version as an over-claim: it asserted "תמיכה מלאה
+// בניווט מלא באמצעות מקלדת" (full keyboard-navigation support) as already
+// true while no one had ever walked a real keyboard journey end to end.
+// This version is deliberately narrower and more specific about WHAT was
+// verified and HOW, rather than repeating a blanket "full support" claim —
+// see that file's own re-audit history for exactly what was and wasn't
+// tested before this was last edited.
 
 export default async function AccessibilityPage() {
   const [s, updatedAt] = await Promise.all([
@@ -53,13 +64,28 @@ export default async function AccessibilityPage() {
 
         <Section title="מה בוצע באתר">
           <ul style={listStyle}>
-            <li>מבנה סמנטי וכותרות מדורגות בכל עמוד.</li>
-            <li>ניגודיות צבעים בין טקסט לרקע בהתאם לרמה AA (4.5:1 לטקסט רגיל).</li>
+            <li>מבנה סמנטי, כותרות מדורגות (ללא דילוג ברמות) ואזורי ניווט (landmarks) בעמודי הלקוח ובעמודי הניהול המרכזיים.</li>
+            <li>ניגודיות צבעים בהתאם לרמה AA — 4.5:1 לטקסט רגיל, 3:1 לגבולות רכיבי ממשק (מתגים, כפתורים, שדות טופס).</li>
             <li>אינדיקציה חזותית ברורה למיקוד מקלדת (focus) בכל רכיב אינטראקטיבי.</li>
-            <li>תמיכה בניווט מלא באמצעות מקלדת.</li>
+            <li>קישור דילוג לתוכן הראשי בתחילת כל עמוד, שמעביר בפועל את המיקוד (ולא רק את הגלילה) לתוכן העמוד.</li>
+            <li>לכידת מיקוד (focus trap) בחלונות הפעולה המרכזיים באתר — הזמנה, עגלת הקניות, הגשת משוב — כולל החזרת המיקוד למקומו בסגירת החלון.</li>
+            <li>הכרזות קוליות (aria-live) לשינויים שמתרחשים בלי רענון עמוד: הוספה לעגלה, שגיאות בטפסים, עדכוני סטטוס.</li>
             <li>כיבוד הגדרת "הפחתת תנועה" (prefers-reduced-motion) של הדפדפן/מערכת ההפעלה.</li>
             <li>תמיכה מלאה בכיווניות טקסט מימין-לשמאל (RTL) עבור עברית וערבית.</li>
           </ul>
+        </Section>
+
+        <Section title="מה נבדק ואיך">
+          <p>
+            מעבר לסקירת קוד שיטתית מול קריטריוני התקן, בוצעו בדיקות ניווט מלאות באמצעות מקלדת
+            בלבד (ללא עכבר) בתהליכים המרכזיים באתר — עמוד הבית, התפריט הדיגיטלי, הוספת פריטים
+            לעגלה ופיצולם בין סועדים. חלק מהבדיקות הללו חשפו וטיפלו בבעיות אמיתיות שסקירת קוד
+            בלבד לא הייתה מגלה.
+          </p>
+          <p style={{ margin: '8px 0 0' }}>
+            <b>מה עדיין לא נבדק:</b> האתר טרם נבדק על ידי משתמש/ת עצמאי/ת בטכנולוגיה מסייעת
+            אמיתית (כגון קורא מסך). זהו החסם המרכזי הנותר, ואנו רואים בו סעיף פתוח, לא נושא שנסגר.
+          </p>
         </Section>
 
         {s.browsersTested && (

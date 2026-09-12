@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import Script from 'next/script'
 import './globals.css'
 import PageTransitions from '@/components/PageTransitions'
 import A11yWidget from '@/components/a11y/A11yWidget'
@@ -40,21 +39,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             wrap it. */}
         <div id="a11y-scope">{children}</div>
         {/* The in-house accessibility widget (PLAN_ACCESSIBILITY.md §3).
-            Phase 1 ("build, internal-only") — mounted here, alongside
-            Negishot below, NOT replacing it yet. Portalled to <body> by its
-            own launcher/panel, so it renders outside #a11y-scope and is
-            never itself affected by the filter it controls. */}
+            Bottom-right corner (DEFAULT_A11Y_CONFIG in src/lib/a11y/types.ts)
+            — the spot Negishot occupied until it was removed below.
+            Portalled to <body> by its own launcher/panel, so it renders
+            outside #a11y-scope and is never itself affected by the filter
+            it controls. */}
         <A11yWidget />
-        {/* Negishot accessibility widget (negishot.co.il) — a free overlay
-            (contrast/text-size/keyboard tools for visitors), not a
-            substitute for the code-level accessibility work already done
-            (see globals.css's :focus-visible/--text-faint fixes) or for the
-            accessibility statement at /accessibility — see PLAYBOOK.md §5
-            for why both matter. Loaded at the end of body, same as any
-            such widget, so it never blocks first paint. Stays in place
-            until PLAN_ACCESSIBILITY.md §2's exit criteria are met — see
-            that file's §3.8 for the phased plan to eventually retire it. */}
-        <Script src="https://negishot.co.il/cdn/widget.php?code=NGS_160D202C7B8B" strategy="afterInteractive" />
+        {/* Negishot (negishot.co.il) REMOVED 2026-09-12 on the owner's
+            explicit instruction, replaced by the in-house widget above.
+            PLAN_ACCESSIBILITY.md §2's own exit criteria are not ALL fully
+            closed at the time of this removal — specifically, no one other
+            than the author has verified the site with a real screen reader
+            (A8) — flagged plainly to the owner alongside this change rather
+            than silently proceeding as if that gate had been met. Everything
+            else in §2's list (a full keyboard-only pass, the statement
+            stating the standard/what was implemented/what was tested/a
+            contact route and being dated) was done first. If Negishot is
+            ever reinstated, the tag was:
+            <Script src="https://negishot.co.il/cdn/widget.php?code=NGS_160D202C7B8B" strategy="afterInteractive" /> */}
       </body>
     </html>
   )

@@ -70,6 +70,12 @@ export interface A11yWidgetConfig {
   onHaptic?: (pattern: 'tick' | 'select') => void
 }
 
+// Bottom-right 2026-09-12, on the owner's explicit instruction, once Negishot
+// (which occupied that corner) was removed from layout.tsx — the widget
+// takes over the exact spot visitors already associate with "accessibility
+// tools live here." Was top-right (PLAN_ACCESSIBILITY.md §3.8 Phase 1's
+// original placement, chosen only because it was the one corner nothing else
+// on the site occupied while Negishot still held bottom-right).
 export const DEFAULT_A11Y_CONFIG: Required<Pick<A11yWidgetConfig, 'corner'>> = {
-  corner: 'top-right',
+  corner: 'bottom-right',
 }
