@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { loc, type MenuCategory } from '@/lib/menu/types'
 import { type HappyHour, type HappyHourRule } from '@/lib/menu/variants'
 import Switch from '@/components/Switch'
@@ -43,6 +43,13 @@ const T = {
 
 const PERCENTS = [10, 15, 20, 25, 30, 50]
 
+// A11y (WCAG 4.1.2): elements a screen reader/keyboard user could tab to
+// while still counting as "in the dialog" — same list SheetShell uses.
+const FOCUSABLE = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+  'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
 export default function HappyHourWizard({
   categories, initial, onClose, onSaved,
 }: {
@@ -64,6 +71,16 @@ export default function HappyHourWizard({
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  const panelRef = useRef<HTMLDivElement>(null)
+  const returnFocusTo = useRef<HTMLElement | null>(null)
+
+  const focusables = useCallback((): HTMLElement[] => {
+    const panel = panelRef.current
+    if (!panel) return []
+    return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE))
+      .filter((el) => el.offsetParent !== null || el === document.activeElement)
+  }, [])
+
   // A stored category rule (from an earlier version of this screen) expands
   // into its items so nothing silently disappears when the owner re-saves.
   useEffect(() => {
@@ -80,13 +97,60 @@ export default function HappyHourWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // A11y (WCAG 4.1.2 / 2.4.3): unlike TempMenuSheet/VariantWizard (which at
+  // least carried `role="dialog" aria-modal="true"` even before THEY got a
+  // real trap), this full-screen takeover had no dialog semantics at all —
+  // a screen-reader user got no announcement that anything had opened, and
+  // could tab straight through it into whatever owner-dashboard/editor
+  // content sits behind it in the DOM (this is a `ModalPortal`, which only
+  // relocates to `<body>`, never hides or inerts the rest of the page).
+  // Scroll lock + initial focus + focus restore, mirroring SheetShell /
+  // VariantWizard. Mount-only (empty deps) so it captures the opener once.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !saving) onClose() }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+
+    const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
-  }, [onClose, saving])
+
+    // One frame's delay: the panel is mid-animation on first paint (see
+    // SheetShell's own comment for why).
+    const t = window.setTimeout(() => {
+      const list = focusables()
+      ;(list[0] ?? panelRef.current)?.focus()
+    }, 60)
+
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.clearTimeout(t)
+      const active = document.activeElement
+      if (!active || active === document.body || panelRef.current?.contains(active)) {
+        returnFocusTo.current?.focus?.()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Escape-to-close (unchanged) plus the actual Tab/Shift+Tab trap this
+  // dialog never had — same mechanics as VariantWizard's own.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { if (!saving) onClose(); return }
+      if (e.key !== 'Tab') return
+      const list = focusables()
+      if (!list.length) return
+      const first = list[0]
+      const last = list[list.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      const inside = !!panelRef.current?.contains(active)
+      if (e.shiftKey) {
+        if (active === first || !inside) { e.preventDefault(); last.focus() }
+      } else if (active === last || !inside) {
+        e.preventDefault(); first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose, saving, focusables])
 
   const overnight = useMemo(() => end <= start, [start, end])
 
@@ -145,7 +209,7 @@ export default function HappyHourWizard({
 
   return (
     <ModalPortal>
-      <div className="hh-screen">
+      <div className="hh-screen" ref={panelRef} role="dialog" aria-modal="true" aria-label={T.title} tabIndex={-1}>
         <div className="app-bg" aria-hidden />
         <div className="app-scrim" aria-hidden />
 

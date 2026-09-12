@@ -172,6 +172,12 @@ export default function MenuVersionBar() {
   // that tells the server to null out active_until. Without force, "בטול
   // תזמון" on the live version would silently do nothing.
   async function applyVariant(id: string, temp?: TempSetting, force = false) {
+    // A11y (WCAG 2.4.3): the guard used to live only in the "הצגה ללקוחות"
+    // button's `disabled={busy}` — disabling a button that currently holds
+    // focus blurs it in every browser, right as the result needs
+    // announcing. The guard belongs in the handler; the button below now
+    // uses aria-disabled instead, which doesn't block activation on its own.
+    if (busy) return
     if (id === activeId && !temp && !force) return
     const prev = activeId
     setActiveId(id) // optimistic — the switch should feel instant
@@ -297,7 +303,14 @@ export default function MenuVersionBar() {
                 {loc(v.name, 'he') || '—'}
                 {v.is_default && <span className="main-badge">{T.main}</span>}
                 {isLive && (
-                  <span aria-hidden title={T.live} style={{ color: 'var(--neon-soft)', fontSize: '0.6rem', lineHeight: 1 }}>●</span>
+                  <>
+                    {/* A11y (WCAG 1.1.1): the live dot was aria-hidden with
+                        only a `title` (never reachable by screen readers) —
+                        "which version is live" was color/glyph-only info.
+                        Text alternative alongside the now-decorative dot. */}
+                    <span aria-hidden title={T.live} style={{ color: 'var(--neon-soft)', fontSize: '0.6rem', lineHeight: 1 }}>●</span>
+                    <span style={srOnly}>{T.live}</span>
+                  </>
                 )}
                 {v.active_until && Date.parse(v.active_until) > nowMs && <span aria-hidden>⏳</span>}
               </button>
@@ -414,8 +427,9 @@ export default function MenuVersionBar() {
               {T.notLiveHint(loc(live.name, 'he') || '—')}
             </p>
           </div>
-          <button type="button" onClick={() => applyVariant(selected!.id)} disabled={busy}
-            className="press" style={applyBtn}>
+          <button type="button" onClick={() => applyVariant(selected!.id)}
+            aria-disabled={busy} aria-busy={busy}
+            className="press" style={{ ...applyBtn, opacity: busy ? 0.6 : 1, cursor: busy ? 'progress' : applyBtn.cursor }}>
             {T.showToCustomers}
           </button>
         </div>
@@ -491,4 +505,11 @@ const applyBtn: CSSProperties = {
   background: 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
   boxShadow: 'var(--glow)', color: 'var(--bg)', fontSize: '0.82rem',
   fontWeight: 700, fontFamily: 'inherit', flex: '0 0 auto', whiteSpace: 'nowrap',
+}
+/** Visually hidden but still reachable by assistive tech — same values as
+ *  AddToCartControl.tsx's own (1px, not 0, so Safari never treats the box
+ *  as having no size and skips it). */
+const srOnly: CSSProperties = {
+  position: 'absolute', width: 1, height: 1, overflow: 'hidden',
+  clipPath: 'inset(50%)', whiteSpace: 'nowrap', border: 0, padding: 0, margin: -1,
 }

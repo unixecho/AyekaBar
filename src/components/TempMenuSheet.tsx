@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { barTimeMinutes, nextBarTimeInstant } from '@/lib/menu/variants'
 import TimeWheel, { fmtHhmm } from '@/components/TimeWheel'
 import Switch from '@/components/Switch'
@@ -52,6 +52,19 @@ const T = {
 const QUICK_HOURS = [2, 4, 6, 8]
 const MINUTE_STEP = 5
 
+// A11y (WCAG 2.4.3): same gap VariantWizard had — role="dialog" with no trap,
+// so Tab walked a keyboard user straight into whatever is behind the scrim
+// (the version list, or VariantWizard's own sheet when nested inside it), and
+// closing never gave focus back to whatever opened it. Mechanics copied from
+// SheetShell (src/components/cart/SheetShell.tsx): capture the opener,
+// initial-focus the panel after it lands, trap Tab/Shift+Tab, restore on
+// unmount. This component can be rendered standalone or nested, so it manages
+// its own trap rather than assuming anything about what's outside it.
+const FOCUSABLE = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+  'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
 const pad = (n: number) => String(n).padStart(2, '0')
 
 export default function TempMenuSheet({
@@ -83,18 +96,65 @@ export default function TempMenuSheet({
   // Keeps "בעוד 3 שעות" honest while the sheet sits open.
   const [tick, setTick] = useState(0)
 
+  const panelRef = useRef<HTMLDivElement>(null)
+  const returnFocusTo = useRef<HTMLElement | null>(null)
+
+  const focusables = useCallback((): HTMLElement[] => {
+    const panel = panelRef.current
+    if (!panel) return []
+    return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE))
+      .filter((el) => el.offsetParent !== null || el === document.activeElement)
+  }, [])
+
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 30_000)
     return () => clearInterval(id)
   }, [])
 
+  // Scroll lock + initial focus + focus restore. Mount-only (like SheetShell)
+  // so a `busy` toggle mid-submit doesn't re-capture the opener or re-steal
+  // focus from wherever the user has since moved it.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onCancel() }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
-  }, [onCancel, busy])
+
+    // One frame's delay: the panel is mid-animation on first paint.
+    const t = window.setTimeout(() => {
+      const list = focusables()
+      ;(list[0] ?? panelRef.current)?.focus()
+    }, 60)
+
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.clearTimeout(t)
+      const active = document.activeElement
+      if (!active || active === document.body || panelRef.current?.contains(active)) {
+        returnFocusTo.current?.focus?.()
+      }
+    }
+  }, [focusables])
+
+  // Escape + Tab wrapping.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { if (!busy) onCancel(); return }
+      if (e.key !== 'Tab') return
+      const list = focusables()
+      if (!list.length) return
+      const first = list[0]
+      const last = list[list.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      const inside = !!panelRef.current?.contains(active)
+      if (e.shiftKey) {
+        if (active === first || !inside) { e.preventDefault(); last.focus() }
+      } else if (active === last || !inside) {
+        e.preventDefault(); first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onCancel, busy, focusables])
 
   const [hh, mm] = time.split(':').map(Number)
 
@@ -131,7 +191,7 @@ export default function TempMenuSheet({
     <ModalPortal>
       <div role="dialog" aria-modal="true" aria-label={T.title}
         onClick={() => !busy && onCancel()} className="sheet-scrim">
-        <div onClick={(e) => e.stopPropagation()} className="sheet-panel">
+        <div ref={panelRef} tabIndex={-1} onClick={(e) => e.stopPropagation()} className="sheet-panel">
           <div aria-hidden className="sheet-grabber" />
 
           <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text)' }}>{T.title}</h3>

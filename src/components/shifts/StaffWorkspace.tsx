@@ -142,7 +142,9 @@ export default function StaffWorkspace() {
           {view === 'mine' && myAssignments.length > 0 && (
             <section className="sh-panel" style={{ marginTop: 14 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-                <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{t('weekHours')}</h3>
+                {/* A11y (WCAG 1.3.1): OwnerHeader supplies the page's only h1;
+                    this panel title is an h2, not h3, so the outline has no skip. */}
+                <h2 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{t('weekHours')}</h2>
                 <span style={{
                   fontSize: '1.1rem', fontWeight: 800, color: 'var(--neon-soft)',
                   direction: 'ltr', fontVariantNumeric: 'tabular-nums',
@@ -195,7 +197,9 @@ export default function StaffWorkspace() {
           {/* Offers from colleagues, if swaps are on. */}
           {db.settings.features.ENABLE_SHIFT_SWAPS && openOffers.length > 0 && (
             <section className="sh-panel" style={{ marginTop: 14 }}>
-              <h3 style={{ margin: '0 0 10px', fontSize: '0.9rem', fontWeight: 700 }}>{t('swaps')}</h3>
+              {/* A11y (WCAG 1.3.1): same fix as weekHours above — h2, not h3,
+                  keeps the outline h1 -> h2 with no skip. */}
+              <h2 style={{ margin: '0 0 10px', fontSize: '0.9rem', fontWeight: 700 }}>{t('swaps')}</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {openOffers.map((swap) => {
                   const assignment = db.assignments.find((a) => a.id === swap.assignmentId)

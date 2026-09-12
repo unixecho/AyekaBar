@@ -49,6 +49,12 @@ export default function HappyHourCard({ categories }: { categories: MenuCategory
 
   async function disable() {
     if (!hh) return
+    // A11y (WCAG 2.4.3): the in-flight guard belongs HERE, not on the
+    // button's `disabled` — disabling a button that currently has focus
+    // blurs it in every browser (see AccountControls.tsx's save() for the
+    // same fix). aria-disabled/aria-busy below need this guard to do the
+    // job `disabled` used to.
+    if (busy) return
     setBusy(true); setErr(null)
     try {
       const res = await fetch('/api/owner/happy-hour', {
@@ -110,11 +116,12 @@ export default function HappyHourCard({ categories }: { categories: MenuCategory
           {configured ? T.edit : T.setup}
         </button>
         {hh?.enabled && (
-          <button type="button" onClick={disable} disabled={busy} className="press"
+          <button type="button" onClick={disable} aria-disabled={busy} aria-busy={busy} className="press"
             style={{
               padding: '10px 14px', borderRadius: 11, border: '1px solid var(--line-strong)',
               background: 'transparent', color: 'var(--text-dim)', fontSize: '0.86rem',
               fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+              opacity: busy ? 0.6 : 1,
             }}>
             {T.disable}
           </button>

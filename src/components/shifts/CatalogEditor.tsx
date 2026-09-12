@@ -323,10 +323,15 @@ function RequirementsEditor({ requirements, roles, onChange }: {
   )
 }
 
+// A11y (WCAG 4.1.2): active/selected state here was expressed purely via
+// border/background/color, with nothing in the accessibility tree — used
+// for both single-select pickers (default station, linked badge) and the
+// multi-select role-restriction toggles. aria-pressed={active}, same as
+// ColorSwatches above.
 function Pill({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
     <button
-      type="button" className="press" onClick={onClick}
+      type="button" className="press" onClick={onClick} aria-pressed={active}
       style={{
         padding: '5px 11px', borderRadius: 999, font: 'inherit', fontSize: '0.78rem', fontWeight: 600,
         cursor: 'pointer', border: `1px solid ${active ? 'rgba(56,225,255,0.4)' : 'var(--line)'}`,

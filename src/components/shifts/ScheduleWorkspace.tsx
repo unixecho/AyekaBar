@@ -131,7 +131,11 @@ export default function ScheduleWorkspace() {
   }
 
   if (!db.settings.onboardedAt && !setupOpen) {
-    return <OnboardingFlow onDone={() => setTab('week')} />
+    // A11y (WCAG 2.4.1 / 1.3.1): this branch returns INSTEAD OF the
+    // <main id="main"> + OwnerHeader below, so it's the only content on
+    // the whole page — standalone tells OnboardingFlow to supply its own
+    // <main>/<h1> rather than assuming one exists upstream.
+    return <OnboardingFlow onDone={() => setTab('week')} standalone />
   }
 
   return (
@@ -262,7 +266,11 @@ export default function ScheduleWorkspace() {
             {/* Hours per person. The number a manager checks last and cares
                 about most — it is what someone's pay looks like. */}
             <section className="sh-panel" style={{ marginTop: 14 }}>
-              <h3 style={{ margin: '0 0 10px', fontSize: '0.9rem', fontWeight: 700 }}>{t('weekHours')}</h3>
+              {/* A11y (WCAG 1.3.1): this page's only h1 is OwnerHeader's; the
+                  week/warnings/requests/settings/log tabs otherwise had no
+                  section heading at all, so this was the page's sole h3,
+                  skipping straight past h2. Promoted — style unchanged. */}
+              <h2 style={{ margin: '0 0 10px', fontSize: '0.9rem', fontWeight: 700 }}>{t('weekHours')}</h2>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {db.staff.filter((s) => s.active).map((person) => {
                   const minutes = hoursByStaff.get(person.id) ?? 0

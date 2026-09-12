@@ -24,7 +24,20 @@ import type { ShiftSettings } from '@/lib/shifts/types'
 const STEPS = ['days', 'hours', 'presets', 'team', 'safety', 'done'] as const
 type Step = (typeof STEPS)[number]
 
-export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
+export default function OnboardingFlow({ onDone, standalone = false }: {
+  onDone: () => void
+  /** True only at the ONE call site (ScheduleWorkspace's first-run branch)
+   *  that returns this component INSTEAD OF its usual `<main id="main">` —
+   *  on that path there is no landmark and no <h1> anywhere on the page at
+   *  all (WCAG 2.4.1/1.3.1), since the render that would normally supply
+   *  both never runs. The other call site (re-opening onboarding from
+   *  Settings) renders this on TOP OF that already-mounted `<main>` — still
+   *  present in the DOM, just visually behind this full-screen overlay —
+   *  so adding a second `id="main"` there would be a genuine duplicate-ID
+   *  bug and would break the skip link. Defaults to false (the safer,
+   *  more common case) since only one call site can ever be the exception. */
+  standalone?: boolean
+}) {
   const { db, t, tri, lang, dispatch } = useShifts()
   const [step, setStep] = useState<Step>('days')
   const [draft, setDraft] = useState<ShiftSettings>(() => structuredCloneish(db.settings))
@@ -46,12 +59,19 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
     onDone()
   }
 
+  // A11y (WCAG 2.4.1 / 1.3.1): see the `standalone` prop's own comment.
+  const Root = standalone ? 'main' : 'div'
+  const StepHeading = standalone ? 'h1' : 'h2'
+
   return (
     <ModalPortal>
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 160, background: 'var(--bg)',
-        display: 'flex', flexDirection: 'column', animation: 'fade-in .24s var(--ease)',
-      }}>
+      <Root
+        {...(standalone ? { id: 'main', tabIndex: -1 } : {})}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 160, background: 'var(--bg)',
+          display: 'flex', flexDirection: 'column', animation: 'fade-in .24s var(--ease)',
+        }}
+      >
         {/* ---- progress ---- */}
         <div style={{ padding: '18px 20px 10px', flex: '0 0 auto' }}>
           <div style={{ display: 'flex', gap: 5, marginBottom: 14 }} aria-hidden>
@@ -65,14 +85,14 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
               }} />
             ))}
           </div>
-          <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: 'var(--text)' }}>
+          <StepHeading style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: 'var(--text)' }}>
             {step === 'days' ? t('stepDays')
               : step === 'hours' ? t('stepHours')
               : step === 'presets' ? t('stepPresets')
               : step === 'team' ? t('stepRoles')
               : step === 'safety' ? t('stepSafety')
               : t('setupDone')}
-          </h2>
+          </StepHeading>
           <p style={{ margin: '6px 0 0', fontSize: '0.84rem', color: 'var(--text-dim)', lineHeight: 1.55 }}>
             {step === 'days' ? t('stepDaysHint')
               : step === 'hours' ? t('stepHoursHint')
@@ -246,7 +266,7 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
             {busy ? t('saving') : step === 'done' ? t('startBuilding') : t('next')}
           </button>
         </div>
-      </div>
+      </Root>
     </ModalPortal>
   )
 }

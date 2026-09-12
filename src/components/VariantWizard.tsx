@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { loc, type MenuCategory } from '@/lib/menu/types'
 import TempMenuSheet, { type TempSetting } from '@/components/TempMenuSheet'
 import Switch from '@/components/Switch'
@@ -67,6 +67,12 @@ export interface VariantSchedule {
 
 const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
 
+// Same focusable-elements query SheetShell uses for its trap.
+const FOCUSABLE = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+  'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
 export default function VariantWizard({
   categories, initialName, initialExcluded, initialSchedule, variantId,
   isDefault = false, timersReady = true, onClose, onSaved,
@@ -113,13 +119,74 @@ export default function VariantWizard({
   const [tempOpen, setTempOpen] = useState(false)
   const offerTemp = !isDefault && !variantId && timersReady
 
+  const panelRef = useRef<HTMLDivElement>(null)
+  const returnFocusTo = useRef<HTMLElement | null>(null)
+
+  const focusables = useCallback((): HTMLElement[] => {
+    const panel = panelRef.current
+    if (!panel) return []
+    return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE))
+      .filter((el) => el.offsetParent !== null || el === document.activeElement)
+  }, [])
+
+  // Scroll lock + initial focus + focus restore, mirroring SheetShell. Keyed
+  // on mount only (not on `tempOpen`) so opening/closing the nested timer
+  // sheet never re-captures "what opened this" or yanks focus back to the
+  // wizard's first control while that sheet is still up.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !saving) onClose() }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
+    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+
+    const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
-  }, [onClose, saving])
+
+    // One frame's delay: the panel is mid-animation on first paint (see
+    // SheetShell's own comment for why).
+    const t = window.setTimeout(() => {
+      const list = focusables()
+      ;(list[0] ?? panelRef.current)?.focus()
+    }, 60)
+
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.clearTimeout(t)
+      const active = document.activeElement
+      if (!active || active === document.body || panelRef.current?.contains(active)) {
+        returnFocusTo.current?.focus?.()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // A11y (WCAG 2.4.3): this dialog only ever closed on Escape — no trap, so
+  // Tab walked straight out into the editor underneath (still visible,
+  // still focusable, behind the scrim), and nothing restored focus to
+  // whatever opened the wizard. Same mechanics as SheetShell's capturing
+  // keydown listener. Handed over entirely while TempMenuSheet is open
+  // (`tempOpen`) — that sheet runs its own Escape handler and isn't part of
+  // this panel, so trapping here would fight it, exactly like SheetShell's
+  // own `suspended` case for a nested overlay.
+  useEffect(() => {
+    if (tempOpen) return
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { if (!saving) onClose(); return }
+      if (e.key !== 'Tab') return
+      const list = focusables()
+      if (!list.length) return
+      const first = list[0]
+      const last = list[list.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      const inside = !!panelRef.current?.contains(active)
+      if (e.shiftKey) {
+        if (active === first || !inside) { e.preventDefault(); last.focus() }
+      } else if (active === last || !inside) {
+        e.preventDefault(); first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose, saving, tempOpen, focusables])
 
   const allUids = useMemo(
     () => categories.flatMap((c) => (c.items ?? []).map((i) => i.uid).filter((u): u is string => !!u)),
@@ -195,7 +262,7 @@ export default function VariantWizard({
         onClick={() => !saving && onClose()}
         className="sheet-scrim"
       >
-        <div onClick={(e) => e.stopPropagation()} className="sheet-panel">
+        <div ref={panelRef} tabIndex={-1} onClick={(e) => e.stopPropagation()} className="sheet-panel">
           <div aria-hidden className="sheet-grabber" />
 
           {step === 1 ? (

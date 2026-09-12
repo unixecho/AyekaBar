@@ -89,6 +89,7 @@ export default function CartFab({ lang }: { lang: Lang }) {
       >
         <button
           type="button"
+          id="cart-fab-button"
           className="cart-fab press"
           onClick={() => { haptic('select'); openSheet() }}
           tabIndex={summoned ? 0 : -1}

@@ -121,6 +121,12 @@ export default function MenuEditor() {
   // when the draft is dirty — no reason to offer "publish now?" to someone
   // who's already mid-publish.
   async function save(promptIfStockRestored = true): Promise<boolean> {
+    // A11y (WCAG 2.4.3): the in-flight/nothing-to-save guard belongs HERE,
+    // not on the Save button's `disabled` — disabling the button that
+    // currently holds keyboard focus blurs it in every browser (see
+    // AccountControls.tsx's save() for the same fix). aria-disabled below
+    // doesn't block activation on its own, so this guard now does that job.
+    if (saving || !dirty) return false
     if (!menuId) return false
     setSaving(true); setMsg(null)
     const { error } = await supabase.from('menus').update({ draft: { categories: cats }, updated_at: new Date().toISOString() }).eq('id', menuId)
@@ -144,6 +150,9 @@ export default function MenuEditor() {
   }
 
   async function publish() {
+    // A11y (WCAG 2.4.3): same fix as save() above — the guard moves into
+    // the handler since the Publish button now uses aria-disabled.
+    if (publishing) return
     if (!menuId) return
     setPublishing(true); setMsg(null)
     if (dirty) { const ok = await save(false); if (!ok) { setPublishing(false); return } }
@@ -300,11 +309,17 @@ export default function MenuEditor() {
 
       {/* Sticky action bar */}
       <div style={bar}>
-        <span style={{ fontSize: '0.8rem', color: dirty ? 'var(--neon-soft)' : 'var(--text-faint)', flex: 1 }}>
+        {/* A11y (WCAG 4.1.3): this line carries both the routine "unsaved
+            changes" state and save/publish success/failure text, with no
+            aria-live — a screen-reader user got no announcement either way.
+            aria-live="polite" fits the mix better than role="alert", which
+            is meant for pure errors, not the "יש שינויים" state this also
+            shows. */}
+        <span aria-live="polite" aria-atomic="true" style={{ fontSize: '0.8rem', color: dirty ? 'var(--neon-soft)' : 'var(--text-faint)', flex: 1 }}>
           {msg ?? (dirty ? T.unsaved : savedTick ? T.saved : '')}
         </span>
-        <button onClick={() => save()} disabled={saving || !dirty} className="press" style={{ ...ghost, opacity: (saving || !dirty) ? 0.5 : 1 }}>{saving ? T.saving : T.save}</button>
-        <button onClick={publish} disabled={publishing} className="press" style={{ ...primary, opacity: publishing ? 0.6 : 1 }}>{publishing ? T.publishing : T.publish}</button>
+        <button onClick={() => save()} aria-disabled={saving || !dirty} aria-busy={saving} className="press" style={{ ...ghost, opacity: (saving || !dirty) ? 0.5 : 1 }}>{saving ? T.saving : T.save}</button>
+        <button onClick={publish} aria-disabled={publishing} aria-busy={publishing} className="press" style={{ ...primary, opacity: publishing ? 0.6 : 1 }}>{publishing ? T.publishing : T.publish}</button>
       </div>
 
       <ConfirmSheet request={confirmReq} onClose={() => setConfirmReq(null)} />

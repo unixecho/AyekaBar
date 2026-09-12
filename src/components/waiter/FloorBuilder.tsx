@@ -281,6 +281,14 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   /* ── Structural writes (immediate) ────────────────────────────────── */
 
   async function onAddTable() {
+    // A11y (WCAG 2.4.3): the in-flight guard belongs HERE, not on the
+    // button's `disabled` — a native `disabled` applied to the button that
+    // was just clicked (and so still holds focus) blurs it in every
+    // browser. The four buttons below that share this `busy` flag
+    // (add table, save, delete, restore) all move to aria-disabled +
+    // aria-busy for the same reason; the guard that used to live in
+    // `disabled` now has to live here instead.
+    if (busy) return
     if (!floorId || !plan) return
     setBusy(true)
 
@@ -334,6 +342,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   }
 
   async function onDeleteSelected() {
+    if (busy) return
     if (!sel || !selected) return
     setBusy(true)
     const err = sel.kind === 'table' ? await deactivateTable(sel.id) : await removeProp(sel.id)
@@ -359,6 +368,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   /** The other half of onDeleteSelected: bring a removed table back,
    *  unplaced, on whichever floor is currently open. */
   async function onRestoreTable(id: string) {
+    if (busy) return
     if (!floorId) return
     setBusy(true)
     const { row, error, code } = await reactivateTable(id, floorId)
@@ -413,6 +423,7 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
   }
 
   async function onSave() {
+    if (busy || !dirty) return
     if (!floorId) return
     setBusy(true)
     const err = await saveFloorLayout(floorId, scoped.tables, scoped.props, canvas)
@@ -691,7 +702,8 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
               <div className="fb-chips">
                 {plan.removedTables.map((t) => (
                   <button key={t.id} className="fb-chip fb-chip--restore"
-                    onClick={() => void onRestoreTable(t.id)} disabled={busy}>
+                    onClick={() => void onRestoreTable(t.id)}
+                    aria-disabled={busy} aria-busy={busy} style={{ opacity: busy ? 0.6 : 1 }}>
                     ↺ {tableName(t)}
                   </button>
                 ))}
@@ -706,7 +718,8 @@ export default function FloorBuilder({ canManage }: { canManage: boolean }) {
           <span className={dirty ? 'fb-dirty' : 'fb-clean'}>
             {dirty ? 'יש שינויים שלא נשמרו' : 'הכל שמור'}
           </span>
-          <button className="fb-btn fb-btn--primary" disabled={!dirty || busy} onClick={() => void onSave()}>
+          <button className="fb-btn fb-btn--primary" aria-disabled={!dirty || busy} aria-busy={busy}
+            style={{ opacity: !dirty || busy ? 0.6 : 1 }} onClick={() => void onSave()}>
             {busy ? 'שומר…' : 'שמירת המפה'}
           </button>
         </div>
@@ -837,7 +850,8 @@ function Inspector({
         </button>
       </div>
 
-      <button className="fb-btn fb-btn--danger" disabled={!canManage || busy} onClick={onDelete}>
+      <button className="fb-btn fb-btn--danger" disabled={!canManage}
+        aria-disabled={busy} aria-busy={busy} style={{ opacity: busy ? 0.6 : 1 }} onClick={onDelete}>
         {isTable ? 'מחיקת השולחן' : 'מחיקה'}
       </button>
       {isTable && (

@@ -114,6 +114,12 @@ function CustomerDetail({ id, onBack, onStats }: { id: string; onBack: () => voi
   useEffect(() => { load() }, [load])
 
   async function adjust(sign: 1 | -1) {
+    // A11y (WCAG 2.4.3): the in-flight guard belongs HERE, not on the
+    // buttons' `disabled` — disabling a button that currently has focus
+    // blurs it in every browser, dropping a keyboard user to <body> right
+    // as the result needs announcing. aria-disabled + aria-busy below,
+    // same fix as AccountControls.tsx's save button.
+    if (busy) return
     const n = Math.trunc(Number(delta))
     if (!Number.isFinite(n) || n <= 0) { setMsg('הזן מספר חיובי'); return }
     setBusy(true); setMsg(null)
@@ -156,8 +162,8 @@ function CustomerDetail({ id, onBack, onStats }: { id: string; onBack: () => voi
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="סיבה (רשות)" aria-label="סיבה (רשות)" style={{ ...input, flex: 1 }} />
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button onClick={() => adjust(1)} disabled={busy} className="press" style={{ ...primary, flex: 1 }}>＋ הוספה</button>
-          <button onClick={() => adjust(-1)} disabled={busy} className="press" style={{ ...danger, flex: 1 }}>－ הפחתה</button>
+          <button onClick={() => adjust(1)} aria-disabled={busy} aria-busy={busy} className="press" style={{ ...primary, flex: 1, opacity: busy ? 0.6 : 1, cursor: busy ? 'progress' : primary.cursor }}>＋ הוספה</button>
+          <button onClick={() => adjust(-1)} aria-disabled={busy} aria-busy={busy} className="press" style={{ ...danger, flex: 1, opacity: busy ? 0.6 : 1, cursor: busy ? 'progress' : danger.cursor }}>－ הפחתה</button>
         </div>
         {msg && <p style={{ fontSize: '0.82rem', color: msg.includes('✓') ? 'var(--neon-soft)' : '#ff6b6b', margin: '8px 0 0' }}>{msg}</p>}
       </div>

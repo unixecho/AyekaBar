@@ -221,7 +221,10 @@ export default function AuditLog() {
           ))}
         </div>
       ) : err ? (
-        <p style={{ color: '#ff6b6b', fontSize: '0.85rem' }}>{err}</p>
+        // A11y (WCAG 4.1.3): this replaces the loading skeleton asynchronously
+        // with no page reload, so a screen reader user hears nothing unless
+        // the failure is announced. role="alert" for an error.
+        <p role="alert" style={{ color: '#ff6b6b', fontSize: '0.85rem' }}>{err}</p>
       ) : entries.length === 0 ? (
         <p style={{ color: 'var(--text-faint)', fontSize: '0.85rem', textAlign: 'center', padding: '20px 0' }}>
           {pending ? T.pending : T.empty}

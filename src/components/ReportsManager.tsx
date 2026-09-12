@@ -85,6 +85,11 @@ function NotifyScopeToggle() {
   }, [])
 
   async function set(next: boolean) {
+    // A11y (WCAG 2.4.3): the in-flight guard belongs HERE, not on the
+    // buttons' `disabled` — disabling a button that currently holds focus
+    // blurs it in every browser. aria-disabled below needs this guard to
+    // do the re-entry job `disabled` used to.
+    if (busy) return
     setBusy(true); setError(null)
     setAllWaiters(next) // optimistic
     try {
@@ -110,14 +115,14 @@ function NotifyScopeToggle() {
         <span style={{ fontWeight: 700, color: 'var(--text)' }}>התראות מוכן להגשה</span>
         <div role="group" style={{ display: 'flex', gap: 6 }}>
           <button
-            style={allWaiters ? primary : ghost} disabled={busy}
+            style={allWaiters ? primary : ghost} aria-disabled={busy} aria-busy={busy}
             aria-pressed={allWaiters === true}
             onClick={() => !allWaiters && void set(true)}
           >
             כל המלצרים
           </button>
           <button
-            style={!allWaiters ? primary : ghost} disabled={busy}
+            style={!allWaiters ? primary : ghost} aria-disabled={busy} aria-busy={busy}
             aria-pressed={allWaiters === false}
             onClick={() => allWaiters && void set(false)}
           >
@@ -130,7 +135,10 @@ function NotifyScopeToggle() {
           ? 'כל מלצר/ית רואה התראת "מוכן להגשה" עבור כל שולחן בקומה.'
           : 'רק המלצר/ית המשויכ/ת לשולחן (או שסימנ/ה את עצמו/ה כאחראי/ת עליו) מקבל/ת את ההתראה.'}
       </p>
-      {error && <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: '#ff6b6b' }}>{error}</p>}
+      {/* A11y (WCAG 4.1.3): a genuine failure the owner needs to know about
+          right away — role="alert" interrupts, unlike the polite live
+          regions used for routine status text elsewhere in this file. */}
+      {error && <p role="alert" style={{ margin: '6px 0 0', fontSize: '0.8rem', color: '#ff6b6b' }}>{error}</p>}
     </div>
   )
 }
@@ -151,6 +159,9 @@ function ShiftPanel() {
   useEffect(() => { void load() }, [load])
 
   async function act(action: 'start' | 'end') {
+    // A11y (WCAG 2.4.3): same fix as NotifyScopeToggle's set() above — the
+    // guard moves here since the buttons below now use aria-disabled.
+    if (busy) return
     setBusy(true); setError(null)
     const res = await fetch('/api/owner/shifts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
@@ -180,7 +191,7 @@ function ShiftPanel() {
                 מ־{heDateTime(active.started_at)}{active.started_by_name && ` · ${active.started_by_name}`}
               </span>
             </div>
-            <button className="press" disabled={busy} onClick={() => void act('end')} style={{ ...ghost, marginTop: 10 }}>
+            <button className="press" aria-disabled={busy} aria-busy={busy} onClick={() => void act('end')} style={{ ...ghost, marginTop: 10, opacity: busy ? 0.6 : 1 }}>
               {busy ? 'סוגר…' : 'סיום משמרת'}
             </button>
             <StationCheckinsList sessionId={active.id} />
@@ -188,12 +199,12 @@ function ShiftPanel() {
         ) : (
           <>
             <span style={{ color: 'var(--text-dim)', fontSize: '0.88rem' }}>אין משמרת פעילה כרגע.</span>
-            <button className="press" disabled={busy} onClick={() => void act('start')} style={{ ...primary, marginTop: 10 }}>
+            <button className="press" aria-disabled={busy} aria-busy={busy} onClick={() => void act('start')} style={{ ...primary, marginTop: 10, opacity: busy ? 0.6 : 1 }}>
               {busy ? 'פותח…' : 'פתיחת משמרת'}
             </button>
           </>
         )}
-        {error && <p style={{ color: '#ff6b6b', fontSize: '0.8rem', marginTop: 8 }}>{error}</p>}
+        {error && <p role="alert" style={{ color: '#ff6b6b', fontSize: '0.8rem', marginTop: 8 }}>{error}</p>}
       </div>
 
       {past.length > 0 && (
@@ -245,7 +256,12 @@ function StationCheckinsList({ sessionId }: { sessionId: string }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
         {[...checkins].reverse().map((c) => (
           <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem' }}>
-            <span style={{ color: c.event === 'check_in' ? 'var(--neon)' : 'var(--text-faint)' }}>
+            {/* A11y (WCAG 1.1.1): check-in vs check-out was color+arrow-glyph
+                only, with no text saying which — the row itself never
+                spells it out either. aria-label on the glyph's own span,
+                since it's the sole content of that element. */}
+            <span aria-label={c.event === 'check_in' ? 'כניסה' : 'יציאה'}
+              style={{ color: c.event === 'check_in' ? 'var(--neon)' : 'var(--text-faint)' }}>
               {c.event === 'check_in' ? '↓' : '↑'}
             </span>
             <span style={{ color: 'var(--text)', flex: 1, minWidth: 0 }}>

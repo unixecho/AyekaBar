@@ -68,10 +68,18 @@ export default function PortalLinksEditor({ initialLinks }: { initialLinks: Reco
       ))}
 
       {notice && (
-        <p style={{
-          color: notice.kind === 'err' ? '#ff6b6b' : 'var(--neon-soft)',
-          fontSize: '0.82rem', margin: 0, lineHeight: 1.5,
-        }}>{notice.text}</p>
+        // A11y (WCAG 4.1.3): save result was a silent status change - no
+        // role/aria-live meant screen reader users got no confirmation the
+        // save succeeded or failed. role="alert" for failure (interrupts),
+        // "status" + aria-live="polite" for success (announced, not urgent).
+        <p
+          role={notice.kind === 'err' ? 'alert' : 'status'}
+          aria-live={notice.kind === 'err' ? 'assertive' : 'polite'}
+          aria-atomic="true"
+          style={{
+            color: notice.kind === 'err' ? '#ff6b6b' : 'var(--neon-soft)',
+            fontSize: '0.82rem', margin: 0, lineHeight: 1.5,
+          }}>{notice.text}</p>
       )}
 
       <button type="button" onClick={save} disabled={busy || !dirty} className="press" style={{ ...saveBtnStyle, opacity: busy || !dirty ? 0.6 : 1 }}>

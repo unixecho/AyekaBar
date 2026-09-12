@@ -77,7 +77,11 @@ export default function QRDisplay() {
         background: 'var(--bg-elev)', border: '1px solid rgba(255,94,58,0.3)',
         display: 'grid', placeItems: 'center',
       }}>
-        <p style={{ color: 'var(--neon-soft)', fontSize: '0.9rem', padding: '0 20px', textAlign: 'center' }}>{error}</p>
+        {/* A11y (WCAG 4.1.3): this text replaces the QR/loading UI on every
+            failed fetch, including the silent REFRESH_SECONDS auto-retry, with
+            no announcement. role="alert" so screen reader users learn the code
+            failed without having to notice the visual swap. */}
+        <p role="alert" style={{ color: 'var(--neon-soft)', fontSize: '0.9rem', padding: '0 20px', textAlign: 'center' }}>{error}</p>
       </div>
       <button onClick={fetchNewToken} style={{
         padding: '10px 24px', borderRadius: 12, border: 'none',

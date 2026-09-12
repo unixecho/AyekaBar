@@ -190,6 +190,15 @@ export default function CheckinPage() {
   return (
     <main id="main" tabIndex={-1} className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm">
+        {/* A11y (WCAG 1.3.1 / 2.4.6): none of this page's states (loading,
+            signing-in, success, error) had an <h1> — the loading spinner
+            state had no heading at all, and every other state started
+            straight at h2. One h1, present across every state, matching how
+            login/page.tsx and no-access/page.tsx render their own brand
+            heading (adapted to this page's own Tailwind/zinc-amber styling,
+            not their inline CSS-var one, to stay consistent with the rest
+            of this specific file). */}
+        <h1 className="text-2xl font-bold text-center text-amber-400 mb-6">אייכה · בר</h1>
         <Suspense fallback={
           <div className="text-center">
             <div className="h-8 w-8 mx-auto animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />

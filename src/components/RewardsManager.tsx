@@ -27,6 +27,11 @@ export default function RewardsManager() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault()
+    // A11y (WCAG 2.4.3): the in-flight guard belongs HERE, not on the
+    // button's `disabled` — disabling the currently-focused submit button
+    // blurs it in every browser. aria-disabled + aria-busy instead, so the
+    // guard has to do the re-entry job the native attribute used to do.
+    if (adding) return
     setAdding(true); setErr(null)
     const res = await fetch('/api/owner/rewards', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -80,7 +85,7 @@ export default function RewardsManager() {
           <input value={points} onChange={(e) => setPoints(e.target.value)} inputMode="numeric" placeholder="נקודות" aria-label="נקודות" dir="ltr" required style={{ ...input, width: 96 }} />
         </div>
         {err && <p style={{ color: '#ff6b6b', fontSize: '0.82rem', margin: 0 }}>{err}</p>}
-        <button type="submit" disabled={adding} className="press" style={primary}>{adding ? 'מוסיף…' : 'הוספת פרס'}</button>
+        <button type="submit" aria-disabled={adding} aria-busy={adding} className="press" style={primary}>{adding ? 'מוסיף…' : 'הוספת פרס'}</button>
       </form>
 
       {/* list */}

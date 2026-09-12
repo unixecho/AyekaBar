@@ -26,6 +26,12 @@ const T = {
   statsHint: 'נכון לעכשיו. המספרים מתעדכנים עם כל כניסה ומימוש.',
   customers: 'לקוחות ונקודות',
   rewards: 'קטלוג פרסים',
+  // A11y (WCAG 2.4.6): this page has OwnerHeader's h1 and then nothing else
+  // in its outline — neither section below ever had a visible title to
+  // promote (unlike e.g. ReportsManager's "משמרות" <h2>), so these two are
+  // new, visually-hidden headings rather than a tag swap on existing text.
+  statsHeading: 'סטטיסטיקות המועדון',
+  navHeading: 'ניהול המועדון',
 }
 
 /** Club-wide counters. Service-role, because RLS scopes `customers` to the
@@ -79,6 +85,7 @@ export default async function OwnerLoyaltyPage() {
         <LoyaltyToggle initialEnabled={loyaltyEnabled} initialVisible={loyaltyVisible} />
       </div>
 
+      <h2 style={srOnly}>{T.statsHeading}</h2>
       <div className="rise" style={{ ...statsCard, animationDelay: '120ms' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
           <Stat value={stats.members} label={T.members} />
@@ -90,6 +97,7 @@ export default async function OwnerLoyaltyPage() {
         </p>
       </div>
 
+      <h2 style={srOnly}>{T.navHeading}</h2>
       <div className="rise" style={{
         display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10,
         animationDelay: '180ms',
@@ -135,4 +143,10 @@ const navCard: React.CSSProperties = {
   border: '1px solid var(--line)', background: 'var(--bg-elev)',
   color: 'var(--text)', textDecoration: 'none',
   fontSize: '0.78rem', fontWeight: 600, textAlign: 'center',
+}
+/** Visually hidden but still reachable by assistive tech — same values used
+ *  throughout this codebase (e.g. AddToCartControl.tsx). */
+const srOnly: React.CSSProperties = {
+  position: 'absolute', width: 1, height: 1, overflow: 'hidden',
+  clipPath: 'inset(50%)', whiteSpace: 'nowrap', border: 0, padding: 0, margin: -1,
 }

@@ -33,14 +33,21 @@ export default function RequestsPanel({ weekStart }: { weekStart: ISODate }) {
           <>
             {!swaps.length && <p className="sh-sub" style={{ margin: 0 }}>{t('noSwaps')}</p>}
 
-            {pending.map((swap) => (
+            {pending.map((swap) => {
+              const fromName = db.staff.find((s) => s.id === swap.fromStaffId)?.name ?? swap.id
+              return (
               <SwapRow key={swap.id} swap={swap}>
                 {viewer.canManage && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                    {/* A11y (WCAG 3.3.2/4.1.2): this input repeats once per pending
+                        swap with the same placeholder, so a screen reader user
+                        with several rows open can't tell them apart. aria-label
+                        folds in the requesting staff member's name. */}
                     <input
                       value={note[swap.id] ?? ''}
                       onChange={(e) => setNote((n) => ({ ...n, [swap.id]: e.target.value }))}
                       placeholder={t('swapReason')}
+                      aria-label={`${t('swapReason')} · ${fromName}`}
                       style={{
                         padding: '9px 11px', borderRadius: 10, border: '1px solid var(--line-strong)',
                         background: 'var(--bg-elev)', color: 'var(--text)', fontSize: '0.82rem',
@@ -66,7 +73,8 @@ export default function RequestsPanel({ weekStart }: { weekStart: ISODate }) {
                   </div>
                 )}
               </SwapRow>
-            ))}
+              )
+            })}
 
             {open.map((swap) => <SwapRow key={swap.id} swap={swap} />)}
 

@@ -39,16 +39,36 @@ export default function CartTutorial({ lang }: { lang: Lang }) {
   const { tutorialOpen, dismissTutorial } = useCart()
   const cardRef = useRef<HTMLDivElement>(null)
   const ctaRef = useRef<HTMLButtonElement>(null)
-  const returnFocusTo = useRef<HTMLElement | null>(null)
-
   // Focus in, focus back out, and a real trap while it is up. This is a modal
   // over a long scrollable menu: without the trap a keyboard or screen-reader
   // user tabs straight into the menu behind the blur, which is still there
   // and still focusable. Same reasoning as SheetShell's own trap.
+  //
+  // ── WHY THE RESTORE TARGET IS ALWAYS THE CART FAB, NEVER "the opener" ──
+  // Every other trap in this codebase (SheetShell, AuthHandoff, ConfirmSheet,
+  // ...) restores focus to whatever `document.activeElement` was right
+  // before it opened. That pattern silently breaks here: this tutorial has
+  // exactly one trigger — the FIRST add — which is also the one tap
+  // AddToCartControl answers by swapping the "+ הוספה" BUTTON for a
+  // `<div class="cart-step">` stepper at the same tree position. React sees
+  // a type change and unmounts the button outright as part of the very same
+  // commit that mounts this dialog, so a captured `document.activeElement`
+  // ref is either already-detached or a transient focus target from
+  // `haptic()`'s own hidden-checkbox trick (see src/lib/haptics.ts) —
+  // neither is a real place to send a keyboard user back to. Found by live
+  // keyboard testing 2026-09-05: Escape closed the modal and the next Tab
+  // restarted from the top of the document instead of continuing sensibly.
+  //
+  // The fix is not "restore more carefully" — it's realizing there is no
+  // "opener" worth returning to. `dismissTutorial` in CartProvider sets
+  // `summoned` true in the SAME batch that closes this dialog, and CartFab
+  // is mounted from first paint (never conditionally), so `#cart-fab-button`
+  // is guaranteed present and already focusable by the time this runs. It's
+  // also genuinely where the customer's attention goes next — the
+  // walkthrough's whole point is "watch this corner."
   useEffect(() => {
     if (!tutorialOpen) return
 
-    returnFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
@@ -71,7 +91,7 @@ export default function CartTutorial({ lang }: { lang: Lang }) {
       window.clearTimeout(t)
       const active = document.activeElement
       if (!active || active === document.body || cardRef.current?.contains(active)) {
-        returnFocusTo.current?.focus?.()
+        document.getElementById('cart-fab-button')?.focus()
       }
     }
   }, [tutorialOpen, dismissTutorial])
