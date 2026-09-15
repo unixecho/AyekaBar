@@ -151,8 +151,11 @@ html[dir="rtl"][data-nav="back"]::view-transition-old(root)    { animation-name:
 
    The transform here is safe ONLY because every modal is portalled to <body>
    (components/ModalPortal.tsx). Fixed page chrome that stays inside — the
-   editor's save bar, the language switch — travels with its page, which is
-   what should happen. */
+   language switch is the one deliberate case — travels with its page, which
+   is what should happen there. The editor's save/publish bar used to be a
+   second example here too; it is now portalled instead (see ModalPortal.tsx,
+   2026-09-15), because "travels with its page" during this animation read
+   identically to "scrolls away with the content" the rest of the time. */
 /* Named after the edge the page comes FROM, so the four rules below can be
    checked by reading them. Forward enters from the leading edge — left in RTL,
    right in LTR — and back enters from the opposite one. */

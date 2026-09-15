@@ -13,9 +13,12 @@ import { createPortal } from 'react-dom'
 // would anchor to the page instead of the screen and, on a long page like the
 // editor, scroll away with the content.
 //
-// Reserved for true overlays. Page chrome that happens to be fixed — the
-// editor's save bar, the floating language switch — deliberately stays in the
-// tree, because during a page transition it SHOULD travel with its page.
+// Reserved for true overlays, plus any OTHER `position: fixed` chrome that
+// must stay pinned to the viewport rather than travel with its page — the
+// menu editor's save/publish bar is one (2026-09-15: portalled after it was
+// found scrolling away with a long draft instead of staying stuck above it).
+// The floating language switch is the one deliberate exception left: it
+// SHOULD travel with its page during a transition.
 //
 // Renders nothing on the server: there is no document to portal into, and an
 // overlay is opened by a tap, so it is never part of the first paint anyway.

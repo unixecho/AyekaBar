@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { MENU_SLUG, loc, type MenuCategory, type MenuItem, type MenuOptionGroup, type Localized } from '@/lib/menu/types'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
+import ModalPortal from '@/components/ModalPortal'
 import MenuVersionBar from '@/components/MenuVersionBar'
 import HappyHourCard from '@/components/HappyHourCard'
 import MenuCartCard from '@/components/MenuCartCard'
@@ -307,20 +308,30 @@ export default function MenuEditor() {
 
       <button onClick={addCat} className="press" style={{ ...ghost, alignSelf: 'flex-start' }}>{T.addCat}</button>
 
-      {/* Sticky action bar */}
-      <div style={bar}>
-        {/* A11y (WCAG 4.1.3): this line carries both the routine "unsaved
-            changes" state and save/publish success/failure text, with no
-            aria-live — a screen-reader user got no announcement either way.
-            aria-live="polite" fits the mix better than role="alert", which
-            is meant for pure errors, not the "יש שינויים" state this also
-            shows. */}
-        <span aria-live="polite" aria-atomic="true" style={{ fontSize: '0.8rem', color: dirty ? 'var(--neon-soft)' : 'var(--text-faint)', flex: 1 }}>
-          {msg ?? (dirty ? T.unsaved : savedTick ? T.saved : '')}
-        </span>
-        <button onClick={() => save()} aria-disabled={saving || !dirty} aria-busy={saving} className="press" style={{ ...ghost, opacity: (saving || !dirty) ? 0.5 : 1 }}>{saving ? T.saving : T.save}</button>
-        <button onClick={publish} aria-disabled={publishing} aria-busy={publishing} className="press" style={{ ...primary, opacity: publishing ? 0.6 : 1 }}>{publishing ? T.publishing : T.publish}</button>
-      </div>
+      {/* Sticky action bar — portalled to <body> (ModalPortal) so it is
+          genuinely pinned to the viewport, not the page. It used to be left
+          in the tree on purpose ("travels with its page during a
+          transition"), but that reads identically to a bug: a
+          transform-bearing ancestor during the page-enter animation makes it
+          a `position: fixed` descendant of THAT element instead of the
+          viewport, so on a long draft it scrolls away with the content
+          instead of staying stuck above it. Portalling removes any ancestor
+          transform from the equation, same fix as CartFab.tsx. */}
+      <ModalPortal>
+        <div style={bar}>
+          {/* A11y (WCAG 4.1.3): this line carries both the routine "unsaved
+              changes" state and save/publish success/failure text, with no
+              aria-live — a screen-reader user got no announcement either way.
+              aria-live="polite" fits the mix better than role="alert", which
+              is meant for pure errors, not the "יש שינויים" state this also
+              shows. */}
+          <span aria-live="polite" aria-atomic="true" style={{ fontSize: '0.8rem', color: dirty ? 'var(--neon-soft)' : 'var(--text-faint)', flex: 1 }}>
+            {msg ?? (dirty ? T.unsaved : savedTick ? T.saved : '')}
+          </span>
+          <button onClick={() => save()} aria-disabled={saving || !dirty} aria-busy={saving} className="press" style={{ ...ghost, opacity: (saving || !dirty) ? 0.5 : 1 }}>{saving ? T.saving : T.save}</button>
+          <button onClick={publish} aria-disabled={publishing} aria-busy={publishing} className="press" style={{ ...primary, opacity: publishing ? 0.6 : 1 }}>{publishing ? T.publishing : T.publish}</button>
+        </div>
+      </ModalPortal>
 
       <ConfirmSheet request={confirmReq} onClose={() => setConfirmReq(null)} />
     </div>

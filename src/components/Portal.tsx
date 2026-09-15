@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { PORTAL_LINKS_DEFAULT, type PortalLinkKey } from '@/lib/settings/keys'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
 import type { PortalReviewsBlock } from '@/lib/reviews/types'
@@ -58,6 +59,22 @@ export default function Portal({
   feedbackEnabled?: boolean
 }) {
   const [lang, setLang] = useLanguage()
+  const router = useRouter()
+  // Hidden staff/owner entry point — no visible link anywhere on this
+  // customer-facing page. Five taps on the logo, each within 700ms of the
+  // last (otherwise the count resets), route to /login. Deliberately NOT
+  // keyboard/screen-reader reachable: a secret gesture that's also a
+  // focusable, announced control isn't secret. /login is itself the single
+  // door for owner/staff/customer (see that page's own header) and re-checks
+  // access on arrival, so this is a discovery shortcut, not a security gate.
+  const logoTaps = useRef({ count: 0, last: 0 })
+  const handleLogoTap = () => {
+    const now = Date.now()
+    const t = logoTaps.current
+    t.count = now - t.last < 700 ? t.count + 1 : 1
+    t.last = now
+    if (t.count >= 5) { t.count = 0; router.push('/login') }
+  }
   const [navOpen, setNavOpen] = useState(false)
   // A11y: same bug as the menu's category accordion (MenuView.tsx) — closed
   // only visually (0fr grid track + overflow:hidden), so the three
@@ -89,8 +106,9 @@ export default function Portal({
       }}>
         {/* brand */}
         <div style={{ textAlign: 'center', animation: `rise-in .6s var(--ease) .1s backwards` }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
           <img src="/assets/logo.svg" alt="אייכה בר" width={84} height={84}
+            onClick={handleLogoTap}
             style={{ display: 'block', margin: '0 auto 10px', filter: 'drop-shadow(0 0 20px rgba(255,94,58,0.45))' }} />
           <h1 style={{ fontSize: '2.6rem', fontWeight: 800, color: 'var(--text)', textShadow: '0 0 26px rgba(255,94,58,0.6), 0 0 4px rgba(255,138,92,0.75)', margin: 0, letterSpacing: 1 }}>{t.brand}</h1>
           <p style={{ color: 'var(--text-dim)', marginTop: 8, fontSize: '1rem', fontWeight: 500 }}>{t.tagline}</p>
