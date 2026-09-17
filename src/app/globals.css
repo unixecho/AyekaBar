@@ -1279,3 +1279,14 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   line-height: inherit;
   color: inherit;
 }
+
+/* WCAG 2.4.11 Focus Not Obscured (Minimum) — same bug as cart.css's
+   .cart-fab-wrap fix (A16), introduced here when the editor's save/publish
+   bar was portalled to <body> to keep it genuinely pinned to the viewport
+   bottom (see MenuEditor.tsx's own comment on that change). Unlike the cart
+   FAB, this bar has no on/off state — it is present for the whole time
+   /owner/editor is mounted — so the reservation is unconditional rather than
+   scoped with :has() to a data-attribute. */
+html:has(.editor-savebar) {
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 72px);
+}

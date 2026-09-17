@@ -318,7 +318,7 @@ export default function MenuEditor() {
           instead of staying stuck above it. Portalling removes any ancestor
           transform from the equation, same fix as CartFab.tsx. */}
       <ModalPortal>
-        <div style={bar}>
+        <div className="editor-savebar" style={bar}>
           {/* A11y (WCAG 4.1.3): this line carries both the routine "unsaved
               changes" state and save/publish success/failure text, with no
               aria-live — a screen-reader user got no announcement either way.

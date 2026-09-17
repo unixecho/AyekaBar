@@ -92,11 +92,20 @@ export default function DinerStrip({ lang }: { lang: Lang }) {
 
 /** Each person carries their own colour everywhere they appear — this strip,
  *  the sheet's section header, the chip on each line. That consistency is the
- *  whole point: you find your drinks by colour instead of reading names. */
+ *  whole point: you find your drinks by colour instead of reading names.
+ *
+ *  The OFF state used to border itself in the diner's own colour at 25%
+ *  alpha (`${colour}40`) — every colour in the palette computed under 1.8:1
+ *  against the page background there, failing WCAG 1.4.11 (needs 3:1) since
+ *  that border is the chip's only boundary in that state. The Dot below
+ *  already carries the full-opacity colour at 6.2–12.6:1, so the OFF border
+ *  can fall back to `--line-interactive` (the token already built for this
+ *  exact class of bug, ~3.15–3.18:1 — see globals.css) without losing the
+ *  per-diner identity; the ON state's full-opacity border still does. */
 function whoStyle(colour: string, on: boolean): React.CSSProperties {
   return on
     ? { borderColor: colour, background: `${colour}26`, color: 'var(--text)', boxShadow: `0 0 12px ${colour}44` }
-    : { borderColor: `${colour}40` }
+    : { borderColor: 'var(--line-interactive)' }
 }
 
 function Dot({ colour }: { colour: string }) {

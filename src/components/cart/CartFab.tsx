@@ -66,6 +66,10 @@ export default function CartFab({ lang }: { lang: Lang }) {
 
   const count = cartCount(cart)
   const { agorot, unpricedLines } = cartTotals(cart)
+  // Same string the visible span renders — the accessible name must contain
+  // it verbatim (WCAG 2.5.3 Label in Name), or a speech-input user reading
+  // the price on screen has no matching phrase to target.
+  const totalLabel = agorot > 0 || unpricedLines === 0 ? `${fmtAgorot(agorot)}₪` : '—'
 
   // Nothing at all before hydration: the server has no idea what is in this
   // phone's cart, and rendering a button with "0" that then jumps to "4" is
@@ -93,7 +97,7 @@ export default function CartFab({ lang }: { lang: Lang }) {
           className="cart-fab press"
           onClick={() => { haptic('select'); openSheet() }}
           tabIndex={summoned ? 0 : -1}
-          aria-label={`${CART_UI.open[lang]} — ${count} ${CART_UI.inCart[lang]}`}
+          aria-label={`${CART_UI.open[lang]} — ${count} ${CART_UI.inCart[lang]}, ${totalLabel}`}
         >
           <svg className="cart-fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -101,9 +105,7 @@ export default function CartFab({ lang }: { lang: Lang }) {
             <circle cx="10" cy="20" r="1.2" />
             <circle cx="18" cy="20" r="1.2" />
           </svg>
-          <span className="cart-fab-total" dir="ltr">
-            {agorot > 0 || unpricedLines === 0 ? `${fmtAgorot(agorot)}₪` : '—'}
-          </span>
+          <span className="cart-fab-total" dir="ltr">{totalLabel}</span>
           <span className="cart-fab-badge" data-bump={bumping} aria-hidden>{count}</span>
         </button>
       </div>
