@@ -1231,7 +1231,16 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
 .skip-link {
   position: fixed;
   top: 8px;
-  inset-inline-start: 8px;
+  /* Both inline edges, not just inset-inline-start: this link is global
+     (rendered once in the root layout, ahead of every page) and several
+     pages put real content — an H1, a date line — right at the top with no
+     header bar underneath to rest on. A content-sized pill anchored to one
+     corner only PARTIALLY covered that text on focus, so the two visibly
+     collided (screenshotted on /accessibility: the pill landed half on top
+     of, half beside, the page's own title). Stretching edge-to-edge (minus
+     the 8px gutter) makes it a clean full-width bar that fully occludes
+     that top strip instead of colliding with whatever's under it. */
+  inset-inline: 8px;
   z-index: 1000;
   padding: 12px 18px;
   /* Exempt from A5/2.5.8 in the strict sense (off-screen until keyboard
@@ -1241,8 +1250,9 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
      the exemption. */
   min-height: 44px;
   box-sizing: border-box;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   border-radius: 12px;
   background: var(--neon);
   /* WCAG 1.4.3: white on solid --neon computes to 3.04:1, under 4.5:1 --
