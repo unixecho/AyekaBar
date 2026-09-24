@@ -52,7 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <body> by its own launcher/panel, so it renders outside
             #a11y-scope and is never itself affected by the filter it
             controls. */}
-        <A11yWidget config={{ storageKey: 'ayeka.a11y.prefs.v1' }} />
+        <A11yWidget config={{ storageKey: 'ayeka.a11y.prefs.v1', statementHref: '/accessibility' }} />
         {/* Negishot (negishot.co.il) REMOVED 2026-09-12 on the owner's
             explicit instruction, replaced by the in-house widget above.
             At the time of that removal, no one other than the author had
