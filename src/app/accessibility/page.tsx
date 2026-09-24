@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { getAccessibilityStatement, getAccessibilityStatementUpdatedAt } from '@/lib/settings/server'
+import { WIDGET_COVERAGE } from 'a11y-widget'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'הצהרת נגישות · אייכה בר' }
@@ -26,6 +27,16 @@ export const metadata: Metadata = { title: 'הצהרת נגישות · אייכ�
 // verified and HOW, rather than repeating a blanket "full support" claim —
 // see that file's own re-audit history for exactly what was and wasn't
 // tested before this was last edited.
+//
+// 2026-09-24: added the "תפריט הנגישות" section, listing WIDGET_COVERAGE
+// from the shared a11y-widget package instead of hand-copying its feature
+// list here — this is exactly the kind of prose that silently drifted from
+// the widget's real behavior once Sarcafe-Portal's independent copy of the
+// widget diverged from this app's; sourcing it from the package means a new
+// widget feature shows up here automatically instead of needing a second
+// edit. Also bumped the claimed standard from WCAG 2.0 to 2.2, matching the
+// 2.2-specific success criteria already fixed in this codebase's own commit
+// history (2.5.7, 2.5.8, among others) and Sarcafe-Portal's equivalent page.
 
 export default async function AccessibilityPage() {
   const [s, updatedAt] = await Promise.all([
@@ -57,12 +68,27 @@ export default async function AccessibilityPage() {
         <Section title="כללי">
           <p>
             אנו רואים חשיבות רבה במתן שירות שוויוני ונגיש לכלל הציבור, לרבות אנשים עם מוגבלות.
-            אתר זה פועל להנגשה בהתאם לתקן הישראלי (ת"י) 5568 ברמה AA, המבוסס על הנחיות הנגישות
-            הבינלאומיות WCAG 2.0.
+            אתר זה פועל להנגשה בהתאם לתקן הישראלי (ת&quot;י) 5568 ברמה AA, המבוסס על הנחיות הנגישות
+            הבינלאומיות העדכניות WCAG 2.2.
           </p>
         </Section>
 
-        <Section title="מה בוצע באתר">
+        <Section title="תפריט הנגישות">
+          <p>
+            בפינה הימנית התחתונה של המסך מופיע כפתור נגישות (סמל דמות בעיגול). לחיצה עליו — או
+            הקשה על <b>F2</b> מהמקלדת בכל מקום באתר — פותחת תפריט התאמות אישיות לביקור זה; אותה
+            הקשה, או <b>Esc</b>, סוגרת אותו. ההתאמות נשמרות במכשיר ונשארות פעילות בביקורים הבאים,
+            עד לאיפוס ידני מתוך התפריט עצמו.
+          </p>
+          <p style={{ margin: '10px 0 0', fontWeight: 700 }}>מה יש בתפריט:</p>
+          <ul style={listStyle}>
+            {WIDGET_COVERAGE.map((item) => (
+              <li key={item.id}>{item.labels.he}</li>
+            ))}
+          </ul>
+        </Section>
+
+        <Section title="מה בוצע באתר עצמו (מעבר לתפריט הנגישות)">
           <ul style={listStyle}>
             <li>מבנה סמנטי, כותרות מדורגות (ללא דילוג ברמות) ואזורי ניווט (landmarks) בעמודי הלקוח ובעמודי הניהול המרכזיים.</li>
             <li>ניגודיות צבעים בהתאם לרמה AA — 4.5:1 לטקסט רגיל, 3:1 לגבולות רכיבי ממשק (מתגים, כפתורים, שדות טופס).</li>

@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
+    "a11y-widget": "https://github.com/unixecho/a11y-widget/archive/a3b8da6429d25bd2ba4129e5bf6419d5591149be.tar.gz",
     "jose": "^5.9.6",
     "next": "14.2.16",
     "qrcode": "^1.5.4",
