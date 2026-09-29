@@ -52,6 +52,9 @@ export const OP_ONLY_PREFIXES = [
   '/owner/staff',
   '/owner/loyalty',
   '/owner/links',
+  // Which languages the public site offers. A site-wide switch, so OP only,
+  // like the portal links it sits beside.
+  '/owner/languages',
   // Unsolicited free text from the public, sometimes carrying a contact
   // address. OP only — being trusted with the MENU has never implied being
   // handed customer correspondence, so this deliberately does NOT follow the

@@ -128,6 +128,35 @@ for (const bg of ['bg', 'bg-elev', 'bg-elev-2']) {
   check(`--line-interactive on --${bg}`, contrast(resolveToken('line-interactive'), resolveToken(bg)), 3.0)
 }
 
+// The 86 list and the language card (2026-09-29). Colors that were already in
+// the editor, used against backgrounds they had not been checked on.
+console.log('\n86 list + language card — new text/background pairs')
+
+// A tinted control's real background is its translucent fill blended onto
+// whatever it sits on, not the token underneath — same step DinerStrip's audit
+// missed until it was done by hand.
+const tinted = (fill, onToken) => {
+  const b = blend(parseColor(fill), parseColor(resolveToken(onToken)))
+  return `rgb(${b.r.toFixed(1)}, ${b.g.toFixed(1)}, ${b.b.toFixed(1)})`
+}
+
+const AMBER = '#ffb240'   // MenuEditor archiveTone / outOfStockCount
+const GREEN = '#4ade80'   // MenuEditor restoreBtn
+const RED = '#ff6b6b'     // MenuEditor delete-red, now also the purge link + dialog
+for (const bg of ['bg-elev', 'bg-elev-2']) {
+  // "86 · הורדה מהתפריט" sits on the category card (--bg-elev) and the item card (--bg-elev-2).
+  check(`86 button amber ${AMBER} on --${bg}`, contrast(AMBER, resolveToken(bg)), 4.5)
+}
+check(`ConfirmSheet calm label --neon-soft on --bg-elev-2`, contrast(resolveToken('neon-soft'), resolveToken('bg-elev-2')), 4.5)
+check(`language card "on" label --neon-soft on --bg-elev-2`, contrast(resolveToken('neon-soft'), resolveToken('bg-elev-2')), 4.5)
+check(`restore button ${GREEN} on its 10% green fill over --bg-elev-2`,
+  contrast(GREEN, tinted('rgba(74,222,128,0.1)', 'bg-elev-2')), 4.5)
+check(`purge link ${RED} on --bg-elev-2 (list row + dialog)`, contrast(RED, resolveToken('bg-elev-2')), 4.5)
+check(`86 count badge --text-dim on its 5% white fill over --bg-elev`,
+  contrast(resolveToken('text-dim'), tinted('rgba(255,255,255,0.05)', 'bg-elev')), 4.5)
+check(`"always on" pill --text-dim on its 4% white fill over --bg-elev-2`,
+  contrast(resolveToken('text-dim'), tinted('rgba(255,255,255,0.04)', 'bg-elev-2')), 4.5)
+
 console.log('\nCart diner/table palette — selected-chip border + dot (full opacity) against --bg')
 
 const tableColourMatch = cartTypes.match(/TABLE_COLOUR\s*=\s*'(#[0-9a-fA-F]{6})'/)

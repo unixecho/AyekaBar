@@ -61,6 +61,11 @@ const ACTION_META: Record<string, { label: string; emoji: string; color: string 
   'variant.default': { label: 'הגדרת תפריט ראשי', emoji: '⭐', color: '#fbbf24' },
   'happy_hour.update': { label: 'Happy Hour', emoji: '🍹', color: '#f472b6' },
   'menu_cart.update': { label: 'עגלת הזמנה בתפריט', emoji: '🧾', color: '#38e1ff' },
+  // 86 list (migration 051). Amber, matching the editor: a reversible state
+  // change, not the red the log uses for deleting a menu version.
+  'menu.archive': { label: 'הורדה מהתפריט (86)', emoji: '🚫', color: '#ffb240' },
+  'menu.restore': { label: 'החזרה לתפריט', emoji: '↩️', color: '#4ade80' },
+  'menu.purge': { label: 'מחיקה לצמיתות', emoji: '🗑️', color: '#ff6b6b' },
 }
 
 const fallbackMeta = { label: 'שינוי', emoji: '•', color: '#a8a5b0' }
