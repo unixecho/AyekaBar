@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { resolveLanguage } from '@/lib/settings/languages'
 
 // One language switcher for the whole site. The portal, menu and team page
 // each had their own — a globe with a dropdown, a globe with CSS-class styling,
@@ -33,11 +34,16 @@ export default function LanguageSwitch({
   lang,
   onChange,
   variant = 'fixed',
+  languages,
 }: {
   lang: Lang
   onChange: (next: Lang) => void
   /** `fixed` pins to the viewport corner; `inline` sits in a topbar. */
   variant?: 'fixed' | 'inline'
+  /** Which languages the owner currently offers (/owner/languages). Absent =
+   *  all three, so a caller that hasn't been taught about the setting behaves
+   *  exactly as before. */
+  languages?: readonly Lang[]
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -70,6 +76,11 @@ export default function LanguageSwitch({
       document.removeEventListener('keydown', onKey)
     }
   }, [closeAndReturnFocus])
+
+  const options = ORDER.filter((l) => !languages || languages.includes(l))
+  // One language left is not a choice. A globe that opens a menu with a single
+  // entry is a control that does nothing, so it isn't drawn at all.
+  if (options.length < 2) return null
 
   const wrap: CSSProperties = variant === 'fixed'
     ? { position: 'fixed', left: 14, top: 'calc(env(safe-area-inset-top) + 14px)', zIndex: 50 }
@@ -108,7 +119,7 @@ export default function LanguageSwitch({
           display: 'flex', flexDirection: 'column', gap: 2,
           animation: 'rise-in .22s var(--ease)',
         }}>
-          {ORDER.map((l) => {
+          {options.map((l) => {
             const active = l === lang
             return (
               <button
@@ -136,14 +147,17 @@ export default function LanguageSwitch({
   )
 }
 
-/** Shared persistence + <html> sync, so every page treats language identically. */
-export function useLanguage(): [Lang, (next: Lang) => void] {
+/** Shared persistence + <html> sync, so every page treats language identically.
+ *
+ *  `languages` is what the owner currently offers. A remembered choice that has
+ *  since been switched off shows as Hebrew but is NOT erased from storage, so
+ *  turning the language back on restores each visitor's own preference. */
+export function useLanguage(languages?: readonly Lang[]): [Lang, (next: Lang) => void] {
   const [lang, setLang] = useState<Lang>('he')
 
   useEffect(() => {
-    const saved = localStorage.getItem('siteLanguage')
-    if (saved && (ORDER as string[]).includes(saved)) setLang(saved as Lang)
-  }, [])
+    setLang(resolveLanguage(localStorage.getItem('siteLanguage'), languages))
+  }, [languages])
 
   useEffect(() => {
     document.documentElement.lang = lang

@@ -14,7 +14,7 @@ import type { MenuCategory, MenuItem } from './types'
 
 const UID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
 
-function mintUid(): string {
+export function mintUid(): string {
   let s = ''
   for (let i = 0; i < 10; i++) s += UID_ALPHABET[Math.floor(Math.random() * UID_ALPHABET.length)]
   return s

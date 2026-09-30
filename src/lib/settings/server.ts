@@ -9,8 +9,11 @@ import {
   TABLE_ORDERING_ENABLED, TABLE_ORDERING_ENABLED_DEFAULT,
   WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT,
   CUSTOMER_FEEDBACK_ENABLED, CUSTOMER_FEEDBACK_ENABLED_DEFAULT,
+  SITE_LANGUAGES,
   SETTINGS_TAG,
 } from './keys'
+import { SITE_LANGUAGES_DEFAULT, enabledLanguages, normalizeSiteLanguages, type SiteLanguages } from './languages'
+import type { Lang } from '@/lib/menu/types'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
 import { normalizeReviews, type PortalReviewsBlock } from '@/lib/reviews/types'
 
@@ -85,6 +88,17 @@ export async function getCartActionFlags(): Promise<{ ordering: boolean; call: b
  *  CUSTOMER_FEEDBACK_ENABLED for why this one fails open. */
 export function getCustomerFeedbackEnabled(): Promise<boolean> {
   return readSetting<boolean>(CUSTOMER_FEEDBACK_ENABLED, CUSTOMER_FEEDBACK_ENABLED_DEFAULT)
+}
+
+/** The owner's on/off for English and Arabic, as stored. */
+export async function getSiteLanguageSettings(): Promise<SiteLanguages> {
+  return normalizeSiteLanguages(await readSetting<unknown>(SITE_LANGUAGES, SITE_LANGUAGES_DEFAULT))
+}
+
+/** The languages the public portal and menu should offer, Hebrew first. When
+ *  this is just ['he'] the switcher is not rendered at all. */
+export async function getSiteLanguages(): Promise<Lang[]> {
+  return enabledLanguages(await getSiteLanguageSettings())
 }
 
 /** The portal's external link destinations (Instagram, Facebook, review, navigate). */

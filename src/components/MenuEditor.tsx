@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { MENU_SLUG, loc, type MenuCategory, type MenuItem, type MenuOptionGroup, type Localized } from '@/lib/menu/types'
+import { mintUid } from '@/lib/menu/variants'
+import { entryName, firstText, type ArchiveEntry } from '@/lib/menu/archive'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import ModalPortal from '@/components/ModalPortal'
 import MenuVersionBar from '@/components/MenuVersionBar'
@@ -24,6 +26,36 @@ const T = {
   publishHint: 'פרסום הופך את השינויים השמורים לגלויים ללקוחות.',
   unsaved: 'שינויים שלא נשמרו',
   addCat: '+ קטגוריה', addItem: '+ פריט', del: 'מחיקה',
+  // 86 (2026-09-29): "make a way for items and categories to be 86'd and not
+  // deleted... easy to understand for people who have no tech background."
+  // Delete used to be the only way to take something off the menu, and it was
+  // gone for good. Now the button says what the owner is actually trying to do
+  // ("take it off the menu") and the answer to "what if I need it back?" is on
+  // the confirmation itself, not in a manual. Written in the passive so it
+  // reads the same to whoever holds the phone.
+  archive: '86 · הורדה מהתפריט',
+  archiveCat: '86 · הורדת הקטגוריה מהתפריט',
+  archiveConfirm: 'כן, להוריד מהתפריט',
+  archiveItemTitle: (name: string) => `להוריד את "${name}" מהתפריט?`,
+  archiveItemBody: 'הוא יורד מהתפריט של הלקוחות מיד, אבל לא נמחק. הוא מחכה ברשימת 86 שבראש העמוד, ואפשר להחזיר אותו בלחיצה אחת.',
+  archiveCatTitle: (name: string) => `להוריד את הקטגוריה "${name}" מהתפריט?`,
+  archiveCatBody: (n: number) => `הקטגוריה וכל ${n} הפריטים שבה יורדים מהתפריט של הלקוחות מיד, אבל לא נמחקים. הכול מחכה ברשימת 86 שבראש העמוד, ואפשר להחזיר בלחיצה אחת.`,
+  archivedMsg: (name: string) => `"${name}" ירד מהתפריט ✓ (מחכה ברשימת 86)`,
+  restoredMsg: (name: string) => `"${name}" חזר לתפריט ✓`,
+  soldVs86: 'אזל = הפריט נשאר בתפריט עם תווית "אזל". 86 = הפריט יורד מהתפריט לגמרי ונשמר ברשימת 86, ואפשר להחזיר אותו.',
+  list86Title: '86 · ירדו מהתפריט',
+  list86Hint: 'פריטים וקטגוריות שהורדו מהתפריט לא נמחקים — הם מחכים כאן. "החזרה לתפריט" מחזירה אותם בדיוק למקום שלהם, והלקוחות רואים אותם מיד.',
+  list86Empty: 'אין כרגע כלום ברשימה. כשמורידים פריט או קטגוריה מהתפריט (כפתור 86), הם מופיעים כאן.',
+  list86Load: 'טעינת רשימת 86 נכשלה.',
+  list86Retry: 'ניסיון חוזר',
+  restore: 'החזרה לתפריט',
+  purge: 'מחיקה לצמיתות',
+  purgeTitle: (name: string) => `למחוק את "${name}" לצמיתות?`,
+  purgeBody: 'אחרי המחיקה אי אפשר להחזיר אותו. אם לא בטוחים, עדיף להשאיר אותו ברשימה.',
+  kindCategory: 'קטגוריה',
+  fromCat: 'מתוך',
+  itemsWord: 'פריטים',
+  actionFailed: 'הפעולה נכשלה. נסה/י שוב.',
   icon: 'אייקון', he: 'עברית', en: 'English', ar: 'العربية',
   name: 'שם', note: 'תיאור', price: 'מחיר (מספר, טווח כמו 30/34, או ריק)',
   catTitle: 'שם הקטגוריה', catNote: 'הערת קטגוריה',
@@ -40,7 +72,6 @@ const T = {
   outOfStockHint: 'כל הפריטים שסומנו כ"אזל", מכל הקטגוריות, כדי שיהיה קל למצוא ולהחזיר למלאי בלחיצה אחת.',
   backInStock: '↩ החזרה למלאי',
   viewMenu: 'צפייה בתפריט', dash: '← ניהול',
-  confirmDelCat: 'למחוק את הקטגוריה?',
   // 2026-09-01: returning an item to stock only edits the DRAFT — the
   // out-of-stock dashboard signal disappears (it reads the draft) while
   // customers, who read `published`, still see the item as אזל until
@@ -61,6 +92,14 @@ const T = {
   optionChoiceName: 'שם האפשרות (למשל: תפוח)',
   addChoice: '+ אפשרות',
   addOptionGroup: '+ קבוצת אפשרויות',
+}
+
+/** What /api/owner/menu-86 answers with. */
+interface Reply86 {
+  error?: string
+  entries?: ArchiveEntry[]
+  categories?: MenuCategory[]
+  publishedAt?: string | null
 }
 
 function priceToInput(p: MenuItem['price']): string {
@@ -92,6 +131,31 @@ export default function MenuEditor() {
   // offer to publish immediately instead of leaving that step to a
   // dashboard signal the owner has to separately notice.
   const [stockJustRestored, setStockJustRestored] = useState(false)
+  // The 86 list. Loaded from its own route (it is not part of the draft).
+  const [entries, setEntries] = useState<ArchiveEntry[]>([])
+  const [list86Open, setList86Open] = useState(false)
+  const [list86Error, setList86Error] = useState(false)
+  // One 86 action at a time: each one saves the draft first and then swaps the
+  // editor's copy for the server's, so two overlapping would race on that swap.
+  const [busy86, setBusy86] = useState(false)
+
+  const loadEntries = useCallback(async () => {
+    try {
+      const res = await fetch('/api/owner/menu-86', { cache: 'no-store' })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error)
+      setEntries(j.entries ?? [])
+      setList86Error(false)
+    } catch {
+      setList86Error(true)
+    }
+  }, [])
+
+  useEffect(() => { void loadEntries() }, [loadEntries])
+  // The dashboard and other pages can deep-link straight to the list.
+  useEffect(() => {
+    if (window.location.hash === '#menu-86') setList86Open(true)
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -183,18 +247,96 @@ export default function MenuEditor() {
 
   // category ops
   const addCat = () => edit((d) => { d.push({ id: 'cat-' + Date.now().toString(36), icon: '🍽️', title: { he: 'קטגוריה חדשה' }, items: [] }) })
-  const delCat = (ci: number) => setConfirmReq({
-    title: T.confirmDelCat,
-    body: `"${loc(cats[ci]?.title, 'he') || ''}" וכל ${cats[ci]?.items?.length ?? 0} הפריטים שבה יימחקו מהטיוטה. השינוי ייכנס לתוקף רק אחרי שמירה.`,
-    confirmLabel: T.del,
-    onConfirm: () => edit((d) => { d.splice(ci, 1) }),
-  })
   const moveCat = (ci: number, dir: -1 | 1) => edit((d) => { const j = ci + dir; if (j < 0 || j >= d.length) return;[d[ci], d[j]] = [d[j], d[ci]] })
-  // item ops
-  const addItem = (ci: number) => edit((d) => { d[ci].items.push({ he: 'פריט חדש', price: null }) })
-  const delItem = (ci: number, ii: number) => edit((d) => { d[ci].items.splice(ii, 1) })
+  // item ops. A new item gets its uid here rather than waiting for the version
+  // bar to mint one on its next load: 86 addresses items by uid, and an item
+  // that has one from birth never needs the by-position fallback.
+  const addItem = (ci: number) => edit((d) => { d[ci].items.push({ uid: mintUid(), he: 'פריט חדש', price: null }) })
   const moveItem = (ci: number, ii: number, dir: -1 | 1) => edit((d) => { const j = ii + dir; const it = d[ci].items; if (j < 0 || j >= it.length) return;[it[ii], it[j]] = [it[j], it[ii]] })
   const restoreItem = (ci: number, ii: number) => { edit((d) => { d[ci].items[ii].available = undefined }); setStockJustRestored(true) }
+
+  // ---- 86 ---------------------------------------------------------------
+  // These do NOT go through edit()/save()/publish(). An 86 has to reach
+  // customers now — see the note at the top of /api/owner/menu-86 — and the
+  // server applies it to the draft and the live menu together.
+
+  const flash = (text: string) => { setMsg(text); setTimeout(() => setMsg(null), 3500) }
+
+  async function post86(body: Record<string, unknown>): Promise<{ ok: boolean; reply: Reply86 }> {
+    try {
+      const res = await fetch('/api/owner/menu-86', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      return { ok: res.ok, reply: (await res.json().catch(() => ({}))) as Reply86 }
+    } catch {
+      return { ok: false, reply: {} }
+    }
+  }
+
+  /** Take something off the menu, or bring it back. Anything unsaved is saved
+   *  first: the server works on the SAVED draft and hands it back, and swapping
+   *  that in over unsaved edits would silently throw them away. */
+  async function change86(body: Record<string, unknown>, doneText: string) {
+    if (busy86) return
+    setBusy86(true); setMsg(null)
+    try {
+      if (dirty && !(await save(false))) { setMsg(T.actionFailed); return }
+      const { ok, reply } = await post86(body)
+      if (!ok) {
+        setMsg(reply.error ?? T.actionFailed)
+        // The list may have changed even though the menu didn't.
+        void loadEntries()
+        return
+      }
+      if (reply.categories) setCats(reply.categories)
+      if (reply.entries) setEntries(reply.entries)
+      if (reply.publishedAt) setPublishedAt(reply.publishedAt)
+      flash(doneText)
+    } finally {
+      setBusy86(false)
+    }
+  }
+
+  const archiveItem = (ci: number, ii: number) => {
+    const cat = cats[ci]; const item = cat?.items[ii]
+    if (!cat || !item) return
+    const name = firstText(item)
+    setConfirmReq({
+      title: T.archiveItemTitle(name), body: T.archiveItemBody, confirmLabel: T.archiveConfirm, tone: 'calm',
+      onConfirm: () => { void change86({ action: 'archive', kind: 'item', categoryId: cat.id, uid: item.uid, index: ii }, T.archivedMsg(name)) },
+    })
+  }
+
+  const archiveCat = (ci: number) => {
+    const cat = cats[ci]
+    if (!cat) return
+    const name = firstText(cat.title)
+    setConfirmReq({
+      title: T.archiveCatTitle(name), body: T.archiveCatBody(cat.items?.length ?? 0), confirmLabel: T.archiveConfirm, tone: 'calm',
+      onConfirm: () => { void change86({ action: 'archive', kind: 'category', categoryId: cat.id }, T.archivedMsg(name)) },
+    })
+  }
+
+  const bringBack = (e: ArchiveEntry) => { void change86({ action: 'restore', entryId: e.id }, T.restoredMsg(entryName(e))) }
+
+  const purgeEntry = (e: ArchiveEntry) => setConfirmReq({
+    title: T.purgeTitle(entryName(e)), body: T.purgeBody, confirmLabel: T.purge,
+    onConfirm: () => { void purge(e) },
+  })
+
+  // Not change86: this never touches the menu, so there is nothing to save
+  // first and no draft to swap in.
+  async function purge(e: ArchiveEntry) {
+    if (busy86) return
+    setBusy86(true); setMsg(null)
+    try {
+      const { ok, reply } = await post86({ action: 'purge', entryId: e.id })
+      if (!ok) { setMsg(reply.error ?? T.actionFailed); void loadEntries(); return }
+      if (reply.entries) setEntries(reply.entries)
+    } finally {
+      setBusy86(false)
+    }
+  }
 
   // Out-of-stock overview — a VIRTUAL grouping, not a real move: an item
   // stays in its actual category (deleting it out of "Cocktails" into a
@@ -267,6 +409,73 @@ export default function MenuEditor() {
         </div>
       )}
 
+      {/* The 86 list. Always present (unlike the out-of-stock panel above), and
+          on purpose: the whole point of 86 is that nothing is lost, and an owner
+          who has never 86'd anything needs to be able to SEE where things will
+          go before they trust the button. Collapsed, so it costs one line. */}
+      <div id="menu-86" style={{ ...list86Card, scrollMarginTop: 16 }}>
+        <button
+          type="button" className="press" onClick={() => setList86Open((v) => !v)}
+          aria-expanded={list86Open} aria-controls="menu-86-body" style={list86Head}
+        >
+          <span aria-hidden style={{ fontSize: '1.05rem' }}>🚫</span>
+          <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', flex: 1, textAlign: 'start' }}>{T.list86Title}</span>
+          <span style={list86Count}>{entries.length}</span>
+          <span aria-hidden style={{ color: 'var(--text-dim)' }}>{list86Open ? '▾' : '▸'}</span>
+        </button>
+
+        {list86Open && (
+          <div id="menu-86-body" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', margin: '0 0 2px', lineHeight: 1.55 }}>{T.list86Hint}</p>
+
+            {list86Error && (
+              <p role="alert" style={{ fontSize: '0.82rem', color: '#ff6b6b', margin: 0 }}>
+                {T.list86Load}{' '}
+                <button type="button" className="press" onClick={() => void loadEntries()} style={linkBtn}>{T.list86Retry}</button>
+              </p>
+            )}
+            {!list86Error && entries.length === 0 && (
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-faint)', margin: 0 }}>{T.list86Empty}</p>
+            )}
+
+            {entries.map((e) => {
+              const name = entryName(e)
+              const icon = e.kind === 'item' ? e.from.icon : e.category.icon
+              const sub = e.kind === 'item'
+                ? `${T.fromCat} ${firstText(e.from.title)}`
+                : `${T.kindCategory} · ${e.category.items?.length ?? 0} ${T.itemsWord}`
+              const when = new Date(e.archivedAt).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
+              return (
+                <div key={e.id} style={list86Row}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                    <b style={{ fontSize: '0.92rem', color: 'var(--text)' }}>{icon ? `${icon} ` : ''}{name}</b>
+                    <small style={{ fontSize: '0.74rem', color: 'var(--text-faint)' }}>
+                      {sub} · {when}{e.archivedBy ? ` · ${e.archivedBy}` : ''}
+                    </small>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button" onClick={() => bringBack(e)} className="press"
+                      aria-disabled={busy86} aria-label={`${T.restore} — ${name}`}
+                      style={{ ...restoreBtn, flex: 1, opacity: busy86 ? 0.6 : 1 }}
+                    >
+                      <span aria-hidden>↩ </span>{T.restore}
+                    </button>
+                    <button
+                      type="button" onClick={() => purgeEntry(e)} className="press"
+                      aria-disabled={busy86} aria-label={`${T.purge} — ${name}`}
+                      style={{ ...linkBtn, color: '#ff6b6b', opacity: busy86 ? 0.6 : 1 }}
+                    >
+                      {T.purge}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {cats.length === 0 && <p style={{ color: 'var(--text-faint)', textAlign: 'center', padding: '10px 0' }}>{T.empty}</p>}
 
       {cats.map((cat, ci) => {
@@ -292,13 +501,13 @@ export default function MenuEditor() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {cat.items.map((it, ii) => (
                     <ItemEditor key={ii} item={it} onChange={(patch) => edit((d) => { Object.assign(d[ci].items[ii], patch) })}
-                      onDelete={() => delItem(ci, ii)} onUp={() => moveItem(ci, ii, -1)} onDown={() => moveItem(ci, ii, 1)} />
+                      onArchive={() => archiveItem(ci, ii)} onUp={() => moveItem(ci, ii, -1)} onDown={() => moveItem(ci, ii, 1)} />
                   ))}
                 </div>
 
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => addItem(ci)} className="press" style={ghost}>{T.addItem}</button>
-                  <button onClick={() => delCat(ci)} className="press" style={{ ...ghost, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto' }}>{T.del} {T.icon === '' ? '' : ''}🗑</button>
+                  <button onClick={() => archiveCat(ci)} className="press" aria-disabled={busy86} style={{ ...ghost, ...archiveTone, marginInlineStart: 'auto' }}>{T.archiveCat}</button>
                 </div>
               </div>
             )}
@@ -338,9 +547,9 @@ export default function MenuEditor() {
   )
 }
 
-function ItemEditor({ item, onChange, onDelete, onUp, onDown }: {
+function ItemEditor({ item, onChange, onArchive, onUp, onDown }: {
   item: MenuItem; onChange: (patch: Partial<MenuItem>) => void
-  onDelete: () => void; onUp: () => void; onDown: () => void
+  onArchive: () => void; onUp: () => void; onDown: () => void
 }) {
   const [open, setOpen] = useState(false)
   const badges = item.badges ?? (item.badge ? [item.badge] : [])
@@ -415,8 +624,11 @@ function ItemEditor({ item, onChange, onDelete, onUp, onDown }: {
             >
               {T.sold} <Switch on={item.available === false} small />
             </button>
-            <button onClick={onDelete} className="press" style={{ ...ghost, color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)', marginInlineStart: 'auto', padding: '5px 10px' }}>{T.del}</button>
+            <button onClick={onArchive} className="press" style={{ ...ghost, ...archiveTone, marginInlineStart: 'auto', padding: '5px 10px' }}>{T.archive}</button>
           </div>
+          {/* "Sold out" and "86" look alike to someone who doesn't live in a
+              kitchen — one line, right where the two controls sit. */}
+          <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: 0, lineHeight: 1.5 }}>{T.soldVs86}</p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: '0.72rem', color: 'var(--text-faint)' }}>{T.options}</span>
@@ -472,6 +684,15 @@ const card: CSSProperties = { background: 'var(--bg-elev)', border: '1px solid v
 // fear, so it gets its own distinct tone rather than borrowing danger's.
 const outOfStockCard: CSSProperties = { background: 'rgba(255,178,64,0.06)', border: '1px solid rgba(255,178,64,0.28)', borderRadius: 14, padding: 12 }
 const outOfStockCount: CSSProperties = { marginInlineStart: 'auto', borderRadius: 999, padding: '2px 9px', fontSize: '0.76rem', fontWeight: 700, color: '#ffb240', background: 'rgba(255,178,64,0.14)', border: '1px solid rgba(255,178,64,0.3)' }
+// 86 shares the out-of-stock amber: like a sold-out item it is a state to
+// manage, not a destructive act to fear (nothing is deleted), so it must not
+// borrow the delete-red the rest of this file reserves for the irreversible.
+const archiveTone: CSSProperties = { color: '#ffb240', borderColor: 'rgba(255,178,64,0.35)' }
+const list86Card: CSSProperties = { background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 14, padding: 12 }
+const list86Head: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', color: 'inherit' }
+const list86Count: CSSProperties = { borderRadius: 999, padding: '2px 9px', fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-dim)', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--line-strong)' }
+const list86Row: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--bg-elev-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '9px 10px' }
+const linkBtn: CSSProperties = { background: 'none', border: 'none', padding: '7px 4px', font: 'inherit', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-dim)', cursor: 'pointer', textDecoration: 'underline' }
 const outOfStockRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-elev-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px' }
 const restoreBtn: CSSProperties = { flex: '0 0 auto', padding: '7px 11px', borderRadius: 9, border: '1px solid rgba(74,222,128,0.35)', background: 'rgba(74,222,128,0.1)', color: '#4ade80', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }
 const input: CSSProperties = { padding: '9px 11px', borderRadius: 9, border: '1px solid var(--line-strong)', background: 'var(--bg-elev-2)', color: 'var(--text)', fontSize: '0.92rem', fontFamily: 'inherit', outline: 'none', width: '100%' }

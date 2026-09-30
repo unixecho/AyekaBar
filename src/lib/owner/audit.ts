@@ -21,11 +21,17 @@ export type AuditAction =
    *  HANDOFF.md; 'variant.default' has been silently dropping rows since it
    *  was added, which is how this was noticed. */
   | 'menu_cart.update'
+  /** 86 list (migration 051). Same story as 'menu_cart.update': the union has
+   *  them, the CHECK constraint learns them when 051 runs, and until then
+   *  logAudit swallows the rejection and the change itself still succeeds. */
+  | 'menu.archive'
+  | 'menu.restore'
+  | 'menu.purge'
 
 /** Resolve who is acting, from the staff roster, falling back to the auth
  *  record. Stored as a snapshot so removing someone later doesn't erase what
  *  they did. */
-async function actorIdentity(service: SupabaseClient, userId: string) {
+export async function actorIdentity(service: SupabaseClient, userId: string) {
   const { data } = await service
     .from('staff')
     .select('display_name, first_name, last_name, email')

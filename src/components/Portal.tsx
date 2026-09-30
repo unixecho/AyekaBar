@@ -48,6 +48,7 @@ export default function Portal({
   links = PORTAL_LINKS_DEFAULT,
   reviews = PORTAL_REVIEWS_DEFAULT,
   feedbackEnabled = true,
+  languages,
 }: {
   loyaltyEnabled?: boolean
   /** Off = no loyalty entry on the portal at all, teaser included. */
@@ -57,8 +58,10 @@ export default function Portal({
   /** The owner's switch for the feedback box. Display only — the endpoint
    *  re-reads the same setting and refuses on its own. */
   feedbackEnabled?: boolean
+  /** Which languages the owner offers (/owner/languages). Absent = all three. */
+  languages?: Lang[]
 }) {
-  const [lang, setLang] = useLanguage()
+  const [lang, setLang] = useLanguage(languages)
   const router = useRouter()
   // Hidden staff/owner entry point — no visible link anywhere on this
   // customer-facing page. Five taps on the logo, each within 700ms of the
@@ -94,7 +97,7 @@ export default function Portal({
       <div className="app-bg" aria-hidden />
       <div className="app-scrim" aria-hidden />
 
-      <LanguageSwitch lang={lang} onChange={setLang} />
+      <LanguageSwitch lang={lang} onChange={setLang} languages={languages} />
 
       {/* The hero still owns exactly one screen, so the portal's first paint is
           unchanged and the review wall below becomes a deliberate scroll-down

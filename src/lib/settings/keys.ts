@@ -172,6 +172,26 @@ export const TABLE_CODE_CHANNEL = 'table_code_channel'
 export const CUSTOMER_FEEDBACK_ENABLED = 'customer_feedback_enabled'
 export const CUSTOMER_FEEDBACK_ENABLED_DEFAULT = true
 
+/** The 86 list: items and categories taken off the menu but kept, so they can
+ *  be brought back. Shape lives in lib/menu/archive.
+ *
+ *  PRIVATE (is_public stays false) — unlike almost every other row here. It
+ *  holds dishes the bar chose not to show, and nothing signed-out reads it;
+ *  only the menu-editor-gated route does, on the service role. Deliberately not
+ *  a column or a table: it needs no migration to work, so 86 is usable the
+ *  moment this ships. */
+export const MENU_86 = 'menu_86'
+
+/** Which languages the public portal and menu offer — `{ en: boolean, ar:
+ *  boolean }`; Hebrew is the base and cannot be turned off. Shape, defaults and
+ *  the rules for a remembered-but-disabled language live in
+ *  lib/settings/languages.
+ *
+ *  Public read (the signed-out portal and menu decide what to put in the
+ *  switcher). FAILS OPEN — both on — for the same reason MENU_CART_ENABLED does:
+ *  a settings-read blip must not strip a language a customer is reading in. */
+export const SITE_LANGUAGES = 'site_languages'
+
 export type PortalLinkKey = 'instagram' | 'facebook' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {

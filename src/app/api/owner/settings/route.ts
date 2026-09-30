@@ -9,8 +9,10 @@ import {
   OMS_NOTIFY_ALL_WAITERS, OMS_NOTIFY_ALL_WAITERS_DEFAULT,
   OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT,
   ACCESSIBILITY_STATEMENT, ACCESSIBILITY_STATEMENT_DEFAULT, type AccessibilityStatement,
+  SITE_LANGUAGES,
   SETTINGS_TAG,
 } from '@/lib/settings/keys'
+import { normalizeSiteLanguages } from '@/lib/settings/languages'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
 import { normalizeReviews, MAX_REVIEWS } from '@/lib/reviews/types'
 
@@ -26,7 +28,7 @@ export async function GET() {
   const { data, error } = await auth.service
     .from('app_settings')
     .select('key, value, updated_at')
-    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS, PORTAL_REVIEWS, OMS_NOTIFY_ALL_WAITERS, OMS_OVERALL_DEMO_MODE, ACCESSIBILITY_STATEMENT])
+    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS, PORTAL_REVIEWS, OMS_NOTIFY_ALL_WAITERS, OMS_OVERALL_DEMO_MODE, ACCESSIBILITY_STATEMENT, SITE_LANGUAGES])
 
   if (error) return NextResponse.json({ error: 'טעינת ההגדרות נכשלה' }, { status: 500 })
 
@@ -37,8 +39,11 @@ export async function GET() {
   const notifyAllRow = data?.find((r) => r.key === OMS_NOTIFY_ALL_WAITERS)
   const overallDemoRow = data?.find((r) => r.key === OMS_OVERALL_DEMO_MODE)
   const accessibilityRow = data?.find((r) => r.key === ACCESSIBILITY_STATEMENT)
+  const languagesRow = data?.find((r) => r.key === SITE_LANGUAGES)
 
   return NextResponse.json({
+    siteLanguages: normalizeSiteLanguages(languagesRow?.value),
+    siteLanguagesUpdatedAt: languagesRow?.updated_at ?? null,
     loyaltyEnabled: (loyaltyRow?.value as boolean | undefined) ?? LOYALTY_ENABLED_DEFAULT,
     loyaltyVisible: (visibleRow?.value as boolean | undefined) ?? LOYALTY_VISIBLE_DEFAULT,
     updatedAt: loyaltyRow?.updated_at ?? null,
@@ -60,7 +65,39 @@ export async function PATCH(request: NextRequest) {
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown; portalReviews?: unknown; omsNotifyAllWaiters?: unknown; omsOverallDemoMode?: unknown; accessibilityStatement?: unknown } | null
+    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown; portalReviews?: unknown; omsNotifyAllWaiters?: unknown; omsOverallDemoMode?: unknown; accessibilityStatement?: unknown; siteLanguages?: unknown } | null
+
+  if (body && 'siteLanguages' in body) {
+    const input = body.siteLanguages as Record<string, unknown> | null
+    // Both flags, both booleans — the card always sends the pair. Refusing a
+    // partial body means a bug elsewhere can't half-write the setting, and
+    // Hebrew has no flag at all: it is not switchable, so nothing to validate.
+    if (typeof input !== 'object' || input === null || typeof input.en !== 'boolean' || typeof input.ar !== 'boolean') {
+      return NextResponse.json({ error: 'ערך לא תקין' }, { status: 400 })
+    }
+
+    const { data, error } = await auth.service
+      .from('app_settings')
+      .upsert({
+        key: SITE_LANGUAGES,
+        value: { en: input.en, ar: input.ar },
+        is_public: true, // the signed-out portal and menu decide what the switcher offers
+        updated_at: new Date().toISOString(),
+        updated_by: auth.userId,
+      }, { onConflict: 'key' })
+      .select('value, updated_at')
+      .single()
+
+    if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
+
+    // The portal and menu read this through the tagged, cached settings fetch.
+    revalidateTag(SETTINGS_TAG)
+
+    return NextResponse.json({
+      siteLanguages: normalizeSiteLanguages(data.value),
+      updatedAt: data.updated_at,
+    })
+  }
 
   if (body && 'accessibilityStatement' in body) {
     const input = body.accessibilityStatement

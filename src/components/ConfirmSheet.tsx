@@ -17,6 +17,11 @@ export interface ConfirmRequest {
   /** Label of the destructive action, e.g. "הסרה". */
   confirmLabel: string
   onConfirm: () => void
+  /** `danger` (default, red) for things that can't be undone. `calm` for a
+   *  reversible action that still deserves a second look — red on "remove from
+   *  the menu (you can bring it back)" tells a non-technical owner they're
+   *  about to destroy something, and they stop tapping it. */
+  tone?: 'danger' | 'calm'
 }
 
 const CANCEL = 'ביטול'
@@ -97,7 +102,7 @@ export default function ConfirmSheet({
               style={{
                 width: '100%', padding: '15px 0', border: 'none',
                 borderTop: '1px solid var(--line-strong)', background: 'transparent',
-                color: '#ff6b6b', fontSize: '1rem', fontWeight: 700,
+                color: request.tone === 'calm' ? 'var(--neon-soft)' : '#ff6b6b', fontSize: '1rem', fontWeight: 700,
                 fontFamily: 'inherit', cursor: 'pointer',
               }}
             >

@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import {
-  LANGS, RTL, MENU_UI, loc, fmtPrice, applyResolvedVariant,
+  RTL, MENU_UI, loc, fmtPrice, applyResolvedVariant,
   type Lang, type MenuData, type MenuCategory, type MenuItem,
 } from '@/lib/menu/types'
 import { fetchMenuClient, fetchMenuStamp, fetchHappyHour } from '@/lib/menu/client'
 import { applyHappyHour, isHappyHourActive, type HappyHour, type DiscountedItem } from '@/lib/menu/variants'
 import LanguageSwitch from '@/components/LanguageSwitch'
+import { resolveLanguage } from '@/lib/settings/languages'
 import CartProvider, { type CartActionAvailability } from '@/components/cart/CartProvider'
 import CartFab from '@/components/cart/CartFab'
 import CartTutorial from '@/components/cart/CartTutorial'
@@ -24,9 +25,11 @@ const POLL_MS = 30_000
  *  is mounted, so a disabled cart costs a customer nothing — not a provider,
  *  not a stylesheet's worth of layout, not a localStorage read. */
 export default function MenuView({
-  initial, cartEnabled = false, cartActions = { ordering: false, call: false }, feedbackEnabled = true,
+  initial, cartEnabled = false, cartActions = { ordering: false, call: false }, feedbackEnabled = true, languages,
 }: {
   initial: MenuData | null
+  /** Which languages the owner offers (/owner/languages). Absent = all three. */
+  languages?: Lang[]
   cartEnabled?: boolean
   cartActions?: CartActionAvailability
   /** The owner's switch for the feedback box — same prop the portal takes.
@@ -44,11 +47,12 @@ export default function MenuView({
   const chipsRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef<HTMLDivElement>(null)
 
-  // Restore saved language, sync <html> dir/lang.
+  // Restore saved language, sync <html> dir/lang. A saved language the owner
+  // has since switched off shows as Hebrew and stays saved — see
+  // resolveLanguage — so switching it back on restores the visitor's choice.
   useEffect(() => {
-    const saved = localStorage.getItem('siteLanguage')
-    if (saved && (LANGS as string[]).includes(saved)) setLang(saved as Lang)
-  }, [])
+    setLang(resolveLanguage(localStorage.getItem('siteLanguage'), languages))
+  }, [languages])
   useEffect(() => {
     document.documentElement.lang = lang
     document.documentElement.dir = RTL[lang] ? 'rtl' : 'ltr'
@@ -192,7 +196,7 @@ export default function MenuView({
             position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
             zIndex: 50, animationDelay: '20ms',
           }}>
-            <LanguageSwitch lang={lang} onChange={pickLang} variant="inline" />
+            <LanguageSwitch lang={lang} onChange={pickLang} variant="inline" languages={languages} />
           </div>
 
           <h1 className="menu-brand rise" style={{ animationDelay: '90ms' }}>{brand}</h1>
