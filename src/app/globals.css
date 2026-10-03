@@ -1253,14 +1253,41 @@ html[dir="rtl"] .menu-page .item-name { clip-path: inset(0 0 0 100%); }
   font-weight: 800;
   font-size: 0.95rem;
   text-decoration: none;
-  /* Off-screen rather than display:none — a hidden element cannot be
-     focused, and this one has to be reachable by Tab. */
+  /* HIDDEN = INVISIBLE, not merely moved away (2026-10-03). It used to hide by
+     sliding to translateY(-160%) — above the top edge of the page — which is
+     off-screen in a desktop browser and NOT on a recent iPhone: Safari draws the
+     page underneath its translucent status bar, so a link parked above the
+     viewport showed through there as an orange pill under the clock and
+     battery, where a tap goes to the system instead of the page. (Reported by
+     the owner from a phone; it was never focused, just peeking out.)
+     `opacity: 0` makes it render nowhere, and — unlike display:none or
+     visibility:hidden — leaves it focusable and in the accessibility tree, so
+     Tab and screen readers still reach it. pointer-events:none so the invisible
+     link can never catch a tap. */
+  opacity: 0;
+  pointer-events: none;
   transform: translateY(-160%);
-  transition: transform .18s var(--ease);
+  transition: transform .18s var(--ease), opacity .12s linear;
 }
-.skip-link:focus-visible,
+/* Revealed by FOCUS… */
 .skip-link:focus {
+  opacity: 1;
+  pointer-events: auto;
   transform: translateY(0);
+}
+/* …but not by focus that is not a keyboard's: a script moving focus here, or a
+   tap landing on it, must not make it appear. (Where :focus-visible is unknown
+   this whole rule is dropped and plain :focus reveals it, as before.) */
+.skip-link:focus:not(:focus-visible) {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-160%);
+}
+/* On a touch device the very top of the screen is the status bar / notch /
+   Dynamic Island — a link revealed there (an external keyboard on a phone or
+   iPad) could not be tapped. Park it below that. */
+@media (pointer: coarse) {
+  .skip-link { top: calc(env(safe-area-inset-top, 0px) + 64px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .skip-link { transition: none; }

@@ -17,6 +17,12 @@
 //   that regresses a ratio fails this script instead of waiting for the
 //   next live audit to notice.
 //
+//   One section near the bottom is not a ratio but a structural contract: the
+//   skip link's hidden state (invisible + inert, revealed only by keyboard
+//   focus). It is here because it is the same file's concern — the skip link's
+//   colours are already pinned above — and because the bug it guards was a
+//   real owner-reported one (an orange pill under an iPhone's status bar).
+//
 // WHAT IT DOES NOT COVER
 //   Contrast is a per-pixel property of the rendered page, not of a token in
 //   isolation — a token used against a *different* background than the ones
@@ -172,6 +178,58 @@ check(`TABLE_COLOUR ${tableColourMatch[1]} on --bg`, contrast(tableColourMatch[1
 for (const colour of dinerColours) {
   check(`DINER_COLOURS ${colour} on --bg`, contrast(colour, bgValue), 3.0)
 }
+
+// ── the skip link's hidden state (not a ratio — a structural contract) ─────
+//
+// 2026-10-03: the skip link hid by sliding to translateY(-160%), above the top
+// edge of the page. That is off-screen in a desktop browser and NOT on a recent
+// iPhone, where Safari draws the page beneath its translucent status bar — so a
+// never-focused link showed as an orange pill under the clock, untappable. The
+// fix is that HIDDEN means INVISIBLE (opacity 0) and INERT (pointer-events none),
+// while staying focusable and in the accessibility tree. These checks pin that
+// rule so a future "tidy-up" of the skip link cannot quietly bring the bug back.
+console.log('\nSkip link — hidden means invisible and inert, revealed only by keyboard focus')
+
+function checkTrue(desc, ok) {
+  if (ok) {
+    console.log(`  ✓ ${desc}`)
+    pass++
+  } else {
+    failures.push(desc)
+  }
+}
+
+// The declaration block for an EXACT selector (so `.skip-link` does not also
+// match `.skip-link:focus`), or null.
+function cssRule(selector) {
+  const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const m = globalsCss.match(new RegExp(`(?:^|\\})\\s*${esc}\\s*\\{([^}]*)\\}`, 'm'))
+  return m ? m[1] : null
+}
+const decl = (body, prop, value) =>
+  new RegExp(`(?:^|[;\\s])${prop}\\s*:\\s*${value}\\s*(?:;|$)`).test(body)
+
+const skipBase = cssRule('.skip-link')
+const skipFocus = cssRule('.skip-link:focus')
+const skipFocusMouse = cssRule('.skip-link:focus:not(:focus-visible)')
+if (!skipBase || !skipFocus || !skipFocusMouse) {
+  throw new Error('could not find the .skip-link rules in globals.css — did they get renamed or restructured?')
+}
+// The base rule has comments between declarations; strip them before matching.
+const baseDecls = skipBase.replace(/\/\*[\s\S]*?\*\//g, '')
+
+checkTrue('hidden skip link is opacity: 0 — invisible even where the page draws under a status bar',
+  decl(baseDecls, 'opacity', '0'))
+checkTrue('hidden skip link is pointer-events: none — an invisible link can never catch a tap',
+  decl(baseDecls, 'pointer-events', 'none'))
+checkTrue('hidden skip link is NOT display:none / visibility:hidden — it must stay focusable and in the accessibility tree',
+  !/display\s*:\s*none/.test(baseDecls) && !/visibility\s*:\s*hidden/.test(baseDecls))
+checkTrue('keyboard focus reveals it (:focus → opacity 1, pointer-events auto, translateY(0))',
+  decl(skipFocus, 'opacity', '1') && decl(skipFocus, 'pointer-events', 'auto') && /translateY\(0\)/.test(skipFocus))
+checkTrue('focus that is not a keyboard\'s (:focus:not(:focus-visible)) re-hides it',
+  decl(skipFocusMouse, 'opacity', '0') && decl(skipFocusMouse, 'pointer-events', 'none'))
+checkTrue('on a touch device it is parked below the status bar (@media (pointer: coarse) + safe-area-inset-top)',
+  /@media\s*\(pointer:\s*coarse\)\s*\{[^}]*\.skip-link\s*\{[^}]*safe-area-inset-top/.test(globalsCss))
 
 // ── report ─────────────────────────────────────────────────────────────
 
