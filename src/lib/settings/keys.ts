@@ -192,6 +192,26 @@ export const MENU_86 = 'menu_86'
  *  a settings-read blip must not strip a language a customer is reading in. */
 export const SITE_LANGUAGES = 'site_languages'
 
+/** The portal's intro screen (src/components/intro, BLUEPRINT §4.15) — the
+ *  dark opening with the coin and the two lines of copy. The owner's on/off:
+ *  "let the owner be able to switch the intro on and off in their dashboard"
+ *  (2026-10-03). Lives at /owner/intro.
+ *
+ *  DEFAULTS TO **ON** and FAILS OPEN, same posture as MENU_CART_ENABLED and
+ *  SITE_LANGUAGES, for the same reason: it is a decoration the owner asked for,
+ *  with no data path behind it, so a settings-read blip must not silently
+ *  remove it. Only an explicit `false` turns it off (normalizeIntroEnabled in
+ *  lib/intro/config — a hand-edited row can't switch it off by accident).
+ *  And the read itself is time-boxed (IntroGate): the intro is a layer on top
+ *  of EVERY page, so its switch must never be the reason a page is slow.
+ *
+ *  Public read (the signed-out portal's own HTML decides whether the overlay
+ *  exists). No migration: the owner API upserts the row with is_public=true on
+ *  the first flip, exactly as site_languages does — until then the missing row
+ *  simply reads as the default, ON. */
+export const INTRO_ENABLED = 'intro_enabled'
+export const INTRO_ENABLED_DEFAULT = true
+
 export type PortalLinkKey = 'instagram' | 'facebook' | 'review' | 'gmaps' | 'waze' | 'amaps'
 
 export const PORTAL_LINKS_DEFAULT: Record<PortalLinkKey, string> = {

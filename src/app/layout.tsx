@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import PageTransitions from '@/components/PageTransitions'
+import IntroGate from '@/components/intro/IntroGate'
 import { A11yWidget } from 'a11y-widget'
 
 export const metadata: Metadata = {
@@ -38,6 +39,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             anything filtered has to sit OUTSIDE the widget's own portalled
             UI, not wrap it. */}
         <div id="a11y-scope">{children}</div>
+        {/* The portal's intro (2026-10-03). A SIBLING of #a11y-scope, never
+            inside it, and not under template.tsx either: both of those can be
+            the containing block for `position: fixed`, which would size the
+            overlay to the page instead of the screen. In the layout it is also
+            in the server-rendered HTML, so it covers the portal from the very
+            first frame, and it plays once per document load (a layout survives
+            client navigation) — on `/` only, see lib/intro/config.ts.
+            <IntroGate> is the owner's on/off switch (/owner/intro): it reads
+            the setting on the server and renders the overlay only when it is
+            on, time-boxed so a slow settings read can never slow a page. */}
+        <IntroGate />
         {/* The shared accessibility widget (github.com/unixecho/a11y-widget)
             — extracted 2026-09-24 from this file's own former in-house build
             (src/components/a11y, src/lib/a11y) once Sarcafe-Portal's

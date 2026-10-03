@@ -55,6 +55,9 @@ export const OP_ONLY_PREFIXES = [
   // Which languages the public site offers. A site-wide switch, so OP only,
   // like the portal links it sits beside.
   '/owner/languages',
+  // The portal's opening screen on/off (and its previews). The front door's
+  // appearance — OP only, like the other portal-wide settings above.
+  '/owner/intro',
   // Unsolicited free text from the public, sometimes carrying a contact
   // address. OP only — being trusted with the MENU has never implied being
   // handed customer correspondence, so this deliberately does NOT follow the

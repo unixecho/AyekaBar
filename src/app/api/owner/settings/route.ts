@@ -10,9 +10,11 @@ import {
   OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT,
   ACCESSIBILITY_STATEMENT, ACCESSIBILITY_STATEMENT_DEFAULT, type AccessibilityStatement,
   SITE_LANGUAGES,
+  INTRO_ENABLED, INTRO_ENABLED_DEFAULT,
   SETTINGS_TAG,
 } from '@/lib/settings/keys'
 import { normalizeSiteLanguages } from '@/lib/settings/languages'
+import { normalizeIntroEnabled } from '@/lib/intro/config'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
 import { normalizeReviews, MAX_REVIEWS } from '@/lib/reviews/types'
 
@@ -28,7 +30,7 @@ export async function GET() {
   const { data, error } = await auth.service
     .from('app_settings')
     .select('key, value, updated_at')
-    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS, PORTAL_REVIEWS, OMS_NOTIFY_ALL_WAITERS, OMS_OVERALL_DEMO_MODE, ACCESSIBILITY_STATEMENT, SITE_LANGUAGES])
+    .in('key', [LOYALTY_ENABLED, LOYALTY_VISIBLE, PORTAL_LINKS, PORTAL_REVIEWS, OMS_NOTIFY_ALL_WAITERS, OMS_OVERALL_DEMO_MODE, ACCESSIBILITY_STATEMENT, SITE_LANGUAGES, INTRO_ENABLED])
 
   if (error) return NextResponse.json({ error: 'טעינת ההגדרות נכשלה' }, { status: 500 })
 
@@ -40,10 +42,13 @@ export async function GET() {
   const overallDemoRow = data?.find((r) => r.key === OMS_OVERALL_DEMO_MODE)
   const accessibilityRow = data?.find((r) => r.key === ACCESSIBILITY_STATEMENT)
   const languagesRow = data?.find((r) => r.key === SITE_LANGUAGES)
+  const introRow = data?.find((r) => r.key === INTRO_ENABLED)
 
   return NextResponse.json({
     siteLanguages: normalizeSiteLanguages(languagesRow?.value),
     siteLanguagesUpdatedAt: languagesRow?.updated_at ?? null,
+    introEnabled: introRow ? normalizeIntroEnabled(introRow.value) : INTRO_ENABLED_DEFAULT,
+    introEnabledUpdatedAt: introRow?.updated_at ?? null,
     loyaltyEnabled: (loyaltyRow?.value as boolean | undefined) ?? LOYALTY_ENABLED_DEFAULT,
     loyaltyVisible: (visibleRow?.value as boolean | undefined) ?? LOYALTY_VISIBLE_DEFAULT,
     updatedAt: loyaltyRow?.updated_at ?? null,
@@ -65,7 +70,44 @@ export async function PATCH(request: NextRequest) {
   if (!auth.ok) return auth.res
 
   const body = await request.json().catch(() => null) as
-    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown; portalReviews?: unknown; omsNotifyAllWaiters?: unknown; omsOverallDemoMode?: unknown; accessibilityStatement?: unknown; siteLanguages?: unknown } | null
+    { loyaltyEnabled?: unknown; loyaltyVisible?: unknown; portalLinks?: unknown; portalReviews?: unknown; omsNotifyAllWaiters?: unknown; omsOverallDemoMode?: unknown; accessibilityStatement?: unknown; siteLanguages?: unknown; introEnabled?: unknown } | null
+
+  if (body && 'introEnabled' in body) {
+    // A bare boolean or nothing: a bug elsewhere must not be able to write
+    // something the reader would have to interpret (the reader treats only an
+    // explicit false as off — see normalizeIntroEnabled).
+    if (typeof body.introEnabled !== 'boolean') {
+      return NextResponse.json({ error: 'ערך לא תקין' }, { status: 400 })
+    }
+
+    const { data, error } = await auth.service
+      .from('app_settings')
+      .upsert({
+        key: INTRO_ENABLED,
+        value: body.introEnabled,
+        // The signed-out portal's own HTML decides whether the overlay exists,
+        // so the anon read has to see this row. Creating it public HERE is what
+        // makes the switch work with no migration; if it were ever created
+        // private, the portal would silently ignore the owner's "off".
+        is_public: true,
+        updated_at: new Date().toISOString(),
+        updated_by: auth.userId,
+      }, { onConflict: 'key' })
+      .select('value, updated_at')
+      .single()
+
+    if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
+
+    // Every page renders the intro's gate through the root layout, and reads
+    // this through the tagged, cached settings fetch — bust it, so the next
+    // load of any page reflects the flip.
+    revalidateTag(SETTINGS_TAG)
+
+    return NextResponse.json({
+      introEnabled: normalizeIntroEnabled(data.value),
+      updatedAt: data.updated_at,
+    })
+  }
 
   if (body && 'siteLanguages' in body) {
     const input = body.siteLanguages as Record<string, unknown> | null

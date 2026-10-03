@@ -105,7 +105,9 @@ export default async function OwnerDashboardPage() {
       {/* 4. Everything else. Eight tiles before this rebuild, ten as of
           2026-09-01, eleven as of 2026-09-29 (שפות האתר — which of English and
           Arabic the public site offers; a set-and-forget switch, so it lives
-          one tap away like the portal links rather than on this screen).
+          one tap away like the portal links rather than on this screen),
+          twelve as of 2026-10-03 (מסך פתיחה — the portal's opening screen,
+          on/off, with a preview of each of its two versions; same reasoning).
           The accessibility statement joined the grid rather
           than staying signal-only, because once its required fields are
           filled the dashboard signal correctly disappears ("no empty
@@ -144,6 +146,10 @@ export default async function OwnerDashboardPage() {
         <Link href="/owner/languages" style={navCard}>
           <span style={{ fontSize: '1.3rem' }} aria-hidden>🌐</span>
           <span>שפות האתר</span>
+        </Link>
+        <Link href="/owner/intro" style={navCard}>
+          <span style={{ fontSize: '1.3rem' }} aria-hidden>🎬</span>
+          <span>מסך פתיחה</span>
         </Link>
         <Link href="/owner/reports" style={navCard}>
           <span style={{ fontSize: '1.3rem' }} aria-hidden>🧮</span>

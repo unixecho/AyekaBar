@@ -10,9 +10,11 @@ import {
   WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT,
   CUSTOMER_FEEDBACK_ENABLED, CUSTOMER_FEEDBACK_ENABLED_DEFAULT,
   SITE_LANGUAGES,
+  INTRO_ENABLED, INTRO_ENABLED_DEFAULT,
   SETTINGS_TAG,
 } from './keys'
 import { SITE_LANGUAGES_DEFAULT, enabledLanguages, normalizeSiteLanguages, type SiteLanguages } from './languages'
+import { normalizeIntroEnabled } from '@/lib/intro/config'
 import type { Lang } from '@/lib/menu/types'
 import { PORTAL_REVIEWS_DEFAULT } from '@/lib/reviews/seed'
 import { normalizeReviews, type PortalReviewsBlock } from '@/lib/reviews/types'
@@ -88,6 +90,14 @@ export async function getCartActionFlags(): Promise<{ ordering: boolean; call: b
  *  CUSTOMER_FEEDBACK_ENABLED for why this one fails open. */
 export function getCustomerFeedbackEnabled(): Promise<boolean> {
   return readSetting<boolean>(CUSTOMER_FEEDBACK_ENABLED, CUSTOMER_FEEDBACK_ENABLED_DEFAULT)
+}
+
+/** Does the portal play its intro? Read by the root layout on EVERY page render
+ *  (through components/intro/IntroGate, which also time-boxes it), so it must
+ *  stay cheap: it is the same tagged, cached fetch as every other switch here.
+ *  See INTRO_ENABLED for why it defaults to ON and fails open. */
+export async function getIntroEnabled(): Promise<boolean> {
+  return normalizeIntroEnabled(await readSetting<unknown>(INTRO_ENABLED, INTRO_ENABLED_DEFAULT))
 }
 
 /** The owner's on/off for English and Arabic, as stored. */
