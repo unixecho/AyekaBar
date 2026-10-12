@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import type { ShiftStatusData } from '@/lib/owner/shift-status'
-import { fmtDuration } from '@/lib/shifts/time'
+import { fmtDuration } from '@/lib/shifts/legacy-clock'
 
 // "the dashboard should have a container for shift that gives stats on last
 // shift and notifies you when the new shift will start," 2026-08-30.

@@ -6,6 +6,8 @@ import { splitName } from '@/lib/staff/name'
 import OwnerHeader from '@/components/OwnerHeader'
 import DashboardLive from '@/components/DashboardLive'
 import SignOutButton from '@/components/SignOutButton'
+import StaffPushCard from '@/components/staff/StaffPushCard'
+import DevPushPanel from '@/components/staff/DevPushPanel'
 import { readDashboardSignals, OVERALL_DEMO_SIGNAL_ID } from '@/lib/owner/signals'
 import { readDashboardDetails } from '@/lib/owner/signal-details'
 import { readShiftStatus } from '@/lib/owner/shift-status'
@@ -102,6 +104,11 @@ export default async function OwnerDashboardPage() {
         initialOverallDemoMode={overallDemoMode} initialShiftStatus={shiftStatus}
       />
 
+      {/* Phone alerts for the owner too: a colleague asking for a shift, a request or swap waiting for a decision. */}
+      <div className="rise" style={{ animationDelay: '120ms', marginTop: 14 }}>
+        <StaffPushCard variant="home" />
+      </div>
+
       {/* 4. Everything else. Eight tiles before this rebuild, ten as of
           2026-09-01, eleven as of 2026-09-29 (שפות האתר — which of English and
           Arabic the public site offers; a set-and-forget switch, so it lives
@@ -168,6 +175,9 @@ export default async function OwnerDashboardPage() {
           <span>יומן שינויים</span>
         </Link>
       </div>
+
+      {/* The owner's push test bench: sends real alerts to this owner only and shows what the server sees. */}
+      <DevPushPanel />
     </main>
   )
 }

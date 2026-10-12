@@ -6,6 +6,7 @@ import { badgeMeta } from '@/lib/staff/badges'
 import { canEditMenu } from '@/lib/staff/access'
 import QRDisplay from '@/components/QRDisplay'
 import SignOutButton from '@/components/SignOutButton'
+import StaffPushCard from '@/components/staff/StaffPushCard'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'אזור הצוות · אייכה בר' }
@@ -88,6 +89,13 @@ export default async function StaffDashboardPage() {
             </p>
           </div>
         )}
+
+        {/* Alerts on the phone: shift changes, a reminder before a shift, colleagues giving shifts away.
+            The card asks first and only then triggers the browser's one-shot permission dialog; on an
+            iPhone in a plain tab it shows the home-screen steps instead. */}
+        <div className="rise" style={{ animationDelay: '205ms', textAlign: 'start' }}>
+          <StaffPushCard variant="home" />
+        </div>
 
         {/* Every staff member reaches their own published shifts from here.
             Unlike the editor link below it, this one is not gated: the whole

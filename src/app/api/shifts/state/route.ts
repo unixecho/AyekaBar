@@ -1,29 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { requireScheduleApi } from '@/lib/shifts/guard'
+import { NextResponse, type NextRequest } from 'next/server'
+import { apiRoute, BadRequest, NotFound } from '@/lib/http/errors'
+import { getActiveVenue, requirePublishedScheduleViewer } from '@/lib/shifts/guard'
+import { createServiceClient } from '@/lib/supabase/server'
+import { canDelegateSchedule, canManageSchedule } from '@/lib/shifts/access'
 import { loadShiftsState } from '@/lib/shifts/state-query'
 
-// The manager AND staff read, in one route — RLS narrows the response per
-// caller (see state-query.ts's header), so this route does not branch on
-// `auth.isManager` at all. `?week=YYYY-MM-DD` selects the 3-week window
-// (that week, the one before, the one after) returned in the response; see
-// SupabaseShiftsSource in supabase-source.ts for the client that calls this.
+const WEEK_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
-export async function GET(request: NextRequest) {
-  const auth = await requireScheduleApi()
-  if (!auth.ok) return auth.res
+// The single read endpoint for both the manager and the staff views — the narrowing that RLS would
+// otherwise do happens inside loadShiftsState() based on isManager, not by having two routes.
+// Never cached: a schedule is only useful if it is current.
+export const dynamic = 'force-dynamic'
 
-  const weekStart = request.nextUrl.searchParams.get('week')
-  if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
-    return NextResponse.json({ error: 'missing or invalid ?week=YYYY-MM-DD' }, { status: 400 })
-  }
+export const GET = apiRoute(async (request: NextRequest) => {
+  const week = request.nextUrl.searchParams.get('week')
+  if (!week || !WEEK_PATTERN.test(week)) throw BadRequest('Invalid or missing week.')
 
-  try {
-    const db = await loadShiftsState(auth.auth.supabase, auth.auth.venueId, weekStart)
-    return NextResponse.json(db)
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'load failed' },
-      { status: 500 },
-    )
-  }
-}
+  const venue = await getActiveVenue()
+  if (!venue) throw NotFound('Venue not found.')
+  const viewer = await requirePublishedScheduleViewer(venue.id)
+
+  const { data: settings } = await createServiceClient().from('shift_settings').select('schedule_managers').eq('venue_id', venue.id).maybeSingle()
+  const scheduleManagers = (settings?.schedule_managers as string[]) ?? []
+  const isManager = canManageSchedule(viewer, scheduleManagers)
+  const canDelegate = canDelegateSchedule(viewer)
+
+  const db = await loadShiftsState(venue.id, week, viewer, isManager, canDelegate)
+  return NextResponse.json({ db }, { headers: { 'Cache-Control': 'no-store' } })
+})

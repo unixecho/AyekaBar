@@ -1,41 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { requireScheduleApi } from '@/lib/shifts/guard'
+import { NextResponse, type NextRequest } from 'next/server'
+import { z } from 'zod'
+import { apiRoute, BadRequest, NotFound } from '@/lib/http/errors'
 import { performDispatch } from '@/lib/shifts/dispatch-write'
+import { getActiveVenue } from '@/lib/shifts/guard'
 
-// A dedicated write for StaffManager.tsx on /owner/dashboard — the one
-// caller in this module that needs to write a schedule_members row but has
-// no <ShiftsProvider> and no week in view, so it cannot go through
-// `/api/shifts/dispatch` the way every schedule surface does (that route
-// always re-reads the 3-week window afterward, which StaffManager has
-// nowhere to put). This route performs the exact same `member.update`
-// action through the exact same `performDispatch()` — one write path, not
-// two — and simply skips the re-read.
-//
-// Authorization is the same story as everywhere else in this module: RLS
-// (via the set_schedule_member() RPC's own is_schedule_manager() check) is
-// the real gate, not a JS branch here.
+// A dedicated write for the staff list on /owner/dashboard (StaffManager): it flips one person's
+// "on the schedule" switch and has no <ShiftsProvider> and no week in view, so it cannot go through
+// /api/shifts/dispatch's draft flow. It performs the exact same `setMember` action through the exact
+// same performDispatch() — one write path, not two — so the guard, the database function and the
+// audit row are the ones every schedule screen uses.
+const body = z.object({ staffId: z.string().uuid(), schedulable: z.boolean() }).strict()
 
-export async function POST(request: NextRequest) {
-  const auth = await requireScheduleApi()
-  if (!auth.ok) return auth.res
+export const dynamic = 'force-dynamic'
 
-  const body = await request.json().catch(() => null) as
-    { staffId?: string; schedulable?: boolean } | null
-  if (!body?.staffId || typeof body.schedulable !== 'boolean') {
-    return NextResponse.json({ error: 'missing staffId or schedulable' }, { status: 400 })
-  }
-
-  try {
-    await performDispatch(
-      auth.auth.supabase,
-      { venueId: auth.auth.venueId, userId: auth.auth.userId, staffId: auth.auth.staffId },
-      { type: 'member.update', staffId: body.staffId, patch: { schedulable: body.schedulable } },
-    )
-    return NextResponse.json({ ok: true })
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'update failed' },
-      { status: 400 },
-    )
-  }
-}
+export const POST = apiRoute(async (request: NextRequest) => {
+  const input = body.parse(await request.json().catch(() => null))
+  const venue = await getActiveVenue()
+  if (!venue) throw NotFound('Venue not found.')
+  if (!input.staffId) throw BadRequest()
+  await performDispatch({ type: 'setMember', venueId: venue.id, staffId: input.staffId, patch: { schedulable: input.schedulable } })
+  return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
+})

@@ -1,0 +1,18 @@
+{
+  "id": "/staff-app",
+  "name": "אייכה בר · צוות",
+  "short_name": "אייכה",
+  "description": "משמרות, בקשות והתראות לצוות אייכה בר",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/staff",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "icons": [
+    { "src": "/assets/staff-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/staff-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

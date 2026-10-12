@@ -1,51 +1,48 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { requireScheduleApi } from '@/lib/shifts/guard'
+import { NextResponse, type NextRequest } from 'next/server'
+import { apiRoute, ApiError } from '@/lib/http/errors'
+import { flushStaffPush } from '@/lib/push/staff'
+import { afterResponse } from '@/lib/server/after'
 import { performDispatch } from '@/lib/shifts/dispatch-write'
-import { loadShiftsState } from '@/lib/shifts/state-query'
-import type { ScheduleAction } from '@/lib/shifts/store'
+import { parseAction } from '@/lib/shifts/schema'
+import { createServiceClient } from '@/lib/supabase/server'
+import { serializeAssignment, serializeShift } from '@/lib/shifts/serialize'
 
-// One `ScheduleAction` in, the fresh windowed `ShiftsDB` back out — a
-// re-read of what actually landed in Postgres, not an optimistic merge of
-// the action onto the client's prior state. Slightly more latency than
-// optimistic updates, considerably fewer ways for the UI to drift from what
-// the database actually holds, which for a shared draft several people can
-// edit is the trade worth making. `weekStart` in the body is the window to
-// re-fetch afterward — it is NOT necessarily the action's own week (an
-// assignment.delete carries no week at all), so the caller (supabase-source.ts)
-// resolves it and sends it explicitly.
+// The single write endpoint — one action in, performDispatch() resolves which venue it touches and
+// authorizes it (requireScheduleManager()/requireScheduleViewer(), per-action — see dispatch-write.ts),
+// then calls ONE database function that applies it atomically. The body is validated against a strict
+// per-action schema (lib/shifts/schema.ts): an unknown field, a malformed id/date/time or an oversized
+// list is a 400 here, before anything is read or written.
 //
-// Authorization is RLS, not a branch here on `auth.isManager` — see
-// dispatch-write.ts's header. A write a non-manager isn't allowed to make
-// fails in Postgres with 42501 and surfaces below as a 400.
+// Errors come back as { error: { code, message, details } } with a plain-Hebrew message a screen can
+// show as-is, and details.reason for the few screens that react to a specific refusal
+// (needs_confirmation, conflict, stale).
+export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
-  const auth = await requireScheduleApi()
-  if (!auth.ok) return auth.res
-
-  const body = await request.json().catch(() => null) as
-    { action?: ScheduleAction; weekStart?: string } | null
-  const action = body?.action
-  const weekStart = body?.weekStart
-
-  if (!action || typeof action.type !== 'string') {
-    return NextResponse.json({ error: 'missing action' }, { status: 400 })
-  }
-  if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
-    return NextResponse.json({ error: 'missing or invalid weekStart' }, { status: 400 })
-  }
-
+export const POST = apiRoute(async (request: NextRequest) => {
+  let body: unknown
   try {
-    await performDispatch(
-      auth.auth.supabase,
-      { venueId: auth.auth.venueId, userId: auth.auth.userId, staffId: auth.auth.staffId },
-      action,
-    )
-    const db = await loadShiftsState(auth.auth.supabase, auth.auth.venueId, weekStart)
-    return NextResponse.json(db)
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'dispatch failed' },
-      { status: 400 },
-    )
+    body = await request.json()
+  } catch {
+    throw new ApiError(400, 'bad_request', 'הבקשה לא תקינה. רעננו את הדף ונסו שוב.')
   }
-}
+  const action = parseAction(body)
+  const data = await performDispatch(action)
+  // Whatever this write put in people's inboxes (a swap request, a published week, an approval) is
+  // pushed to their phones now, after the response: a serverless function can be frozen once it is sent.
+  afterResponse(() => flushStaffPush())
+  // Saving a shift used to force the browser to make a second full-state request before it could close
+  // the sheet. Return the small authoritative slice that changed so the board can update immediately,
+  // then reconcile the rest of the state quietly in the background.
+  if (action.type === 'saveShift' && typeof data.shiftId === 'string') {
+    const service = createServiceClient()
+    const [{ data: shift }, { data: assignments }] = await Promise.all([
+      service.from('shifts').select('*').eq('id', data.shiftId).maybeSingle(),
+      service.from('shift_assignments').select('*').eq('shift_id', data.shiftId),
+    ])
+    if (shift) {
+      data.shift = serializeShift(shift as Record<string, unknown>)
+      data.assignments = (assignments ?? []).map((assignment) => serializeAssignment(assignment as Record<string, unknown>))
+    }
+  }
+  return NextResponse.json({ ok: true, data }, { headers: { 'Cache-Control': 'no-store' } })
+})

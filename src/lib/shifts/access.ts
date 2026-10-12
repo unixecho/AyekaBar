@@ -1,79 +1,48 @@
-// Who can do what with the schedule. Sits on top of lib/staff/access.ts rather
-// than beside it — the three existing levels (OP / menu editor / staff) are
-// unchanged, and this adds one more capability that borrows OP from them.
+// Authorization predicates for shift scheduling — the TS twin of the SQL functions
+// sched_can_manage / sched_can_view / sched_is_op (migration 052). Every predicate
+// here MUST stay in sync with its SQL counterpart, same discipline
+// lib/staff/access.ts documents for is_op() / is_menu_editor().
 //
-//   MANAGE SCHEDULE   OP
-//                     OR badge = 'general_manager'
-//                     OR staff.id listed in settings.scheduleManagers
+//   view      any active staff row — the team reads the published schedule
+//   manage    OP, or badge = 'general_manager', or someone the owner / GM
+//             delegated via shift_settings.schedule_managers[]
+//   delegate  deliberately narrower than manage: OP / general manager only, so a
+//             delegate can run the schedule but not widen who else may
 //
-// The third clause is the delegation Johnathan asked for: scheduling is the
-// general manager's job UNTIL it is explicitly handed to a shift manager. It is
-// a per-person, per-venue grant the manager panel toggles — not a badge rule,
-// because "אחראי/ת משמרת" is a job title several people hold and only some of
-// them should be drafting the week.
-//
-// WHY THE GRANT IS NOT A public.staff COLUMN
-// public.staff is shared: middleware, both guards, the waiter app's
-// is_staff_client() and the staff directory view all read it, and middleware
-// selects an explicit column list. Adding a column there means every one of
-// those has to learn about scheduling, and a `select('role, badge, …')` that
-// runs before the migration lands takes the whole owner panel down. Storing the
-// grant in the venue's own settings row keeps the blast radius inside this
-// module and makes the grant venue-scoped for free.
-//
-// MIRRORED IN SQL by `is_schedule_manager(venue)` in migration 027. Change both
-// together — `is_op()` and `isOp()` drifting apart is exactly the bug this
-// codebase already paid for once.
+// Why the delegation list lives in shift_settings and not on public.staff: staff is
+// shared (middleware, both guards, the waiter app's is_staff_client() all read it),
+// so a column there means every one of them has to learn about scheduling.
 
-import { isOp, type AccessRow } from '@/lib/staff/access'
-import type { ShiftSettings, Tri } from './types'
+import type { AccessRow } from '@/lib/staff/access'
+import { isOp } from '@/lib/staff/access'
 
-/** The staff row plus its schedule identity. `id` is `staff.id`. */
-export interface ScheduleAccessRow extends AccessRow {
-  id?: string | null
+export type ScheduleAccessRow = AccessRow & { id?: string | null }
+
+/** View: any staff row (the caller has already been resolved as an active person). */
+export function canViewSchedule(row: ScheduleAccessRow | null | undefined): boolean {
+  return !!row
 }
 
-/** May open the builder, edit settings, and publish a week. */
-export function canManageSchedule(
-  row: ScheduleAccessRow | null | undefined,
-  settings: Pick<ShiftSettings, 'scheduleManagers'> | null | undefined,
-): boolean {
+/** Manage: OP, general manager, or delegated via shift_settings.schedule_managers[]. */
+export function canManageSchedule(row: ScheduleAccessRow | null | undefined, scheduleManagers: readonly string[]): boolean {
   if (!row) return false
   if (isOp(row)) return true
   if (row.badge === 'general_manager') return true
-  return !!row.id && !!settings?.scheduleManagers?.includes(row.id)
+  return !!row.id && scheduleManagers.includes(row.id)
 }
 
-/** May hand scheduling rights to someone else. Deliberately narrower than
- *  managing: a delegate runs the schedule, they do not widen the circle. */
+/** Delegate: OP / general manager only. */
 export function canDelegateSchedule(row: ScheduleAccessRow | null | undefined): boolean {
   if (!row) return false
   return isOp(row) || row.badge === 'general_manager'
 }
 
-/** Anyone on the roster may read the PUBLISHED schedule. Drafts are invisible
- *  to them — that separation is enforced by what the data source returns, not
- *  by hiding UI. */
-export function canViewSchedule(row: ScheduleAccessRow | null | undefined): boolean {
-  return !!row
-}
-
-/** Route prefixes this module owns. Middleware imports these so the list lives
- *  in one place, the same way OP_ONLY_PREFIXES already does. */
+/** Route prefixes this module owns. Middleware imports these so the list lives in one place,
+ *  the same way OP_ONLY_PREFIXES already does. */
 export const SCHEDULE_MANAGER_PREFIX = '/owner/schedule'
 export const SCHEDULE_STAFF_PREFIX = '/staff/schedule'
 
-/** Both surfaces require a staff row at the middleware layer; the precise
- *  manage-vs-view split is re-checked server-side in the page, following the
- *  established "middleware is the first gate, not the only one" rule. */
+/** Both surfaces require a staff row at the middleware layer; the precise manage-vs-view split is
+ *  re-checked server-side in the page, following the established "middleware is the first gate,
+ *  not the only one" rule. */
 export const SCHEDULE_PREFIXES = [SCHEDULE_MANAGER_PREFIX, SCHEDULE_STAFF_PREFIX]
-
-export function scheduleAccessLabel(
-  row: ScheduleAccessRow,
-  settings: Pick<ShiftSettings, 'scheduleManagers'> | null,
-): { text: Tri; color: string } {
-  if (isOp(row)) return { text: { he: 'ניהול מלא', en: 'Full control', ar: 'تحكم كامل' }, color: '#ff8a5c' }
-  if (row.badge === 'general_manager') return { text: { he: 'ניהול סידור', en: 'Schedule manager', ar: 'إدارة الجدول' }, color: '#fb7185' }
-  if (canManageSchedule(row, settings)) return { text: { he: 'הרשאת סידור', en: 'Delegated', ar: 'مفوَّض' }, color: '#60a5fa' }
-  return { text: { he: 'צפייה', en: 'View only', ar: 'عرض فقط' }, color: '#a8a5b0' }
-}

@@ -1,132 +1,281 @@
-// Server-only. Assembles one `ShiftsDB` window from Supabase, using the
-// CALLER'S OWN session client — never service-role (see guard.ts's header for
-// why that matters here specifically). Shared by both `/api/shifts/state`
-// (GET) and `/api/shifts/dispatch` (POST, which re-runs this after a write so
-// the response is always a fresh read of what actually landed, not an
-// optimistic guess).
-//
-// THE WINDOW. `db.weeks`/`db.shifts`/`db.assignments`/`db.availability` cover
-// exactly three weeks — the one requested, and the ones immediately before
-// and after it. That is precisely what `neighbouringOf()` in store.ts ever
-// reads (cross-week rest checks look one week either side, never two), and
-// it is what every existing pure function in this module already expects —
-// nothing above this file needed to change to accept a windowed `ShiftsDB`
-// instead of the mock's everything-in-memory one. `db.published` is fetched
-// for the same three weeks. `db.staff` (the roster) and `db.settings` are
-// venue-wide and unwindowed — they are small, single rows/short lists, read
-// in full every time. `db.audit` and `db.swaps` are capped rather than
-// windowed by date, matching PLAN_SHIFTS.md Part II decision D10 ("not all
-// history").
+// Server-only read path. Runs on the SERVICE ROLE client (the caller was
+// already authorized by requirePublishedScheduleViewer()/requireScheduleManager()
+// in the route), so this must do by hand what RLS would otherwise enforce
+// for a non-manager: read published-only data from published_snapshot,
+// never the live schedule_weeks/shifts/shift_assignments rows, and scope
+// availability / swaps / requests / notifications to what that viewer is
+// actually allowed to see.
 
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { addDays } from './time'
+import { createServiceClient } from '@/lib/supabase/server'
+import type { StaffRow } from '@/lib/staff/session'
+import { addDays, durationMinutes, wallClockNow, weekStartOf } from './time'
 import {
-  rowToAssignment, rowToAudit, rowToAvailability, rowToPublishedWeek,
-  rowToRosterStaff, rowToSettings, rowToShift, rowToSwap, rowToVenue, rowToWeek,
+  serializeAssignment,
+  serializeAuditEntry,
+  serializeAvailability,
+  serializeNotification,
+  serializeRequest,
+  serializeRosterRow,
+  serializeSettings,
+  serializeShift,
+  serializeSwap,
+  serializeWeek,
 } from './serialize'
-import type { ShiftsDB } from './store'
-import type { ISODate } from './types'
+import { DEFAULT_PRESETS, DEFAULT_ROLES, DEFAULT_SAFETY, DEFAULT_STATIONS } from './config'
+import { syncShiftsToPresets } from './preset-sync'
+import type { Assignment, PlanningShift, SaturdayBalance, Shift, ShiftsDB } from './types'
 
-const AUDIT_LIMIT = 100
-const SWAP_LIMIT = 200
+const AUDIT_LIMIT = 60
+const HISTORY_LIMIT = 150
+const NOTIFICATION_LIMIT = 40
 
-function unwrap<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
-  if (res.error) throw new Error(`shifts state: ${what}: ${res.error.message}`)
-  return res.data as T
-}
+type Service = ReturnType<typeof createServiceClient>
 
 export async function loadShiftsState(
-  supabase: SupabaseClient, venueId: string, weekStart: ISODate,
+  venueId: string,
+  requestedWeekStart: string,
+  viewer: StaffRow,
+  isManager: boolean,
+  canDelegate: boolean
 ): Promise<ShiftsDB> {
-  const weekStarts = [addDays(weekStart, -7), weekStart, addDays(weekStart, 7)]
+  const service = createServiceClient()
+  const centerWeek = weekStartOf(requestedWeekStart)
+  const windowStarts = [addDays(centerWeek, -7), centerWeek, addDays(centerWeek, 7)]
 
-  const [venueRes, settingsRes, rosterRes, weeksRes, publishedRes, availabilityRes, swapsRes, auditRes] =
-    await Promise.all([
-      supabase.from('venues')
-        .select('id, slug, name, timezone, week_starts_on')
-        .eq('id', venueId).single(),
-      supabase.from('shift_settings')
-        .select('venue_id, working_days, open_time, close_time, day_hours, presets, roles, stations, safety, features, schedule_managers, rule_severity, onboarded_at')
-        .eq('venue_id', venueId).single(),
-      // Any signed-in staff member may read this (schedule_roster is not
-      // manager-gated — see migration 027's comment on it); RLS on the
-      // underlying tables is unaffected either way.
-      supabase.from('schedule_roster')
-        .select('staff_id, name, initial, colour, badge, role, pending, schedulable, default_role_id, max_weekly_hours, employment_type, sort_order, note')
-        .eq('venue_id', venueId).order('name'),
-      // Manager-only at the row level: a non-manager's session gets [] here,
-      // not an error — that IS the "draft invisible until published"
-      // guarantee (Part I decision D6), enforced by Postgres, not this file.
-      supabase.from('schedule_weeks')
-        .select('id, venue_id, week_start, status, version, published_at, published_by, day_notes, dismissed_warnings')
-        .eq('venue_id', venueId).in('week_start', weekStarts),
-      // Readable by anyone on staff — this is the ONLY schedule surface a
-      // non-manager sees populated.
-      supabase.from('published_schedule')
-        .select('id, venue_id, week_start, version, published_at, published_by, day_notes, published_snapshot')
-        .eq('venue_id', venueId).in('week_start', weekStarts),
-      // Each person's own rows, or every row for a manager (shift_availability
-      // policies) — RLS narrows this per caller.
-      supabase.from('shift_availability')
-        .select('id, venue_id, staff_id, week_start, entries, note, status, submitted_at')
-        .eq('venue_id', venueId).in('week_start', weekStarts),
-      // Not windowed by week — an open offer is addressed to the whole team
-      // regardless of which week is on screen, and any staff member may read
-      // the venue's swaps (shift_swaps_read policy). Capped, not unbounded.
-      supabase.from('shift_swaps')
-        .select('id, venue_id, assignment_id, from_staff_id, to_staff_id, status, reason, created_at, peer_responded_at, decided_at, decided_by, decision_note')
-        .eq('venue_id', venueId).order('created_at', { ascending: false }).limit(SWAP_LIMIT),
-      // Manager-only (shift_audit_read); [] for anyone else. Newest first,
-      // capped — full history paginates separately once that matters.
-      supabase.from('shift_audit')
-        .select('id, venue_id, at, actor_id, actor_name, action, summary, diff')
-        .eq('venue_id', venueId).order('at', { ascending: false }).limit(AUDIT_LIMIT),
-    ])
+  const settingsRow = await ensureSettingsRow(service, venueId)
+  const settings = serializeSettings(settingsRow)
+  // A venue with nothing customized yet starts from the app's own defaults
+  // rather than an empty catalog the owner has to build from scratch.
+  if (settings.roles.length === 0) settings.roles = DEFAULT_ROLES
+  if (settings.stations.length === 0) settings.stations = DEFAULT_STATIONS
+  if (settings.presets.length === 0) settings.presets = DEFAULT_PRESETS
+  if (!settingsRow.safety) settings.safety = DEFAULT_SAFETY
+  // Who may manage is the manager's business; it is not something to hand every employee.
+  if (!isManager) settings.scheduleManagers = []
 
-  const venue = unwrap(venueRes, 'venue')
-  const settings = unwrap(settingsRes, 'settings')
-  const roster = unwrap(rosterRes, 'roster')
-  const weeks = unwrap(weeksRes, 'weeks')
-  const published = unwrap(publishedRes, 'published')
-  const availability = unwrap(availabilityRes, 'availability')
-  const swaps = unwrap(swapsRes, 'swaps')
-  const audit = unwrap(auditRes, 'audit')
-
-  // Shifts/assignments depend on which weeks actually came back (empty for a
-  // non-manager — see above), so they run as a second round-trip rather than
-  // in the Promise.all above.
-  const weekIds = weeks.map((w) => w.id as string)
-  const shiftsRes = weekIds.length
-    ? await supabase.from('shifts')
-        .select('id, venue_id, week_id, shift_date, start_time, end_time, preset_id, station_id, requirements, note')
-        .in('week_id', weekIds)
-    : { data: [], error: null }
-  const shifts = unwrap(shiftsRes, 'shifts')
-
-  const shiftIds = shifts.map((s) => s.id as string)
-  const assignmentsRes = shiftIds.length
-    ? await supabase.from('shift_assignments')
-        .select('id, venue_id, shift_id, staff_id, staff_name, role_id, status')
-        .in('shift_id', shiftIds)
-    : { data: [], error: null }
-  const assignments = unwrap(assignmentsRes, 'assignments')
-
-  const publishedMap: ShiftsDB['published'] = {}
-  for (const row of published) {
-    const pw = rowToPublishedWeek(row)
-    publishedMap[pw.week.weekStart] = pw
+  const tz = await venueTimezone(service, venueId)
+  // The shift hours in settings are the truth: shifts made from a template follow it, before anything is read.
+  // A failure here must never take the schedule down — it simply retries on the next read.
+  try {
+    await syncShiftsToPresets(service, { venueId, presets: settings.presets, timezone: tz, actorId: isManager ? viewer.id : null })
+  } catch (error) {
+    console.error('shifts: syncing shift hours to the templates failed', error instanceof Error ? error.message : error)
   }
+  const roster = await loadRoster(service, isManager)
+
+  const [weeks, shifts, assignments] = isManager
+    ? await loadLive(service, venueId, windowStarts)
+    : await loadPublishedOnly(service, venueId, windowStarts)
+
+  const [availability, swaps, requests, notifications, audit, planningShifts, saturdayBalance] = await Promise.all([
+    settings.features.availability ? loadAvailability(service, venueId, windowStarts, viewer, isManager) : Promise.resolve([]),
+    settings.features.swaps ? loadSwaps(service, venueId, viewer, isManager) : Promise.resolve([]),
+    loadRequests(service, venueId, viewer, isManager),
+    loadNotifications(service, venueId, viewer),
+    isManager ? loadAudit(service, venueId) : Promise.resolve([]),
+    loadPlanningShifts(service, venueId, centerWeek),
+    isManager ? loadSaturdayBalance(service, venueId, centerWeek) : Promise.resolve([]),
+  ])
 
   return {
-    venue: rowToVenue(venue),
-    settings: rowToSettings(settings),
-    staff: roster.map(rowToRosterStaff),
-    weeks: weeks.map(rowToWeek),
-    shifts: shifts.map(rowToShift),
-    assignments: assignments.map(rowToAssignment),
-    published: publishedMap,
-    availability: availability.map(rowToAvailability),
-    swaps: swaps.map(rowToSwap),
-    audit: audit.map(rowToAudit),
+    venueId,
+    settings,
+    roster,
+    weeks,
+    shifts,
+    assignments,
+    availability,
+    swaps,
+    requests,
+    planningShifts,
+    saturdayBalance,
+    notifications: notifications.items,
+    unreadCount: notifications.unread,
+    audit,
+    now: wallClockNow(tz),
+    viewerStaffId: viewer.id,
+    viewerCanManage: isManager,
+    viewerCanDelegate: canDelegate,
   }
+}
+
+/** Only the shift menu is public to staff before publishing. Assignees and private notes stay private. */
+async function loadPlanningShifts(service: Service, venueId: string, centerWeek: string): Promise<PlanningShift[]> {
+  const { data } = await service.from('shifts')
+    .select('id, week_id, shift_date, start_time, end_time, preset_id, requests_open')
+    .eq('venue_id', venueId).gte('shift_date', centerWeek).lte('shift_date', addDays(centerWeek, 13))
+    .order('shift_date').order('start_time')
+  return (data ?? []).map((s) => ({ id: s.id, weekId: s.week_id, date: s.shift_date, startTime: s.start_time, endTime: s.end_time, presetId: s.preset_id, requestsOpen: s.requests_open === true }))
+}
+
+async function loadSaturdayBalance(service: Service, venueId: string, centerWeek: string): Promise<SaturdayBalance[]> {
+  const { data: weeks } = await service.from('schedule_weeks').select('id')
+    .eq('venue_id', venueId).eq('status', 'published').gte('week_start', addDays(centerWeek, -84)).lt('week_start', centerWeek)
+  if (!weeks?.length) return []
+  const { data: shifts } = await service.from('shifts').select('id, shift_date, start_time, end_time').in('week_id', weeks.map((w) => w.id))
+  const saturdays = (shifts ?? []).filter((s) => new Date(`${s.shift_date}T00:00:00Z`).getUTCDay() === 6)
+  if (!saturdays.length) return []
+  const byShift = new Map(saturdays.map((s) => [s.id, s]))
+  const { data: assignments } = await service.from('shift_assignments').select('shift_id, staff_id').in('shift_id', saturdays.map((s) => s.id))
+  const balance = new Map<string, SaturdayBalance>()
+  for (const a of assignments ?? []) {
+    const shift = byShift.get(a.shift_id)
+    if (!shift || !a.staff_id) continue
+    const item = balance.get(a.staff_id) ?? { staffId: a.staff_id, minutes: 0, shifts: 0 }
+    item.minutes += durationMinutes({ startTime: shift.start_time, endTime: shift.end_time })
+    item.shifts++
+    balance.set(a.staff_id, item)
+  }
+  return [...balance.values()]
+}
+
+async function ensureSettingsRow(service: Service, venueId: string): Promise<Record<string, unknown>> {
+  const { data } = await service.from('shift_settings').select('*').eq('venue_id', venueId).maybeSingle()
+  if (data) return data as Record<string, unknown>
+
+  // A venue created after the scheduling migration has no seeded row —
+  // create one on first access rather than requiring a manual backfill.
+  const { data: created } = await service
+    .from('shift_settings')
+    .upsert({ venue_id: venueId }, { onConflict: 'venue_id', ignoreDuplicates: true })
+    .select('*')
+    .maybeSingle()
+  if (created) return created as Record<string, unknown>
+  const { data: again } = await service.from('shift_settings').select('*').eq('venue_id', venueId).maybeSingle()
+  return (again as Record<string, unknown>) ?? { venue_id: venueId }
+}
+
+async function venueTimezone(service: Service, venueId: string): Promise<string> {
+  const { data } = await service.from('venues').select('timezone').eq('id', venueId).maybeSingle()
+  return (data?.timezone as string | undefined) || 'Asia/Jerusalem'
+}
+
+/**
+ * Everyone who can be (or has been) on the schedule, with a REAL name — resolved from display name /
+ * first+last / email (lib/shifts/names.ts), so a person without an email is never "unnamed".
+ *
+ * A manager also gets the inactive people (so a shift still held by someone who has left can be
+ * flagged); an employee gets only active colleagues, and only their names — never the manager's
+ * private notes or hour caps.
+ */
+async function loadRoster(service: Service, isManager: boolean) {
+  const [{ data: staffRows }, { data: memberRows }] = await Promise.all([
+    service.from('staff').select('id, display_name, first_name, last_name, email, badge, role, active, auth_user_id, colour'),
+    service.from('schedule_members').select('*'),
+  ])
+  const members = new Map((memberRows ?? []).map((m) => [m.staff_id as string, m as Record<string, unknown>]))
+  return (staffRows ?? [])
+    .filter((s) => isManager || s.active !== false)
+    .map((s) => serializeRosterRow(s as Record<string, unknown>, members.get(s.id as string), isManager))
+}
+
+async function loadLive(service: Service, venueId: string, windowStarts: string[]): Promise<[ShiftsDB['weeks'], Shift[], Assignment[]]> {
+  const { data: weekRows } = await service.from('schedule_weeks').select('*').eq('venue_id', venueId).in('week_start', windowStarts)
+
+  // A manager always gets all three window weeks back, even ones nobody
+  // has touched yet — the UI never has to special-case "this week doesn't
+  // exist in the database yet" before it can create a first shift.
+  const existingStarts = new Set((weekRows ?? []).map((w) => w.week_start as string))
+  const missing = windowStarts.filter((s) => !existingStarts.has(s))
+  let rows = weekRows ?? []
+  if (missing.length > 0) {
+    await service
+      .from('schedule_weeks')
+      .upsert(
+        missing.map((week_start) => ({ venue_id: venueId, week_start })),
+        { onConflict: 'venue_id,week_start', ignoreDuplicates: true }
+      )
+    const { data: refreshed } = await service.from('schedule_weeks').select('*').eq('venue_id', venueId).in('week_start', windowStarts)
+    rows = refreshed ?? []
+  }
+  const weeks = rows.map(serializeWeek).sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+  return loadShiftsAndAssignmentsFor(service, weeks)
+}
+
+async function loadShiftsAndAssignmentsFor(service: Service, weeks: ShiftsDB['weeks']): Promise<[ShiftsDB['weeks'], Shift[], Assignment[]]> {
+  const weekIds = weeks.map((w) => w.id)
+  if (weekIds.length === 0) return [weeks, [], []]
+
+  const { data: shiftRows } = await service.from('shifts').select('*').in('week_id', weekIds)
+  const shifts = (shiftRows ?? []).map(serializeShift)
+  const shiftIds = shifts.map((s) => s.id)
+  if (shiftIds.length === 0) return [weeks, shifts, []]
+
+  const { data: assignmentRows } = await service.from('shift_assignments').select('*').in('shift_id', shiftIds)
+  return [weeks, shifts, (assignmentRows ?? []).map(serializeAssignment)]
+}
+
+/** Staff never read the live tables — everything here comes out of each
+ *  published week's frozen snapshot, matching the RLS backstop exactly. */
+async function loadPublishedOnly(service: Service, venueId: string, windowStarts: string[]): Promise<[ShiftsDB['weeks'], Shift[], Assignment[]]> {
+  const { data: weekRows } = await service
+    .from('schedule_weeks')
+    .select('id, venue_id, week_start, status, version, published_at, day_notes, dismissed_warnings, published_snapshot')
+    .eq('venue_id', venueId)
+    .eq('status', 'published')
+    .in('week_start', windowStarts)
+
+  const weeks = (weekRows ?? []).map(serializeWeek).sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+  const shifts: Shift[] = []
+  const assignments: Assignment[] = []
+  for (const week of weeks) {
+    for (const raw of week.publishedSnapshot?.shifts ?? []) shifts.push(serializeShift(raw as unknown as Record<string, unknown>))
+    for (const raw of week.publishedSnapshot?.assignments ?? []) assignments.push(serializeAssignment(raw as unknown as Record<string, unknown>))
+  }
+  // The frozen copy is the employee's whole world: it is never sent back to them whole.
+  return [weeks.map((w) => ({ ...w, publishedSnapshot: null })), shifts, assignments]
+}
+
+async function loadAvailability(service: Service, venueId: string, windowStarts: string[], viewer: StaffRow, isManager: boolean) {
+  let query = service.from('shift_availability').select('*').eq('venue_id', venueId).in('week_start', [...windowStarts, addDays(windowStarts[2]!, 7)])
+  if (!isManager) query = query.eq('staff_id', viewer.id)
+  const { data } = await query
+  return (data ?? []).map(serializeAvailability)
+}
+
+/** A manager sees every swap of the venue. An employee sees their own (either
+ *  side) plus swaps open to anyone — and NOT a swap one colleague aimed at another. */
+async function loadSwaps(service: Service, venueId: string, viewer: StaffRow, isManager: boolean) {
+  let query = service.from('shift_swaps').select('*').eq('venue_id', venueId).order('created_at', { ascending: false }).limit(HISTORY_LIMIT)
+  if (!isManager) {
+    query = query.or(`from_staff_id.eq.${viewer.id},to_staff_id.eq.${viewer.id},and(status.eq.open,to_staff_id.is.null)`)
+  }
+  const { data } = await query
+  return (data ?? []).map(serializeSwap)
+}
+
+async function loadRequests(service: Service, venueId: string, viewer: StaffRow, isManager: boolean) {
+  let query = service.from('shift_requests').select('*').eq('venue_id', venueId).order('created_at', { ascending: false }).limit(HISTORY_LIMIT)
+  if (!isManager) query = query.eq('staff_id', viewer.id)
+  const { data } = await query
+  return (data ?? []).map(serializeRequest)
+}
+
+async function loadNotifications(service: Service, venueId: string, viewer: StaffRow) {
+  const [{ data }, { count }] = await Promise.all([
+    service
+      .from('schedule_notifications')
+      .select('*')
+      .eq('staff_id', viewer.id)
+      .eq('venue_id', venueId)
+      .order('created_at', { ascending: false })
+      .limit(NOTIFICATION_LIMIT),
+    service
+      .from('schedule_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('staff_id', viewer.id)
+      .eq('venue_id', venueId)
+      .is('read_at', null),
+  ])
+  return { items: (data ?? []).map(serializeNotification), unread: count ?? 0 }
+}
+
+async function loadAudit(service: Service, venueId: string) {
+  const { data } = await service
+    .from('shift_audit')
+    .select('id, actor_name, action, summary, detail, created_at')
+    .eq('venue_id', venueId)
+    .order('created_at', { ascending: false })
+    .limit(AUDIT_LIMIT)
+  return (data ?? []).map(serializeAuditEntry)
 }

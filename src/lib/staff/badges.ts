@@ -88,3 +88,10 @@ export function badgeMeta(badge: string | null | undefined, role: string): Badge
   if (role === 'owner') return BADGES.owner
   return STAFF_FALLBACK
 }
+
+/** The label for a badge key in one language; an unknown (custom) badge is shown as typed. */
+export function badgeLabel(badge: string | null | undefined, lang: 'he' | 'en' | 'ar' = 'he'): string {
+  if (!badge) return ''
+  const known = BADGES[badge as BadgeKey]
+  return known ? known[lang] : badge
+}

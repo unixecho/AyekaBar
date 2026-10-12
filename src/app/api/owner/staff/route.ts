@@ -385,10 +385,25 @@ export async function DELETE(request: NextRequest) {
   // 041_staff_soft_delete.sql's own note on why claim_staff_invite() also
   // had to change: without that fix, the same person signing in again would
   // silently re-link and undo this.
+  // The scheduler's own cleanup first: open swaps and pending requests of someone who is leaving can
+  // no longer be answered, so they are cancelled (with the reason, and everyone involved told), and
+  // the person is counted for the confirmation below. It also writes the staff audit row. It
+  // deactivates exactly as the update below does; this route keeps the self-lockout and last-owner
+  // guards above, which the function does not know about. Future shifts are NOT removed — the board
+  // flags them (an inactive person on a shift) and the manager decides.
+  const { data: actor } = await auth.service.from('staff').select('id').eq('auth_user_id', auth.userId).maybeSingle()
+  let futureShifts = 0
+  if (actor?.id) {
+    const { data: result } = await auth.service.rpc('sched_set_staff_active', {
+      p_actor: actor.id, p_staff: id, p_active: false, p_remove_future: false,
+    })
+    futureShifts = Number((result as { futureLeft?: number } | null)?.futureLeft ?? 0)
+  }
+
   const { error } = await auth.service
     .from('staff')
     .update({ active: false, auth_user_id: null })
     .eq('id', id)
   if (error) return NextResponse.json({ error: 'ההסרה נכשלה' }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, futureShifts })
 }
