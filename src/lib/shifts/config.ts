@@ -1,79 +1,58 @@
-// Defaults and the seeded venue.
+// Seed data a venue's shift_settings starts from — overwritten freely by the
+// settings screens (ManagerPanel / CatalogEditor), not runtime-hardcoded logic.
+// Nothing in the module reads these constants at runtime except when a venue's
+// first settings row is created, or while a venue has an empty catalog.
 //
-// Everything here is a STARTING POINT the Manager Panel overwrites — nothing in
-// the module reads these constants at runtime except when creating a venue's
-// first settings row. That is the difference between a default and a
-// hard-coded rule, and it is why the safety numbers below are advisory rather
-// than authoritative: Israeli hospitality practice, not law, and the manager
-// moves them.
+// SEEDING ONLY: a venue that already exists carries its own roles, stations and
+// templates in `shift_settings`, and that row is what every live surface renders.
+// Changing an entry here does NOT rename anything for Ayeka Bar.
+//
+// `id` is a foreign key in all but name: `shift_assignments.role_id` and every
+// `requirements[].roleId` point at it. Rename the `name`, never the `id` — an id
+// change orphans existing assignments silently.
 
-import type {
-  FeatureFlags, HM, SafetyRules, ShiftPreset, ShiftRole, ShiftSettings, Station, Venue,
-} from './types'
+import type { SafetyRules, ShiftPreset, ShiftRole, Station } from './types'
 
-/** The one venue that exists today. A second bar is a second row here — no
- *  schema change, no code change, which is the whole point of venueId. */
-export const AYEKA_VENUE: Venue = {
-  id: 'venue-ayeka',
+/** The one venue that exists today (the row seeded by migration 027). A second
+ *  bar is a second `venues` row — the database already scopes everything by it. */
+export const AYEKA_VENUE = {
   slug: 'ayeka-bar',
-  name: { he: 'אייכה בר', en: 'Ayeka Bar', ar: 'بار أييكا' },
+  name: 'אייכה בר',
   timezone: 'Asia/Jerusalem',
-  weekStartsOn: 0, // Sunday — the Israeli working week
-}
+} as const
 
-// ── Roles ──────────────────────────────────────────────────────────────
-// Keys mirror `BADGE_OPTIONS` in lib/staff/badges.ts wherever a job title
+// Roles. Keys mirror BADGE_OPTIONS in lib/staff/badges.ts wherever a job title
 // already exists, so assigning someone to a shift can suggest the role they
-// actually hold. `shift_leader` is the exception: it maps to the `manager`
-// badge (אחראי/ת משמרת), which is that badge's literal meaning.
-//
-// SEEDING ONLY — read the file header again before editing this list. A venue
-// that already exists carries its own roles in `shift_settings.roles`, and
-// that row is what every live surface renders; changing an entry here does
-// NOT rename anything for Ayeka Bar. Bringing a live venue in line is either
-// a Manager Panel edit (Catalog → תפקידים) or a deliberate data update.
-//
-// `id` is a foreign key in all but name: `shift_assignments.role_id` and
-// every `requirements[].roleId` point at it. Rename the `name`, never the
-// `id` — an id change orphans existing assignments silently.
-
+// actually hold. `shift_leader` maps to the `manager` badge (אחראי/ת משמרת).
 export const DEFAULT_ROLES: ShiftRole[] = [
-  { id: 'shift_leader', name: { he: 'אחראי/ת משמרת', en: 'Shift Leader', ar: 'مسؤول/ة الوردية' }, emoji: '🗂️', color: '#f472b6', badge: 'manager' },
-  { id: 'bartender',    name: { he: 'ברמן/ית',        en: 'Bartender',    ar: 'نادل/ة بار' },      emoji: '🍸', color: '#c084fc', badge: 'bartender' },
-  { id: 'waiter',       name: { he: 'מלצר/ית',        en: 'Waiter',       ar: 'نادل/ة' },          emoji: '🍽️', color: '#60a5fa', badge: 'waiter' },
-  { id: 'kitchen',      name: { he: 'טבח/ית',         en: 'Cook',         ar: 'طاهٍ/طاهية' },      emoji: '👨‍🍳', color: '#fbbf24', badge: 'cook' },
-  { id: 'busboy',       name: { he: 'עוזר/ת טבח',     en: 'Busboy',       ar: 'مساعد/ة طاهٍ' },    emoji: '🔪', color: '#a3e635', badge: 'busboy' },
-  { id: 'host',         name: { he: 'מארח/ת',         en: 'Host',         ar: 'مضيف/ة' },          emoji: '🛎️', color: '#2dd4bf', badge: 'receptionist' },
+  { id: 'shift_leader', name: 'אחראי/ת משמרת', color: '#f472b6', emoji: '🗂️', badge: 'manager' },
+  { id: 'bartender', name: 'ברמן/ית', color: '#c084fc', emoji: '🍸', badge: 'bartender' },
+  { id: 'waiter', name: 'מלצר/ית', color: '#60a5fa', emoji: '🍽️', badge: 'waiter' },
+  { id: 'kitchen', name: 'טבח/ית', color: '#fbbf24', emoji: '👨‍🍳', badge: 'cook' },
+  { id: 'busboy', name: 'עוזר/ת טבח', color: '#a3e635', emoji: '🔪', badge: 'busboy' },
+  { id: 'host', name: 'מארח/ת', color: '#2dd4bf', emoji: '🛎️', badge: 'receptionist' },
 ]
 
-// ── Stations ───────────────────────────────────────────────────────────
-// Deliberately NOT derived from `waiter_tables.zone`. That table belongs to the
-// staff ordering app (see STAFF_APP.md) and describes where GUESTS sit; a
-// station describes where a WORKER stands, and "Closing Prep" is a station with
-// no tables at all. Reading across that boundary would couple two apps that are
-// documented as independent.
-
+// Stations. Deliberately NOT derived from `waiter_tables.zone`: that table
+// describes where GUESTS sit, a station describes where a WORKER stands.
 export const DEFAULT_STATIONS: Station[] = [
-  { id: 'main_bar', name: { he: 'בר ראשי',   en: 'Main Bar',     ar: 'البار الرئيسي' }, emoji: '🍹', roleIds: ['bartender', 'shift_leader'] },
-  { id: 'patio',    name: { he: 'פטיו / חוץ', en: 'Patio',        ar: 'الفناء' },        emoji: '🌙', roleIds: ['waiter', 'host'] },
-  { id: 'floor',    name: { he: 'אולם פנימי', en: 'Inside Floor', ar: 'الصالة' },        emoji: '🪑', roleIds: ['waiter'] },
-  { id: 'kitchen',  name: { he: 'מטבח',       en: 'Kitchen',      ar: 'مطبخ' },          emoji: '🔥', roleIds: ['kitchen'] },
-  { id: 'closing',  name: { he: 'סגירה',      en: 'Closing Prep', ar: 'إغلاق' },         emoji: '🧹' },
+  { id: 'main_bar', name: 'בר ראשי', emoji: '🍹', roleIds: ['bartender', 'shift_leader'] },
+  { id: 'patio', name: 'פטיו / חוץ', emoji: '🌙', roleIds: ['waiter', 'host'] },
+  { id: 'floor', name: 'אולם פנימי', emoji: '🪑', roleIds: ['waiter'] },
+  { id: 'kitchen', name: 'מטבח', emoji: '🔥', roleIds: ['kitchen'] },
+  { id: 'closing', name: 'סגירה', emoji: '🧹' },
 ]
 
-// ── Shift presets ──────────────────────────────────────────────────────
-// A bar's day, not an office's: the early block is setup rather than "morning",
-// and both evening blocks cross midnight.
-
+// Shift templates. A bar's day, not an office's: the early block is setup rather
+// than "morning", and both evening blocks cross midnight. A template may also
+// carry the staffing a shift made from it starts with.
 export const DEFAULT_PRESETS: ShiftPreset[] = [
   {
-    id: 'prep', name: { he: 'הכנה', en: 'Prep', ar: 'تحضير' },
-    start: '15:00', end: '19:00', color: '#38e1ff', stationId: 'main_bar',
+    id: 'prep', name: 'הכנה', startTime: '15:00', endTime: '19:00', stationId: 'main_bar', color: '#38e1ff',
     requirements: [{ roleId: 'bartender', min: 1 }],
   },
   {
-    id: 'evening', name: { he: 'ערב', en: 'Evening', ar: 'مساء' },
-    start: '18:00', end: '01:00', color: '#ff8a5c', stationId: 'main_bar',
+    id: 'evening', name: 'ערב', startTime: '18:00', endTime: '01:00', stationId: 'main_bar', color: '#ff8a5c',
     requirements: [
       { roleId: 'shift_leader', min: 1, max: 1 },
       { roleId: 'bartender', min: 2 },
@@ -81,8 +60,7 @@ export const DEFAULT_PRESETS: ShiftPreset[] = [
     ],
   },
   {
-    id: 'night', name: { he: 'לילה', en: 'Night', ar: 'ليل' },
-    start: '21:00', end: '03:00', color: '#c084fc', stationId: 'main_bar',
+    id: 'night', name: 'לילה', startTime: '21:00', endTime: '03:00', stationId: 'main_bar', color: '#c084fc',
     requirements: [
       { roleId: 'shift_leader', min: 1, max: 1 },
       { roleId: 'bartender', min: 2 },
@@ -91,8 +69,6 @@ export const DEFAULT_PRESETS: ShiftPreset[] = [
   },
 ]
 
-// ── Safety rules ───────────────────────────────────────────────────────
-
 export const DEFAULT_SAFETY: SafetyRules = {
   maxWeeklyHours: 42,
   minRestHours: 8,
@@ -100,68 +76,27 @@ export const DEFAULT_SAFETY: SafetyRules = {
   maxConsecutiveDays: 6,
 }
 
-/** Slider bounds for the panel. Kept beside the defaults so the UI can never
- *  offer a value the rules engine treats as nonsense (a zero-hour week, a rest
- *  period longer than a day). */
-export const SAFETY_BOUNDS: Record<keyof SafetyRules, { min: number; max: number; step: number }> = {
-  maxWeeklyHours:     { min: 10, max: 80, step: 1 },
-  minRestHours:       { min: 0,  max: 16, step: 1 },
-  maxDailyHours:      { min: 4,  max: 16, step: 1 },
-  maxConsecutiveDays: { min: 1,  max: 7,  step: 1 },
+/** UI slider/stepper bounds — keeps the owner from typing in a value the
+ *  rules engine would treat as nonsensical (e.g. a rest period longer than a day). */
+export const SAFETY_BOUNDS = {
+  maxWeeklyHours: { min: 10, max: 80, step: 1 },
+  minRestHours: { min: 0, max: 16, step: 0.5 },
+  maxDailyHours: { min: 4, max: 16, step: 0.5 },
+  maxConsecutiveDays: { min: 1, max: 10, step: 1 },
+} as const
+
+export function hoursForDay(
+  dayOfWeek: number,
+  openTime: string,
+  closeTime: string,
+  dayHours: Record<number, { open: string; close: string }>
+): { open: string; close: string } {
+  return dayHours[dayOfWeek] ?? { open: openTime, close: closeTime }
 }
 
-// ── Feature flags ──────────────────────────────────────────────────────
-// Both OFF for Ayeka Bar, per the brief. They are venue settings rather than
-// environment variables on purpose: a second venue may want availability on
-// from day one, and the manager must be able to flip it without a deploy —
-// exactly how `app_settings.loyalty_enabled` already works for the club.
-
-export const DEFAULT_FEATURES: FeatureFlags = {
-  ENABLE_AVAILABILITY_SUBMISSIONS: false,
-  ENABLE_SHIFT_SWAPS: false,
-}
-
-export function defaultSettings(venueId: string): ShiftSettings {
-  return {
-    venueId,
-    workingDays: [0, 1, 2, 3, 4, 5, 6],
-    openTime: '17:00',
-    closeTime: '03:00',
-    // Empty, not pre-filled with a guess at Friday/Saturday's actual hours —
-    // "short days by design" is real but venue-specific, and defaultSettings
-    // exists to be a starting point the manager overwrites, never a
-    // hard-coded rule (see this file's header). The Manager Panel is where
-    // Friday and Saturday actually get set.
-    dayHours: {},
-    presets: DEFAULT_PRESETS,
-    roles: DEFAULT_ROLES,
-    stations: DEFAULT_STATIONS,
-    safety: DEFAULT_SAFETY,
-    features: DEFAULT_FEATURES,
-    scheduleManagers: [],
-    // Empty, not pre-filled with a guess at which codes a venue won't care
-    // about — same reasoning as dayHours above: this is a starting point,
-    // not a rule. The Manager Panel is where a code actually gets silenced.
-    ruleSeverity: {},
-    onboardedAt: null,
-  }
-}
-
-/** The operating window for one weekday — `dayHours[weekday]` if the manager
- *  set one, otherwise the venue default. The single place both the rules
- *  engine and the panel resolve "what hours does Thursday actually run",
- *  so they cannot read that question two different ways. */
-export function hoursForDay(settings: ShiftSettings, weekday: number): { open: HM; close: HM } {
-  // Optional-chained: a browser session persisted before dayHours existed
-  // (this is a localStorage prototype, not a real migration system — see
-  // mock.ts's restore()) has no such key at all, not an empty object.
-  const override = settings.dayHours?.[weekday]
-  return override ?? { open: settings.openTime, close: settings.closeTime }
-}
-
-/** Palette offered when the manager adds a preset or a role. Drawn from the
+/** Palette offered when the manager adds a template or a role. Drawn from the
  *  app's existing accents rather than a fresh set — one visual language. */
-export const ACCENTS = [
+export const ACCENT_COLORS = [
   '#ff5e3a', '#ff8a5c', '#fb7185', '#f472b6', '#c084fc',
   '#60a5fa', '#38e1ff', '#2dd4bf', '#4ade80', '#fbbf24',
 ]

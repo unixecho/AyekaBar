@@ -1,451 +1,486 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import OwnerHeader from '@/components/OwnerHeader'
-import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
-import SheetShell, { sheetPrimary, sheetSecondary } from '@/components/shifts/SheetShell'
-import SegmentedControl from '@/components/shifts/SegmentedControl'
-import LangSwitch from '@/components/shifts/LangSwitch'
-import WeekGrid from '@/components/shifts/WeekGrid'
-import ShiftSheet, { type ShiftSheetMode } from '@/components/shifts/ShiftSheet'
-import WarningsPanel from '@/components/shifts/WarningsPanel'
-import ManagerPanel from '@/components/shifts/ManagerPanel'
-import RequestsPanel from '@/components/shifts/RequestsPanel'
-import AuditTrail from '@/components/shifts/AuditTrail'
-import OnboardingFlow from '@/components/shifts/OnboardingFlow'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { AlertTriangle, CalendarPlus, CheckCircle2, ChevronLeft, ChevronRight, Copy, Eraser, Inbox, MoreHorizontal, Send, Share, Undo2, WandSparkles, X } from 'lucide-react'
+import SheetShell from '@/components/shifts/kit/SheetShell'
+import PromptSheet, { type PromptRequest } from '@/components/shifts/kit/PromptSheet'
+import ConfirmSheet, { type ConfirmRequest } from '@/components/shifts/kit/ConfirmSheet'
 import { useShifts } from '@/components/shifts/ShiftsProvider'
-import { draftWeek, isOptimisticId, neighbouringOf, weekSignature, weekStartFor } from '@/lib/shifts/store'
-import { evaluate, summarize } from '@/lib/shifts/rules'
-import { addDays, durationMinutes, fmtDuration, weekLabel } from '@/lib/shifts/time'
-import type { ISODate } from '@/lib/shifts/types'
+import WeekGrid from '@/components/shifts/WeekGrid'
+import ShiftSheet from '@/components/shifts/ShiftSheet'
+import WarningsPanel from '@/components/shifts/WarningsPanel'
+import RequestsPanel from '@/components/shifts/RequestsPanel'
+import PlanningPanel from '@/components/shifts/PlanningPanel'
+import ManagerPanel from '@/components/shifts/ManagerPanel'
+import { SettingsDraftProvider, SettingsSaveBar, useSettingsDirty } from '@/components/shifts/SettingsDraft'
+import ScheduleShareSheet from '@/components/shifts/SchedulePoster'
+import ShiftsAuditTrail from '@/components/shifts/ShiftsAuditTrail'
+import NotificationsSheet, { NotificationsButton } from '@/components/shifts/NotificationsSheet'
+import { EmptyState, InlineError } from '@/components/shifts/ui'
+import { evaluate } from '@/lib/shifts/rules'
+import { coverageOf } from '@/lib/shifts/coverage'
+import { unpublishedChanges } from '@/lib/shifts/snapshot-diff'
+import { indexByShift, managerInbox } from '@/lib/shifts/view'
+import { addDays, formatDateLabel, requestsOpen, weekDates } from '@/lib/shifts/time'
+import type { NotificationLink } from '@/lib/shifts/types'
 
-// The manager's screen. Five tabs over one week.
-//
-// The week bar is the spine: which week, what state it is in, and the single
-// button that makes it real. Publishing is the only action here with an
-// audience, so it is the only one that gets an accent colour — everything else
-// edits a draft nobody but the manager can see.
+type Tab = 'week' | 'requests' | 'problems' | 'settings' | 'log'
 
-type Tab = 'week' | 'warnings' | 'requests' | 'settings' | 'log'
+type SheetState = { shiftId: string | null; date: string; weekId: string }
 
-export default function ScheduleWorkspace() {
-  const { db, t, tri, dispatch, viewer, isMock, today } = useShifts()
-  const [weekStart, setWeekStart] = useState<ISODate>(() => weekStartFor(today, db.venue))
+// The settings draft wraps the whole workspace, not just the settings tab: switching tabs must not lose
+// what has been edited, and the "unsaved changes" bar belongs on every tab.
+export default function ScheduleWorkspace({ venueName }: { venueName: string }) {
+  const { db } = useShifts()
+  if (!db) return <ScheduleWorkspaceBody venueName={venueName} />
+  return (
+    <SettingsDraftProvider>
+      <ScheduleWorkspaceBody venueName={venueName} />
+      <SettingsSaveBar />
+    </SettingsDraftProvider>
+  )
+}
+
+function ScheduleWorkspaceBody({ venueName }: { venueName: string }) {
+  const { db, loading, error, weekStart, setWeekStart, goToToday, dispatch, refresh } = useShifts()
+  const settingsDirty = useSettingsDirty()
   const [tab, setTab] = useState<Tab>('week')
-  const [sheet, setSheet] = useState<ShiftSheetMode | null>(null)
-  const [noteDate, setNoteDate] = useState<ISODate | null>(null)
-  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
-  const [setupOpen, setSetupOpen] = useState(false)
-  const [publishing, setPublishing] = useState(false)
-
-  // A week row is created lazily, the first time someone looks at that week.
-  // Creating all 52 up front would fill the audit log with weeks nobody opened.
-  //
-  // Gated on canManage: `week.ensure` is a manager-only write (ACTION_ROUTES),
-  // so for anyone else it can only ever be refused — and since a refusal rolls
-  // the optimistic week back out, this effect would immediately fire again and
-  // loop, one rejected request and one error toast per turn.
-  useEffect(() => {
-    if (!viewer.canManage) return
-    if (!db.weeks.some((w) => w.weekStart === weekStart)) {
-      void dispatch({ type: 'week.ensure', weekStart })
-    }
-  }, [weekStart, db.weeks, dispatch, viewer.canManage])
-
-  // MEMOISED, and the memo below depends on it. `draftWeek()` builds a fresh
-  // object every call, so calling it in the render body handed `warnings` a
-  // dependency that was never equal to last render's — which meant the entire
-  // rules engine re-ran on every state change on this screen, opening a sheet
-  // and switching a tab included. That synchronous re-evaluation, not the
-  // sheet itself, was most of the delay between tapping ＋ and seeing it.
-  const bundle = useMemo(() => draftWeek(db, weekStart), [db, weekStart])
-  const neighbouring = useMemo(() => neighbouringOf(db, weekStart), [db, weekStart])
-  const published = db.published[weekStart] ?? null
+  const [sheet, setSheet] = useState<SheetState | null>(null)
+  const lastSheet = useRef<SheetState | null>(null)
+  if (sheet) lastSheet.current = sheet
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [confirm, setConfirm] = useState<(ConfirmRequest & { onYes: () => void }) | null>(null)
+  const [prompt, setPrompt] = useState<(PromptRequest & { date: string }) | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const warnings = useMemo(() => {
-    if (!bundle) return []
-    return evaluate({
-      venue: db.venue,
-      settings: db.settings,
-      week: bundle.week,
-      shifts: bundle.shifts,
-      assignments: bundle.assignments,
-      staff: db.staff,
-      availability: db.availability,
-      neighbouring,
-    })
-  }, [db.venue, db.settings, db.staff, db.availability, bundle, neighbouring])
+    if (!db) return []
+    return evaluate({ weekStart, settings: db.settings, roster: db.roster, shifts: db.shifts, assignments: db.assignments, availability: db.availability })
+  }, [db, weekStart])
 
-  const counts = summarize(warnings)
-  const dirty = !!published && weekSignature(bundle) !== weekSignature(published)
-  const isPublished = bundle?.week.status === 'published'
+  if (loading && !db) {
+    return (
+      <div className="sch-wrap" aria-busy="true" aria-label="טוען את הלוח">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="sk" style={{ height: 90 }} />
+        ))}
+      </div>
+    )
+  }
+  if (error && !db) {
+    return (
+      <div className="sch-col">
+        <InlineError>{error}</InlineError>
+        <button type="button" className="sch-btn press" onClick={() => void refresh()}>
+          ניסיון נוסף
+        </button>
+      </div>
+    )
+  }
+  if (!db) return null
 
-  const hoursByStaff = useMemo(() => {
-    const minutesOf = new Map<string, number>()
-    for (const s of bundle?.shifts ?? []) minutesOf.set(s.id, durationMinutes(s.start, s.end))
-    const map = new Map<string, number>()
-    for (const a of bundle?.assignments ?? []) {
-      const minutes = minutesOf.get(a.shiftId)
-      if (minutes === undefined) continue
-      map.set(a.staffId, (map.get(a.staffId) ?? 0) + minutes)
-    }
-    return map
-  }, [bundle])
+  const currentWeek = db.weeks.find((w) => w.weekStart === weekStart)
+  const weekShifts = currentWeek ? db.shifts.filter((s) => s.weekId === currentWeek.id) : []
+  const weekShiftIds = new Set(weekShifts.map((s) => s.id))
+  const weekAssignments = db.assignments.filter((a) => weekShiftIds.has(a.shiftId))
+  const byShift = indexByShift(weekAssignments)
+  const inbox = managerInbox(db)
+  const weekWarnings = warnings.filter((w) => !w.shiftId || weekShiftIds.has(w.shiftId))
+  const errorCount = weekWarnings.filter((w) => w.severity === 'error').length
+  const changes = unpublishedChanges(currentWeek, weekShifts, weekAssignments)
+  const published = currentWeek?.status === 'published'
+  const isCurrentWeek = weekDates(weekStart).includes(db.now.date)
+  const prevWeekShifts = db.weeks.find((w) => w.weekStart === addDays(weekStart, -7))
+  const prevHasShifts = !!prevWeekShifts && db.shifts.some((s) => s.weekId === prevWeekShifts.id)
+  const pendingForWeek = db.requests.filter((r) => r.status === 'pending' && !!r.terms.date && r.terms.date >= weekStart && r.terms.date <= addDays(weekStart, 6)).length
+  const planningOpen = requestsOpen(weekStart, db.now)
 
-  async function publish() {
-    setPublishing(true)
-    await dispatch({ type: 'week.publish', weekStart })
-    setPublishing(false)
+  let unassigned = 0
+  let short = 0
+  for (const s of weekShifts) {
+    const c = coverageOf(s, byShift.get(s.id) ?? [])
+    if (c.state === 'unassigned') unassigned++
+    else if (c.state === 'partial') short++
   }
 
-  function onPublishClick() {
-    if (counts.errors > 0) {
-      // Errors individually, warnings/infos as a count — a confirmation
-      // that gets read rather than reflexively dismissed (decision D11).
-      // Dismissed warnings are NOT filtered out of this gate: dismissal
-      // mutes the list view (WarningsPanel), it does not change what is
-      // actually true about the week, and publishing is exactly the moment
-      // that should still know the whole truth.
-      const errors = warnings.filter((w) => w.severity === 'error')
-      const MAX_LISTED = 4
-      const listed = errors.slice(0, MAX_LISTED).map((e) => tri(e.message)).join(' · ')
-      const overflow = errors.length > MAX_LISTED
-        ? ` ${t('andNMoreErrors').replace('{n}', String(errors.length - MAX_LISTED))}`
-        : ''
-      const rest = [
-        counts.warns ? `${counts.warns} ${t('warnsLabel')}` : null,
-        counts.infos ? `${counts.infos} ${t('infosLabel')}` : null,
-      ].filter(Boolean).join(', ')
-      const body = listed + overflow + (rest ? ` — ${rest}` : '')
+  const openShift = (shiftId: string | null, date: string) => currentWeek && setSheet({ shiftId, date, weekId: currentWeek.id })
 
+  function follow(link: NotificationLink) {
+    setNotesOpen(false)
+    if (link.weekStart) setWeekStart(link.weekStart)
+    if (link.tab === 'requests') setTab('requests')
+    else {
+      setTab('week')
+      if (link.shiftId) {
+        const s = db!.shifts.find((x) => x.id === link.shiftId)
+        if (s) openShift(s.id, s.date)
+      }
+    }
+  }
+
+  async function publish() {
+    if (!currentWeek) return
+    const go = async () => {
+      setBusy(true)
+      await dispatch(
+        { type: 'publishWeek', weekId: currentWeek.id },
+        {
+          success: (d) => {
+            const n = typeof d.notified === 'number' ? d.notified : 0
+            return published ? `העדכון פורסם — ${n > 0 ? `${n} עובדים קיבלו הודעה על מה שהשתנה` : 'העובדים רואים את הלוח המעודכן'}` : `הלוח פורסם — ${n > 0 ? `${n} עובדים קיבלו הודעה` : 'העובדים רואים אותו עכשיו'}`
+          },
+        }
+      )
+      setBusy(false)
+    }
+    const problems: string[] = []
+    if (unassigned > 0) problems.push(`${unassigned} משמרות בלי אף אחד משובץ`)
+    if (short > 0) problems.push(`${short} משמרות שחסרים בהן אנשים`)
+    if (errorCount > 0) problems.push(`${errorCount} בעיות שמופיעות בלשונית "בעיות בלוח"`)
+    if (problems.length > 0) {
       setConfirm({
-        title: t('publishWithErrors'),
-        body,
-        confirmLabel: t('publishAnyway'),
-        onConfirm: () => { void publish() },
+        title: 'לפרסם למרות הבעיות?',
+        body: `בשבוע הזה יש: ${problems.join(', ')}.\nהעובדים יראו את הלוח כמו שהוא עכשיו.`,
+        confirmLabel: published ? 'פרסום העדכון' : 'פרסום בכל זאת',
+        cancelLabel: 'חזרה לתיקון',
+        onYes: () => void go(),
       })
       return
     }
-    void publish()
+    await go()
   }
 
-  if (!db.settings.onboardedAt && !setupOpen) {
-    // A11y (WCAG 2.4.1 / 1.3.1): this branch returns INSTEAD OF the
-    // <main id="main"> + OwnerHeader below, so it's the only content on
-    // the whole page — standalone tells OnboardingFlow to supply its own
-    // <main>/<h1> rather than assuming one exists upstream.
-    return <OnboardingFlow onDone={() => setTab('week')} standalone />
+  async function fillRemaining() {
+    if (!currentWeek) return
+    setBusy(true)
+    await dispatch({ type: 'fillWeek', weekId: currentWeek.id }, { success: (d) => {
+      const left = Array.isArray(d.remaining) ? d.remaining.length : 0
+      return `נוספו ${d.added ?? 0} שיבוצים. כל הבחירות הידניות נשמרו.${left ? ` נותרו ${left} חוסרים ללא עובד/ת מתאים/ה — אפשר לשבץ ידנית.` : ' בדקו את הלוח ופרסמו לצוות.'}`
+    } })
+    setBusy(false)
   }
+
+  async function prepareWeek() {
+    if (!currentWeek) return
+    setBusy(true)
+    await dispatch({ type: 'prepareWeek', weekId: currentWeek.id }, { success: (d) => `נוספו ${d.added ?? 0} משמרות ללא שיבוץ. ${planningOpen ? 'העובדים יכולים לבחור בקשות עד יום שלישי.' : 'אפשר להמשיך לשיבוץ ידני ולהשלמת החוסרים.'}` })
+    setBusy(false)
+  }
+
+  function unpublish() {
+    if (!currentWeek) return
+    setMoreOpen(false)
+    setConfirm({
+      title: 'להחזיר את הלוח לטיוטה?',
+      body: 'העובדים יפסיקו לראות את הלוח של השבוע הזה. בקשות להצטרף והחלפות שממתינות על המשמרות שלו יבוטלו, והעובדים יקבלו על כך הודעה.',
+      confirmLabel: 'החזרה לטיוטה',
+      danger: true,
+      onYes: () => void dispatch({ type: 'unpublishWeek', weekId: currentWeek.id }, { success: 'הלוח הוחזר לטיוטה — העובדים לא רואים אותו' }),
+    })
+  }
+
+  function clearWeek() {
+    if (!currentWeek) return
+    setMoreOpen(false)
+    setConfirm({
+      title: 'לנקות את כל משמרות השבוע?',
+      body: `${weekShifts.length} משמרות והשיבוצים שלהן יימחקו. בקשות והחלפות שממתינות עליהן יבוטלו (נשארות בהיסטוריה). אי אפשר לבטל את הניקוי.`,
+      confirmLabel: 'ניקוי השבוע',
+      danger: true,
+      onYes: () => void dispatch({ type: 'clearWeek', weekId: currentWeek.id }, { success: 'השבוע נוקה' }),
+    })
+  }
+
+  function copyFromPreviousWeek() {
+    setMoreOpen(false)
+    const run = () =>
+      void dispatch(
+        { type: 'copyWeek', venueId: db!.venueId, fromWeekStart: addDays(weekStart, -7), toWeekStart: weekStart },
+        {
+          success: (d) => {
+            const skipped = Array.isArray(d.skipped) ? (d.skipped as { name: string; why: string }[]) : []
+            const base = `הועתקו ${d.shifts ?? 0} משמרות עם ${d.people ?? 0} שיבוצים`
+            return skipped.length > 0
+              ? `${base}. לא שובצו: ${skipped.map((s) => `${s.name} (${s.why === 'busy' ? 'כבר עובד/ת בשעות האלה' : 'לא פעיל/ה'})`).join(', ')}`
+              : base
+          },
+        }
+      )
+    if (weekShifts.length > 0) {
+      setConfirm({
+        title: 'להחליף את הלוח של השבוע הזה?',
+        body: 'המשמרות שכבר קיימות בשבוע הזה יימחקו ויוחלפו במשמרות של השבוע הקודם.',
+        confirmLabel: 'העתקה והחלפה',
+        danger: true,
+        onYes: run,
+      })
+    } else run()
+  }
+
+  const tabs: { id: Tab; label: string; badge?: { n: number; tone?: 'warn' | 'danger' } }[] = [
+    { id: 'week', label: 'לוח' },
+    { id: 'requests', label: 'בקשות', badge: inbox.count > 0 ? { n: inbox.count } : undefined },
+    { id: 'problems', label: 'בעיות', badge: weekWarnings.length > 0 ? { n: weekWarnings.length, tone: errorCount > 0 ? 'danger' : 'warn' } : undefined },
+    { id: 'settings', label: 'הגדרות' },
+    { id: 'log', label: 'היסטוריה' },
+  ]
 
   return (
-    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '20px 16px 40px', maxWidth: 1180, margin: '0 auto' }}>
-      <OwnerHeader right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <LangSwitch />
-          <Link href="/owner/dashboard" style={{
-            fontSize: '0.8rem', color: 'var(--text-dim)', textDecoration: 'none',
-            padding: '6px 11px', borderRadius: 999, border: '1px solid var(--line)',
-          }}>
-            {t('back')}
-          </Link>
+    <div className="sch-wrap">
+      <div className="sch-row">
+        <div role="tablist" aria-label="ניהול לוח משמרות" className="sch-tabs" style={{ flex: 1 }}>
+          {tabs.map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className="sch-tab press" onClick={() => setTab(t.id)}>
+              {t.label}
+              {t.id === 'settings' && settingsDirty && <span className="sch-dot" role="img" aria-label="יש שינויים שלא נשמרו" />}
+              {t.badge && (
+                <span className={`sch-badge${t.badge.tone ? ` sch-badge--${t.badge.tone}` : ''}`} aria-label={`${t.badge.n} ממתינים`}>
+                  {t.badge.n}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-      } />
+        <NotificationsButton onOpen={() => setNotesOpen(true)} />
+      </div>
 
-      {isMock && <PrototypeBanner />}
+      {loading && <div className="sch-loading" aria-hidden="true" />}
 
-      {/* ---- week bar ---- */}
-      <div className="rise sh-panel" style={{ marginBottom: 14, padding: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <ArrowButton label={t('prevWeek')} onClick={() => setWeekStart(addDays(weekStart, -7))} back />
-          <div style={{ flex: 1, minWidth: 130, textAlign: 'center' }}>
-            <div style={{ fontSize: '0.95rem', fontWeight: 700, direction: 'ltr' }}>{weekLabel(weekStart)}</div>
-            <StatusChip published={isPublished} dirty={dirty} version={bundle?.week.version ?? 0} />
+      {tab === 'week' && (
+        <>
+          <div className="sch-weeknav">
+            <button type="button" className="sch-iconbtn press" onClick={() => setWeekStart(addDays(weekStart, -7))} aria-label="השבוע הקודם">
+              <ChevronRight size={20} aria-hidden="true" />
+            </button>
+            <div className="sch-weeknav__label">
+              <strong className="ltr-isolate">
+                {formatDateLabel(weekStart)} – {formatDateLabel(weekDates(weekStart)[6]!)}
+              </strong>
+              <span>{isCurrentWeek ? 'השבוע' : weekStart > db.now.date ? 'שבוע עתידי' : 'שבוע שעבר'}</span>
+            </div>
+            {!isCurrentWeek && (
+              <button type="button" className="sch-btn sch-btn--sm press" onClick={goToToday}>
+                להיום
+              </button>
+            )}
+            <button type="button" className="sch-iconbtn press" onClick={() => setWeekStart(addDays(weekStart, 7))} aria-label="השבוע הבא">
+              <ChevronLeft size={20} aria-hidden="true" />
+            </button>
           </div>
-          <ArrowButton label={t('nextWeek')} onClick={() => setWeekStart(addDays(weekStart, 7))} />
-        </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-          <button
-            type="button" className="press"
-            onClick={onPublishClick}
-            disabled={publishing || !bundle}
-            style={{
-              flex: '1 1 160px', padding: '12px 0', borderRadius: 13, border: 'none',
-              background: isPublished && !dirty
-                ? 'var(--bg-elev-2)'
-                : 'linear-gradient(135deg, var(--neon), var(--neon-soft))',
-              color: isPublished && !dirty ? 'var(--text-faint)' : 'var(--bg)',
-              font: 'inherit', fontSize: '0.9rem', fontWeight: 700,
-              cursor: publishing ? 'default' : 'pointer',
-              boxShadow: isPublished && !dirty ? 'none' : 'var(--glow)',
-            }}
-          >
-            {publishing ? t('publishing') : isPublished ? (dirty ? t('republish') : t('published')) : t('publish')}
-          </button>
+          {/* ---- is this week visible to the team? ---- */}
+          <div className={`sch-card ${!published ? 'sch-card--warn' : changes.total > 0 ? 'sch-card--attention' : 'sch-card--ok'}`}>
+            <div className="sch-row" style={{ alignItems: 'flex-start' }}>
+              <span style={{ marginTop: 2, display: 'inline-flex' }} aria-hidden="true">
+                {published && changes.total === 0 ? <CheckCircle2 size={20} color="var(--ok)" /> : <AlertTriangle size={20} color={published ? 'var(--neon)' : 'var(--warn)'} />}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p className="sch-h" style={{ fontSize: '0.95rem' }}>
+                  {!published ? 'הלוח הזה עדיין לא פורסם' : changes.total > 0 ? `יש ${changes.total} שינויים שעוד לא פורסמו` : `הלוח פורסם · גרסה ${currentWeek?.version}`}
+                </p>
+                <p className="sch-sub">
+                  {!published
+                    ? 'העובדים לא רואים אותו עדיין. כשהוא מוכן — פרסמו אותו והם יקבלו הודעה.'
+                    : changes.total > 0
+                      ? 'העובדים עדיין רואים את הגרסה הקודמת. פרסמו כדי שיראו את מה ששיניתם.'
+                      : 'העובדים רואים את הלוח כמו שהוא מופיע כאן.'}
+                </p>
+              </div>
+            </div>
+            <div className="sch-row" style={{ flexWrap: 'wrap' }}>
+              <button type="button" className="sch-btn press" disabled={busy || weekShifts.length === 0 || planningOpen || pendingForWeek > 0} onClick={fillRemaining} title={planningOpen ? 'זמין לאחר סגירת ההגשה ביום שלישי' : pendingForWeek ? 'טפלו קודם בבקשות לשבוע הזה' : 'שומר את הבחירות הידניות ומשלים חוסרים'}>
+                <WandSparkles size={18} aria-hidden="true" /> {busy ? 'מעדכן…' : 'השלמת חוסרים הוגנת'}
+              </button>
+              {(!published || changes.total > 0) && (
+                <button type="button" className="sch-btn sch-btn--primary press" style={{ flex: '1 1 200px' }} disabled={busy || weekShifts.length === 0} onClick={publish}>
+                  <Send size={18} aria-hidden="true" /> {published ? 'פרסום העדכון לעובדים' : 'פרסום לעובדים'}
+                </button>
+              )}
+              <button type="button" className="sch-btn press" onClick={() => setShareOpen(true)} aria-label="שיתוף הלוח של הסניפים: תמונה, PDF וקישור">
+                <Share size={18} aria-hidden="true" /> שיתוף
+              </button>
+              <button type="button" className="sch-btn press" onClick={() => setMoreOpen(true)} aria-label="עוד פעולות: הדפסה, העתקה, ניקוי">
+                <MoreHorizontal size={20} aria-hidden="true" /> עוד
+              </button>
+            </div>
+          </div>
 
-          <Link
-            href={`/owner/schedule/print?week=${weekStart}`}
-            target="_blank"
-            className="press"
-            style={{ ...ghost, flex: '0 0 auto', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-          >
-            🖨 {t('print')}
-          </Link>
+          <p className="sch-sub">{planningOpen ? 'בקשות העובדים פתוחות עד יום שלישי בחצות. אפשר להתחיל לשבץ ידנית.' : pendingForWeek > 0 ? `${pendingForWeek} בקשות ממתינות לשבוע הזה. טפלו בהן לפני ההשלמה האוטומטית.` : 'השלמה אוטומטית מאזנת שעות ושבתות, מכבדת זמינות ושומרת כל שיבוץ שכבר בחרתם.'}</p>
 
-          <button
-            type="button" className="press" style={{ ...ghost, flex: '0 0 auto' }}
-            onClick={() => dispatch({ type: 'week.copy', from: addDays(weekStart, -7), to: weekStart })}
-          >
-            {t('copyLastWeek')}
-          </button>
-
-          <button
-            type="button" className="press" style={{ ...ghost, flex: '0 0 auto' }}
-            onClick={() => setConfirm({
-              title: t('clearWeek'), body: t('clearWeekBody'),
-              confirmLabel: t('clearWeek'),
-              onConfirm: () => { void dispatch({ type: 'week.clear', weekStart }) },
-            })}
-          >
-            {t('clearWeek')}
-          </button>
-
-          {isPublished && (
-            <button
-              type="button" className="press" style={{ ...ghost, flex: '0 0 auto' }}
-              onClick={() => dispatch({ type: 'week.unpublish', weekStart })}
-            >
-              {t('unpublish')}
+          {inbox.count > 0 && (
+            <button type="button" className="sch-card sch-card--attention press" style={{ flexDirection: 'row', alignItems: 'center', font: 'inherit', color: 'inherit', textAlign: 'start', cursor: 'pointer' }} onClick={() => setTab('requests')}>
+              <Inbox size={22} aria-hidden="true" color="var(--neon)" />
+              <span style={{ flex: 1 }}>
+                <strong>{inbox.count === 1 ? 'בקשה אחת מחכה לאישור שלך' : `${inbox.count} בקשות מחכות לאישור שלך`}</strong>
+                <span className="sch-sub" style={{ display: 'block' }}>
+                  לחצו כדי לאשר או לדחות
+                </span>
+              </span>
+              <span className="sch-badge">{inbox.count}</span>
             </button>
           )}
-        </div>
 
-        <p className="sh-sub" style={{ margin: '10px 0 0' }}>
-          {isPublished && !dirty ? t('publishedHint') : t('draftHint')}
-        </p>
-      </div>
+          {weekShifts.length > 0 && (
+            <p className="sch-sub" aria-live="polite">
+              {weekShifts.length} משמרות בשבוע
+              {unassigned > 0 && <strong style={{ color: 'var(--warn)' }}> · {unassigned} ללא שיבוץ</strong>}
+              {short > 0 && <strong style={{ color: 'var(--warn)' }}> · {short} עם חוסר</strong>}
+              {unassigned === 0 && short === 0 && <span style={{ color: 'var(--ok)' }}> · כולן מאוישות</span>}
+            </p>
+          )}
 
-      {/* ---- tabs ---- */}
-      <div className="rise" style={{ marginBottom: 14, animationDelay: '60ms' }}>
-        <SegmentedControl<Tab>
-          ariaLabel={t('managerTitle')}
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'week', label: t('tabWeek') },
-            { value: 'warnings', label: t('tabWarnings'), badge: counts.errors + counts.warns },
-            { value: 'requests', label: t('tabRequests'), badge: db.swaps.filter((s) => s.status === 'peer_accepted').length },
-            { value: 'settings', label: t('tabSettings') },
-            { value: 'log', label: t('tabAudit') },
-          ]}
-        />
-      </div>
+          {weekShifts.length === 0 && (
+            <EmptyState
+              icon={<CalendarPlus size={30} aria-hidden="true" />}
+              title="עוד אין משמרות בשבוע הזה"
+              hint="לחצו על ״משמרת״ בכל יום כדי להוסיף. השעות יתמלאו לבד לפי התבניות שהגדרתם בהגדרות."
+            >
+              <button type="button" className="sch-btn sch-btn--primary press" disabled={busy} onClick={prepareWeek}>
+                <CalendarPlus size={18} aria-hidden="true" /> הכנת שבוע מהתבניות
+              </button>
+              <p className="sch-sub">יוצר משמרות פנויות בימי הפעילות. בדקו את השעות והצרכים לפני השיבוץ.</p>
+              {prevHasShifts && (
+                <button type="button" className="sch-btn press" onClick={copyFromPreviousWeek}>
+                  <Copy size={18} aria-hidden="true" /> העתקה מהשבוע הקודם
+                </button>
+              )}
+            </EmptyState>
+          )}
 
-      <div className="rise" style={{ animationDelay: '110ms' }}>
-        {tab === 'week' && bundle && (
-          <>
-            <WeekGrid
-              weekStart={weekStart}
-              shifts={bundle.shifts}
-              assignments={bundle.assignments}
-              dayNotes={bundle.week.dayNotes}
-              warnings={warnings}
-              // A shift whose id is still client-minted has not reached
-              // Postgres yet (see OPTIMISTIC_ID_PREFIX in store.ts), so
-              // nothing inside the sheet could address it. Sub-second, and
-              // only after a create or a "copy last week"; the tap simply
-              // does nothing until the real row lands.
-              onShiftClick={viewer.canManage
-                ? (shift) => { if (!isOptimisticId(shift.id)) setSheet({ type: 'edit', shift }) }
-                : undefined}
-              onAddShift={viewer.canManage ? (date) => setSheet({ type: 'create', date }) : undefined}
-              onDayNote={viewer.canManage ? setNoteDate : undefined}
-            />
-
-            {/* Hours per person. The number a manager checks last and cares
-                about most — it is what someone's pay looks like. */}
-            <section className="sh-panel" style={{ marginTop: 14 }}>
-              {/* A11y (WCAG 1.3.1): this page's only h1 is OwnerHeader's; the
-                  week/warnings/requests/settings/log tabs otherwise had no
-                  section heading at all, so this was the page's sole h3,
-                  skipping straight past h2. Promoted — style unchanged. */}
-              <h2 style={{ margin: '0 0 10px', fontSize: '0.9rem', fontWeight: 700 }}>{t('weekHours')}</h2>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {db.staff.filter((s) => s.active).map((person) => {
-                  const minutes = hoursByStaff.get(person.id) ?? 0
-                  const over = minutes > db.settings.safety.maxWeeklyHours * 60
-                  return (
-                    <span key={person.id} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 7,
-                      padding: '6px 11px', borderRadius: 999,
-                      border: `1px solid ${over ? 'rgba(255,107,107,0.45)' : 'var(--line)'}`,
-                      background: over ? 'rgba(255,107,107,0.08)' : 'var(--bg-elev-2)',
-                      fontSize: '0.78rem', fontWeight: 600,
-                      color: minutes ? 'var(--text)' : 'var(--text-faint)',
-                    }}>
-                      <span className="sh-dot" style={{ background: person.colour ?? 'var(--line-strong)' }} aria-hidden>
-                        {person.initial ?? person.name[0]}
-                      </span>
-                      {person.name}
-                      <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', opacity: 0.8 }}>
-                        {fmtDuration(minutes)}
-                      </span>
-                    </span>
-                  )
-                })}
-              </div>
-            </section>
-          </>
-        )}
-
-        {tab === 'warnings' && (
-          <WarningsPanel
-            warnings={warnings}
-            shifts={bundle?.shifts ?? []}
-            dismissedWarnings={bundle?.week.dismissedWarnings ?? []}
-            onOpenShift={viewer.canManage
-              ? (shift) => {
-                  setTab('week')
-                  // Same reason as onShiftClick above — a brand-new shift
-                  // warns ("unstaffed") before the server has answered for it.
-                  if (!isOptimisticId(shift.id)) setSheet({ type: 'edit', shift })
-                }
-              : undefined}
-            onDismiss={(warningId, dismissed) => { void dispatch({ type: 'warning.dismiss', weekStart, warningId, dismissed }) }}
+          <div className="sch-planning-layout">
+          <div className="sch-board-scroll" tabIndex={0} role="region" aria-label="לוח שבועי מלא; גללו בין הימים">
+          <WeekGrid
+            weekStart={weekStart}
+            db={db}
+            shifts={weekShifts}
+            assignments={weekAssignments}
+            warnings={weekWarnings}
+            dayNotes={currentWeek?.dayNotes}
+            onShiftClick={(s) => openShift(s.id, s.date)}
+            onAdd={(date) => openShift(null, date)}
+            onEditNote={(date) =>
+              setPrompt({ date, title: `הערה ל${formatDateLabel(date)}`, label: 'הערה ליום (תוצג לעובדים)', initialValue: currentWeek?.dayNotes[date] ?? '', submitLabel: 'שמירה', allowEmpty: true })
+            }
           />
-        )}
-
-        {tab === 'requests' && <RequestsPanel weekStart={weekStart} />}
-
-        {tab === 'settings' && <ManagerPanel onRerunSetup={() => setSetupOpen(true)} />}
-
-        {tab === 'log' && <AuditTrail />}
-      </div>
-
-      {sheet && (
-        <ShiftSheet
-          mode={sheet}
-          weekStart={weekStart}
-          readOnly={!viewer.canManage}
-          onClose={() => setSheet(null)}
-        />
-      )}
-
-      {noteDate && bundle && (
-        <NoteSheet
-          date={noteDate}
-          initial={bundle.week.dayNotes[noteDate] ?? ''}
-          onClose={() => setNoteDate(null)}
-          onSave={(note) => {
-            // Not awaited: dispatch() has already applied the note locally by
-            // the time it returns its promise, so holding the sheet open for
-            // the round trip would only add the delay back.
-            void dispatch({ type: 'note.day', weekStart, date: noteDate, note })
-            setNoteDate(null)
-          }}
-        />
-      )}
-
-      {setupOpen && <OnboardingFlow onDone={() => setSetupOpen(false)} />}
-
-      <ConfirmSheet request={confirm} onClose={() => setConfirm(null)} />
-
-      {/* Keeps the venue name in the DOM for the print sheet's header and for
-          anyone auditing which venue a screenshot came from. */}
-      <p className="sh-noprint" style={{ marginTop: 24, fontSize: '0.7rem', color: 'var(--text-faint)', textAlign: 'center' }}>
-        {tri(db.venue.name)}
-      </p>
-    </main>
-  )
-}
-
-function NoteSheet({ date, initial, onClose, onSave }: {
-  date: ISODate
-  initial: string
-  onClose: () => void
-  onSave: (note: string) => void | Promise<void>
-}) {
-  const { t } = useShifts()
-  const [value, setValue] = useState(initial)
-
-  return (
-    <SheetShell
-      title={t('dayNote')}
-      subtitle={date}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="press" style={sheetSecondary} onClick={onClose}>{t('cancel')}</button>
-          <button type="button" className="press" style={sheetPrimary()} onClick={() => onSave(value)}>{t('save')}</button>
+          </div>
+          <PlanningPanel />
+          </div>
         </>
-      }
-    >
-      <textarea
-        value={value} onChange={(e) => setValue(e.target.value)}
-        placeholder={t('notePlaceholder')} rows={4} autoFocus
-        style={{
-          width: '100%', padding: '12px 13px', borderRadius: 12, resize: 'vertical',
-          border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
-          color: 'var(--text)', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none',
+      )}
+
+      {tab === 'requests' && (
+        <div className="sch-col">
+          <RequestsPanel />
+        </div>
+      )}
+      {tab === 'problems' && (
+        <div className="sch-col">
+          <WarningsPanel
+            onJump={(shiftId) => {
+              const s = weekShifts.find((x) => x.id === shiftId)
+              if (s) {
+                setTab('week')
+                openShift(s.id, s.date)
+              }
+            }}
+          />
+        </div>
+      )}
+      {tab === 'settings' && (
+        <div className="sch-col">
+          <ManagerPanel />
+        </div>
+      )}
+      {tab === 'log' && (
+        <div className="sch-col">
+          <ShiftsAuditTrail />
+        </div>
+      )}
+
+      <ShiftSheet
+        open={!!sheet}
+        onClose={() => setSheet(null)}
+        weekId={(sheet ?? lastSheet.current)?.weekId ?? ''}
+        date={(sheet ?? lastSheet.current)?.date ?? weekStart}
+        shiftId={(sheet ?? lastSheet.current)?.shiftId ?? null}
+      />
+
+      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)}>
+        <MoreRow icon={<Share size={20} aria-hidden="true" />} title="שיתוף והדפסת השבוע" hint="תמונה או PDF בעיצוב אייכה בר — לשליחה בוואטסאפ, לשמירה או להדפסה" onClick={() => { setMoreOpen(false); setShareOpen(true) }} />
+        <MoreRow
+          icon={<Copy size={20} aria-hidden="true" />}
+          title="העתקה מהשבוע הקודם"
+          hint={prevHasShifts ? (weekShifts.length > 0 ? 'מחליף את המשמרות של השבוע הזה' : 'מעתיק משמרות ושיבוצים') : 'בשבוע הקודם אין משמרות להעתיק'}
+          disabled={!prevHasShifts}
+          onClick={copyFromPreviousWeek}
+        />
+        {published && <MoreRow icon={<Undo2 size={20} aria-hidden="true" />} title="החזרה לטיוטה" hint="העובדים יפסיקו לראות את הלוח" onClick={unpublish} danger />}
+        {weekShifts.length > 0 && <MoreRow icon={<Eraser size={20} aria-hidden="true" />} title="ניקוי כל השבוע" hint="מוחק את כל המשמרות של השבוע" onClick={clearWeek} danger />}
+      </MoreSheet>
+
+      <NotificationsSheet open={notesOpen} onClose={() => setNotesOpen(false)} onFollow={follow} />
+      <ScheduleShareSheet open={shareOpen} onClose={() => setShareOpen(false)} weekStart={weekStart} venueName={venueName} scopes={['everyone']} />
+
+      <PromptSheet
+        request={prompt}
+        onCancel={() => setPrompt(null)}
+        onSubmit={(value) => {
+          const p = prompt
+          setPrompt(null)
+          if (p && currentWeek) void dispatch({ type: 'setDayNote', weekId: currentWeek.id, date: p.date, note: value }, { success: value ? 'ההערה נשמרה' : 'ההערה הוסרה' })
         }}
       />
-    </SheetShell>
-  )
-}
-
-function StatusChip({ published, dirty, version }: { published: boolean; dirty: boolean; version: number }) {
-  const { t } = useShifts()
-  const label = !published ? t('draft') : dirty ? t('hasChanges') : `${t('published')} · ${t('version')} ${version}`
-  const color = !published ? 'var(--text-faint)' : dirty ? '#fbbf24' : '#4ade80'
-  return (
-    <span style={{
-      display: 'inline-block', marginTop: 4, padding: '2px 9px', borderRadius: 999,
-      fontSize: '0.68rem', fontWeight: 700, color, border: `1px solid ${color}44`,
-    }}>
-      {label}
-    </span>
-  )
-}
-
-function ArrowButton({ label, onClick, back = false }: { label: string; onClick: () => void; back?: boolean }) {
-  return (
-    <button
-      type="button" onClick={onClick} aria-label={label} className="press"
-      style={{
-        flex: '0 0 auto', width: 38, height: 38, borderRadius: 999,
-        border: '1px solid var(--line)', background: 'var(--bg-elev-2)',
-        color: 'var(--text-dim)', cursor: 'pointer', display: 'grid', placeItems: 'center',
-      }}
-    >
-      {/* Chevrons are mirrored by `dir` through .dir-flip, so "previous" points
-          the physically correct way in Hebrew and in English alike. */}
-      <svg className="dir-flip" viewBox="0 0 24 24" width={17} height={17} fill="none"
-        stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-        <path d={back ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
-      </svg>
-    </button>
-  )
-}
-
-function PrototypeBanner() {
-  const { t } = useShifts()
-  return (
-    <div className="sh-noprint" style={{
-      display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-      padding: '9px 12px', borderRadius: 12,
-      border: '1px dashed rgba(56,225,255,0.4)', background: 'rgba(56,225,255,0.06)',
-    }}>
-      <span aria-hidden>🧪</span>
-      <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)', lineHeight: 1.45 }}>
-        <strong style={{ color: 'var(--neon-2)' }}>{t('prototype')}</strong> · {t('prototypeHint')}
-      </span>
+      <ConfirmSheet
+        request={confirm}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          const c = confirm
+          setConfirm(null)
+          c?.onYes()
+        }}
+      />
     </div>
   )
 }
 
-const ghost = {
-  padding: '12px 16px', borderRadius: 13, border: '1px solid var(--line-strong)',
-  background: 'transparent', color: 'var(--text-dim)', font: 'inherit',
-  fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer',
-} as const
+// ---- the "more actions" sheet --------------------------------------------------------------
+function MoreSheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+  return (
+    <SheetShell open={open} onClose={onClose} labelledBy="sch-more-title" className="sch-sheet">
+      <div className="sch-sheet__head">
+        <h2 id="sch-more-title" className="sch-sheet__title">
+          עוד פעולות
+        </h2>
+        <button type="button" className="sch-iconbtn press" onClick={onClose} aria-label="סגירה">
+          <X size={20} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="sheet-scroll">{children}</div>
+    </SheetShell>
+  )
+}
+
+function MoreRow({ icon, title, hint, onClick, href, danger, disabled }: { icon: ReactNode; title: string; hint: string; onClick?: () => void; href?: string; danger?: boolean; disabled?: boolean }) {
+  const inner = (
+    <>
+      <span style={{ color: danger ? 'var(--danger)' : 'var(--text-dim)', flex: 'none' }}>{icon}</span>
+      <span className="sch-pick__main">
+        <span className="sch-pick__name" style={{ color: danger ? 'var(--danger)' : undefined }}>
+          {title}
+        </span>
+        <span className="sch-pick__hint">{hint}</span>
+      </span>
+    </>
+  )
+  return href ? (
+    <a className="sch-pick press" href={href} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+      {inner}
+    </a>
+  ) : (
+    <button type="button" className="sch-pick press" disabled={disabled} onClick={onClick}>
+      {inner}
+    </button>
+  )
+}

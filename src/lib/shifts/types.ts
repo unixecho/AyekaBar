@@ -1,351 +1,277 @@
-// The shift-scheduling domain. Deliberately free of React, Supabase and Next —
-// everything here is plain data, so the same types serve the mock prototype,
-// the eventual Supabase adapter, the print view and the rules engine.
-//
-// MULTI-VENUE FROM DAY ONE
-// Every row carries `venueId`. Ayeka Bar is one seeded venue; cloning the
-// module for a second bar is a new `venues` row, not a schema change. Nothing
-// in this module ever reads a venue from a global — it is threaded through
-// explicitly so a single deployment could serve two venues if that day comes.
-//
-// WALL-CLOCK, NOT INSTANTS
-// A shift is `date + start + end` in local wall-clock time, never a timestamp.
-// A bar's "22:00–02:00" is four hours to everyone who reads the schedule,
-// including on the two nights a year Israel changes its clocks — storing
-// instants would make one of those nights three hours and the other five, and
-// the rest-hours engine would flag a violation nobody committed.
+// The shift-scheduling domain model — the same model Sarcafe's scheduler runs on,
+// scoped to a venue (venueId), with plain Hebrew strings for role/station/template
+// vocabulary: none of it is ever customer-facing, matching every other
+// staff/owner-only screen in this app.
 
-import type { Lang } from '@/lib/menu/types'
-import type { BadgeKey } from '@/lib/staff/badges'
+export type HM = string // "HH:MM"
+export type ISODate = string // "YYYY-MM-DD"
 
-export type { Lang }
-
-/** Every user-facing string in this app carries all three languages. */
-export interface Tri { he: string; en: string; ar: string }
-
-export const tri = (t: Tri, lang: Lang): string => t[lang] || t.he || t.en
-
-/** `HH:MM`, 24h, local wall-clock. */
-export type HM = string
-/** `YYYY-MM-DD`, local calendar date. */
-export type ISODate = string
-
-// ── Venue ──────────────────────────────────────────────────────────────
-
-export interface Venue {
+export type ShiftRole = {
   id: string
-  /** Stable, human-readable key — the menus table already addresses by slug. */
-  slug: string
-  name: Tri
-  /** IANA zone. Only used for "what is today"; shift maths stays wall-clock. */
-  timezone: string
-  /** 0 = Sunday. Israel starts its week on Sunday; kept configurable anyway. */
-  weekStartsOn: number
-}
-
-// ── Configuration (the Manager Panel writes all of this) ───────────────
-
-export interface ShiftRole {
-  id: string
-  name: Tri
-  emoji: string
+  name: string
   color: string
-  /** Links a schedule role to the existing staff job-title badge, so assigning
-   *  someone can suggest the role they actually hold. Optional: a venue may
-   *  invent a role that has no badge (e.g. "Security"). */
-  badge?: BadgeKey
+  /** Kept from the venue's earlier configuration; shown beside the role where there is room. */
+  emoji?: string
+  /** The staff job-title badge this role corresponds to, so adding someone can suggest the role they hold. */
+  badge?: string
 }
-
-export interface Station {
+export type Station = {
   id: string
-  name: Tri
+  name: string
   emoji: string
   /** A station may be limited to certain roles — "Main Bar" wants bartenders. */
   roleIds?: string[]
 }
-
-/** How many people of a role a shift needs. `min` drives the missing-role
- *  warning; `max` is advisory and only warns when exceeded. */
-export interface RoleRequirement {
-  roleId: string
-  min: number
-  max?: number
-}
-
-export interface ShiftPreset {
+export type RoleRequirement = { roleId: string; min: number; max?: number }
+/** A shift TEMPLATE: the times offered by default when a shift is created.
+ *  A shift copies its times from it and remembers which one;
+ *  a shift that still names its template follows it (preset-sync.ts). It may also carry the
+ *  staffing a shift made from it starts with (`requirements`) and a display colour. */
+export type ShiftPreset = {
   id: string
-  name: Tri
-  start: HM
-  end: HM
-  color: string
-  /** Default staffing this preset creates a shift with. Editable per shift. */
-  requirements: RoleRequirement[]
-  /** Default station, if the preset always runs somewhere specific. */
-  stationId?: string | null
+  name: string
+  startTime: HM
+  endTime: HM
+  roleId?: string
+  stationId?: string
+  color?: string
+  requirements?: RoleRequirement[]
 }
 
-/** The configurable safety rules. Every one of these is a slider in the panel;
- *  none of them is hard-coded in the rules engine. */
-export interface SafetyRules {
-  /** Hours per employee per schedule week. */
+export type SafetyRules = {
   maxWeeklyHours: number
-  /** Mandatory rest between the end of one shift and the start of the next —
-   *  the "clopening" guard. */
   minRestHours: number
-  /** Hours in any single shift. */
   maxDailyHours: number
-  /** Consecutive calendar days worked. */
   maxConsecutiveDays: number
 }
 
-export const FEATURE_KEYS = ['ENABLE_AVAILABILITY_SUBMISSIONS', 'ENABLE_SHIFT_SWAPS'] as const
-export type FeatureKey = (typeof FEATURE_KEYS)[number]
-export type FeatureFlags = Record<FeatureKey, boolean>
+export type FeatureFlags = { availability: boolean; swaps: boolean }
 
-export interface ShiftSettings {
+export type RuleSeverity = 'error' | 'warning' | 'off'
+
+export type ShiftSettings = {
   venueId: string
-  /** Day numbers the venue operates, 0 = Sunday. */
-  workingDays: number[]
-  /** Advisory opening window for a day with no override below; shifts
-   *  outside it warn but are allowed. */
+  workingDays: number[] // 0=Sun..6=Sat (JS getDay())
   openTime: HM
   closeTime: HM
-  /** Per-day override of the window above, keyed by weekday (0 = Sunday). A
-   *  day absent from this map uses openTime/closeTime — Friday and Saturday
-   *  running shorter hours than the rest of the week is the common case this
-   *  exists for, but any day can be overridden. */
-  dayHours: Partial<Record<number, { open: HM; close: HM }>>
-  presets: ShiftPreset[]
+  dayHours: Record<number, { open: HM; close: HM }>
   roles: ShiftRole[]
   stations: Station[]
+  presets: ShiftPreset[]
   safety: SafetyRules
+  ruleSeverity: Record<string, RuleSeverity>
   features: FeatureFlags
-  /** Staff ids explicitly delegated schedule-management rights by an OP or the
-   *  general manager. Stored HERE rather than as a public.staff column on
-   *  purpose: the grant is per-venue, and public.staff is a shared table the
-   *  waiter app and every auth guard already depend on. */
-  scheduleManagers: string[]
-  /** Per-venue override of the rules engine's severity for one warning code —
-   *  `{ outside_hours: 'off' }` silences a code this venue doesn't care
-   *  about, permanently, without a deploy. Keyed by `WarningCode` (defined in
-   *  rules.ts) but typed loosely as `string` here rather than importing that
-   *  type, so this file keeps its "no dependency on the rest of the module"
-   *  property — rules.ts already imports types FROM here, and importing back
-   *  would be a cycle. `evaluate()` is the only reader and knows the valid
-   *  keys. Absent or `'off'`-free means "use the engine's own default
-   *  severity for every code" — an empty object, not a per-code default
-   *  copied in here, so the engine's defaults stay in exactly one place. */
-  ruleSeverity: Partial<Record<string, 'error' | 'warn' | 'info' | 'off'>>
-  /** Null until the onboarding flow is completed; the panel edits the same
-   *  fields forever after. */
+  scheduleManagers: string[] // staff.id[]  (managers only — empty for everyone else)
   onboardedAt: string | null
 }
 
-// ── Roster projection ──────────────────────────────────────────────────
-
-/** A read-only projection of `public.staff`. This module never defines a
- *  worker identity — it references one. `id` is `staff.id` (the surrogate key
- *  since migration 006; `auth_user_id` is null for a pending invite, so it is
- *  the wrong thing to key an assignment on). */
-export interface ScheduleStaff {
-  id: string
-  name: string
-  initial: string | null
-  colour: string | null
-  badge: string | null
-  role: string
-  /** Whether this person is on the roster the scheduler actually uses. On the
-   *  mock source this was always true — "no soft-delete in public.staff, so
-   *  anyone returned is active by definition" (see the old /api/shifts/staff
-   *  route). On the live source it is `schedule_members.schedulable`, which
-   *  starts false for everyone (no row = not schedulable — PLAN_SHIFTS.md
-   *  Part II decision D8) until the owner opts each person in via the
-   *  roster panel. Filtering the assignment picker on `active` therefore
-   *  gives "warn loudly, never block" (D7) for free: an empty roster shows
-   *  nobody to assign rather than erroring. */
-  active: boolean
-  /** True for a staff row the owner authorized by email but who has not yet
-   *  signed in (`auth_user_id` still null — see migration 006). Schedulable
-   *  now so a new hire's first week can be built before their first shift;
-   *  surfaced so the UI can say why someone has no colour/initial yet. */
-  pending?: boolean
-}
-
-/** One row of `schedule_members` — a venue's own per-person scheduling
- *  configuration, on top of the `ScheduleStaff` projection above. Not every
- *  `ScheduleStaff` has one: no row is exactly how "not schedulable" is
- *  represented (D8). Kept as its own type, distinct from `ScheduleStaff`,
- *  because the roster panel needs to read/write these fields directly rather
- *  than through the flattened `active` boolean the rest of the UI uses. */
-export interface ScheduleMember {
+/** One roster row — a person as the scheduler sees them. `displayName` is ALWAYS
+ *  a real name (lib/shifts/names.ts), never blank, whether or not the person has
+ *  an email. The scheduling fields after `active` are the manager's private
+ *  bookkeeping: they are null/false for any non-manager viewer. */
+export type ScheduleStaffRow = {
   staffId: string
+  displayName: string
+  /** Self-selected lightweight avatar until profile photos are introduced. */
+  avatarEmoji: string | null
+  /** The person's own colour from the staff directory (hex), when they have one. */
+  colour?: string | null
+  badge: string | null
+  active: boolean
+  /** On the roster only when the owner has switched them on (no row = off in this app). */
   schedulable: boolean
-  /** Key into settings.roles. Pre-selects the assignment picker; optional. */
   defaultRoleId: string | null
-  /** Null = use settings.safety.maxWeeklyHours. */
   maxWeeklyHours: number | null
-  employmentType: string
-  /** Manual ordering in the roster panel and the assignment picker. */
+  employmentType: string | null
   sortOrder: number | null
-  note: string
+  note: string | null
+  /** Has a linked sign-in — i.e. can open the app, see their schedule and answer a swap. */
+  hasLogin: boolean
 }
 
-// ── The schedule itself ────────────────────────────────────────────────
+export type PublishedSnapshot = { shifts: Shift[]; assignments: Assignment[] }
 
-export type WeekStatus = 'draft' | 'published'
-
-export interface ScheduleWeek {
+export type ScheduleWeek = {
   id: string
   venueId: string
-  /** The week's first day (venue's weekStartsOn), `YYYY-MM-DD`. */
   weekStart: ISODate
-  status: WeekStatus
-  /** Bumped on every publish. Staff see the snapshot of the latest version. */
+  status: 'draft' | 'published'
   version: number
   publishedAt: string | null
-  publishedBy: string | null
-  /** Free-text notes pinned to a whole day, keyed by date. */
-  dayNotes: Record<ISODate, string>
-  /** Warning ids (see `Warning.id` in rules.ts) the manager has acknowledged
-   *  for this draft. Shared between co-managers on purpose — a dismissal is a
-   *  fact about the week, not about one browser (D11). Evaporates on its own
-   *  once the underlying problem changes shape, since the id is derived from
-   *  the warning's own content. */
+  dayNotes: Record<string, string>
   dismissedWarnings: string[]
+  publishedSnapshot: PublishedSnapshot | null
 }
 
-export interface Shift {
+export type Shift = {
   id: string
   venueId: string
   weekId: string
   date: ISODate
-  /** Which preset it came from, for display grouping. Null = ad-hoc. */
+  startTime: HM
+  endTime: HM
   presetId: string | null
-  start: HM
-  end: HM
   stationId: string | null
   requirements: RoleRequirement[]
-  note: string
+  /** The manager explicitly allows employees to ask for this shift. */
+  requestsOpen: boolean
+  note: string | null
+  /** Raw timestamp string, echoed back on save so a concurrent edit is detected. */
+  updatedAt: string | null
 }
 
+/** `swap_pending` is legacy (migration 024 stopped writing it): a pending swap is
+ *  derived from the swaps list and never alters the assignment itself. */
 export type AssignmentStatus = 'assigned' | 'swap_pending'
 
-export interface Assignment {
+export type Assignment = {
   id: string
-  venueId: string
   shiftId: string
-  staffId: string
-  roleId: string
+  staffId: string | null
+  staffName: string | null
+  roleId: string | null
   status: AssignmentStatus
 }
 
-// ── Availability (feature-flagged) ─────────────────────────────────────
+export type AvailabilityKind = 'unavailable' | 'partial' | 'prefer'
+export type AvailabilityEntry = { date: ISODate; kind: AvailabilityKind; from?: HM; to?: HM }
 
-export type AvailabilityKind = 'unavailable' | 'prefer' | 'partial'
-
-export interface AvailabilityEntry {
-  date: ISODate
-  kind: AvailabilityKind
-  /** Only for `partial`: the window the person CAN work. */
-  from?: HM
-  to?: HM
-}
-
-export type SubmissionStatus = 'draft' | 'submitted'
-
-export interface AvailabilitySubmission {
+export type AvailabilitySubmission = {
   id: string
-  venueId: string
   staffId: string
   weekStart: ISODate
   entries: AvailabilityEntry[]
-  note: string
-  status: SubmissionStatus
-  submittedAt: string | null
+  note: string | null
+  status: 'draft' | 'submitted'
 }
 
-// ── Swaps (feature-flagged) ────────────────────────────────────────────
+// ---- Swaps ------------------------------------------------------------------
+//   open ──(colleague accepts)──> peer_accepted ──(manager approves)──> approved
+//     │  \──(named colleague declines)──> declined   └─(manager rejects)──> rejected
+//     └──(requester / manager / a schedule change)──> cancelled
+export type SwapStatus = 'open' | 'peer_accepted' | 'approved' | 'rejected' | 'declined' | 'cancelled'
 
-export type SwapStatus =
-  | 'open'          // offered, no peer has taken it
-  | 'peer_accepted' // a peer said yes; waiting on the manager
-  | 'approved'
-  | 'rejected'
-  | 'cancelled'
+/** Who started it. 'give': the person giving `assignmentId` away (hand-over or exchange),
+ *  answered by `toStaffId` (or any colleague for an open offer). 'take': the person who
+ *  WANTS that shift (`toStaffId`), answered by the person holding it (`fromStaffId`).
+ *  Either way `fromStaffId` holds `assignmentId` now and `toStaffId` gets it on approval. */
+export type SwapDirection = 'give' | 'take'
 
-export interface SwapRequest {
-  id: string
-  venueId: string
+/** What one side of a swap looked like when it was agreed. Kept on the swap
+ *  itself so the record stays readable after the shifts are edited or deleted. */
+export type SwapSide = {
   assignmentId: string
-  fromStaffId: string
-  /** Null while the offer is open to the whole team. */
-  toStaffId: string | null
-  status: SwapStatus
-  reason: string
-  createdAt: string
-  peerRespondedAt: string | null
-  decidedAt: string | null
-  decidedBy: string | null
-  decisionNote: string
+  shiftId: string
+  weekId: string
+  date: ISODate
+  start: HM
+  end: HM
+  presetId: string | null
+  roleId: string | null
+  staffId: string | null
+  staffName: string | null
+  label: string
 }
 
-// ── Audit ──────────────────────────────────────────────────────────────
-
-export type AuditAction =
-  | 'settings.update'
-  | 'onboarding.complete'
-  | 'week.create'
-  /** SQL-only: copy_schedule_week()/clear_schedule_week() write these. The
-   *  reducer's own copy/clear cases log 'week.create'/'shift.delete', so the
-   *  live log and the prototype's log genuinely differ here — both are
-   *  rendered, neither is wrong. */
-  | 'week.copy'
-  | 'week.clear'
-  | 'week.publish'
-  | 'week.unpublish'
-  | 'member.update'
-  | 'warning.dismiss'
-  | 'shift.create'
-  | 'shift.update'
-  | 'shift.delete'
-  | 'assignment.create'
-  | 'assignment.delete'
-  | 'note.update'
-  | 'availability.submit'
-  | 'swap.request'
-  | 'swap.peer_accept'
-  | 'swap.approve'
-  | 'swap.reject'
-  | 'swap.cancel'
-
-export interface AuditEntry {
+export type SwapRequest = {
   id: string
-  venueId: string
-  at: string
-  actorId: string | null
-  /** Snapshotted, like menu_audit does — removing someone later must not erase
-   *  what they did. */
-  actorName: string | null
-  action: AuditAction
-  summary: string
-  /** Payload diff: `{ before, after }` for updates, the row for creates. */
-  diff: Record<string, unknown>
+  direction: SwapDirection
+  /** null once the underlying assignment is gone (history survives). */
+  assignmentId: string | null
+  /** The shift the other person gives in return (an exchange); null = a hand-over. */
+  returnAssignmentId: string | null
+  fromStaffId: string
+  fromStaffName: string | null
+  toStaffId: string | null
+  toStaffName: string | null
+  status: SwapStatus
+  reason: string | null
+  cancelReason: string | null
+  decidedAt: string | null
+  decisionNote: string | null
+  createdAt: string
+  terms: { from?: SwapSide; to?: SwapSide | null }
 }
 
-// ── What the rules engine reads ────────────────────────────────────────
+// ---- "I would like to work this shift" ----------------------------------------
+export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
 
-export interface ScheduleSnapshot {
-  venue: Venue
+export type ShiftRequest = {
+  id: string
+  shiftId: string | null
+  staffId: string
+  staffName: string | null
+  status: RequestStatus
+  note: string | null
+  decisionNote: string | null
+  cancelReason: string | null
+  decidedAt: string | null
+  createdAt: string
+  terms: { shiftId?: string; weekId?: string; date?: ISODate; start?: HM; end?: HM; label?: string }
+}
+
+// ---- In-app notifications (nothing here depends on email) ----------------------
+export type NotificationLink = { tab?: 'schedule' | 'requests'; weekStart?: ISODate; shiftId?: string }
+
+export type ScheduleNotification = {
+  id: string
+  kind: string
+  title: string
+  body: string | null
+  link: NotificationLink
+  createdAt: string
+  readAt: string | null
+}
+
+export type ShiftAuditEntry = {
+  id: string
+  actorName: string | null
+  action: string
+  summary: string | null
+  detail: Record<string, unknown> | null
+  createdAt: string
+}
+
+export type WarningSeverity = 'error' | 'warning'
+
+export type Warning = {
+  code: string
+  severity: WarningSeverity
+  message: string
+  shiftId?: string
+  staffId?: string
+}
+
+/** The venue's own wall clock right now — the one thing "has this shift
+ *  already started?" is decided by, on the server and (from this) the client. */
+export type WallClock = { date: ISODate; time: HM }
+
+/** Shift choices offered before publishing, deliberately without names, notes or assignments. */
+export type PlanningShift = Pick<Shift, 'id' | 'weekId' | 'date' | 'startTime' | 'endTime' | 'presetId' | 'requestsOpen'>
+export type SaturdayBalance = { staffId: string; minutes: number; shifts: number }
+
+/** The full window the provider holds: the requested week, ± 1 — enough
+ *  for cross-week rest/consecutive-day checks at the boundary. Manager
+ *  view reads shifts/assignments live; staff view is built from each
+ *  week's publishedSnapshot instead (see serialize.ts). */
+export type ShiftsDB = {
+  venueId: string
   settings: ShiftSettings
-  week: ScheduleWeek
+  roster: ScheduleStaffRow[]
+  weeks: ScheduleWeek[]
   shifts: Shift[]
   assignments: Assignment[]
-  staff: ScheduleStaff[]
   availability: AvailabilitySubmission[]
-  /** Read-only shifts from the weeks either side. A Saturday-night close
-   *  followed by a Sunday-evening open is the classic clopening, and it is
-   *  invisible to an engine that can only see one week at a time. These
-   *  contribute to overlap and rest checks and to nothing else — counting them
-   *  in the weekly hours quota would bill Sunday for last week's Saturday. */
-  neighbouring?: { shifts: Shift[]; assignments: Assignment[] }
+  swaps: SwapRequest[]
+  requests: ShiftRequest[]
+  planningShifts: PlanningShift[]
+  /** Manager-only count of scheduled Saturday opportunities in the preceding 12 weeks. */
+  saturdayBalance: SaturdayBalance[]
+  notifications: ScheduleNotification[]
+  unreadCount: number
+  audit: ShiftAuditEntry[]
+  now: WallClock
+  viewerStaffId: string | null
+  viewerCanManage: boolean
+  viewerCanDelegate: boolean
 }

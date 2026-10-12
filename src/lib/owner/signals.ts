@@ -37,7 +37,7 @@ import {
   ACCESSIBILITY_STATEMENT, ACCESSIBILITY_REQUIRED_TEXT_FIELDS, type AccessibilityStatement,
 } from '@/lib/settings/keys'
 import { AYEKA_VENUE, DEFAULT_ROLES } from '@/lib/shifts/config'
-import { todayIn, addDays, dayIndex, intervalOf, nowMinutesIn } from '@/lib/shifts/time'
+import { todayIn, addDays, dayIndex, absoluteInterval, nowMinutesIn } from '@/lib/shifts/legacy-clock'
 
 // ── Tunables ──────────────────────────────────────────────────────────
 // Named, because every one of them is a judgement call somebody will want to
@@ -421,7 +421,7 @@ async function readShiftReminder(service: Service): Promise<DashboardSignal | nu
     let earliest: { start: string; startAbs: number; endAbs: number } | null = null
     for (const s of shifts) {
       if (s.date !== today || !s.start) continue
-      const interval = intervalOf(s.date, s.start, s.end || s.start)
+      const interval = absoluteInterval(s.date, s.start, s.end || s.start)
       if (interval.end <= nowAbs) continue
       if (earliest && interval.start >= earliest.startAbs) continue
       earliest = { start: s.start, startAbs: interval.start, endAbs: interval.end }
@@ -531,9 +531,9 @@ async function readDemoMode(service: Service): Promise<DashboardSignal | null> {
   }
 }
 
-/** The snapshot a published week froze. Mirrors `rowToPublishedWeek`'s input
- *  in lib/shifts/serialize.ts — kept local and minimal because this module
- *  only needs staffing counts, not the full domain type. */
+/** One published shift as the dashboard reads it — kept local and minimal because this module
+ *  only needs staffing counts, not the full domain type (see readTodayShifts for how it is
+ *  built from the week's frozen snapshot). */
 export interface SnapshotShift {
   date?: string
   start?: string
@@ -580,9 +580,25 @@ export async function readTodayShifts(service: Service): Promise<{
     .eq('status', 'published')
   if (error) return unknown
 
+  // The frozen copy is flat — shifts and assignments side by side, as table rows (snake_case) — so
+  // each shift's people are gathered here into the per-shift shape the dashboard reads.
   const shifts: SnapshotShift[] = (weeks ?? []).flatMap((w) => {
-    const snap = w.published_snapshot as { shifts?: SnapshotShift[] } | null
-    return (snap?.shifts ?? []).filter((s) => s.date === today || s.date === tomorrow)
+    const snap = w.published_snapshot as { shifts?: Record<string, unknown>[]; assignments?: Record<string, unknown>[] } | null
+    const people = new Map<string, NonNullable<SnapshotShift['assignments']>>()
+    for (const a of snap?.assignments ?? []) {
+      const list = people.get(a.shift_id as string) ?? []
+      list.push({ roleId: (a.role_id as string | null) ?? undefined, staffId: (a.staff_id as string | null) ?? null, staffName: (a.staff_name as string | null) ?? undefined })
+      people.set(a.shift_id as string, list)
+    }
+    return (snap?.shifts ?? [])
+      .filter((s) => s.shift_date === today || s.shift_date === tomorrow)
+      .map((s) => ({
+        date: s.shift_date as string,
+        start: s.start_time as string,
+        end: s.end_time as string,
+        assignments: people.get(s.id as string) ?? [],
+        requirements: (s.requirements as SnapshotShift['requirements']) ?? [],
+      }))
   })
   return { venueId: venue.id, today, shifts, known: true }
 }
@@ -707,7 +723,7 @@ async function readSchedule(service: Service): Promise<{
  *  role in config.ts cannot leave this function behind. An unknown id falls
  *  back to the id itself: visibly raw, rather than confidently wrong. */
 export function roleLabel(roleId: string): string {
-  return DEFAULT_ROLES.find((r) => r.id === roleId)?.name.he ?? roleId
+  return DEFAULT_ROLES.find((r) => r.id === roleId)?.name ?? roleId
 }
 
 // ── Entry point ───────────────────────────────────────────────────────

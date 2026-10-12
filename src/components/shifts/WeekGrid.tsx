@@ -1,121 +1,132 @@
 'use client'
 
-import { useShifts } from '@/components/shifts/ShiftsProvider'
-import { dayNumeric, dayShort, weekDates, weekdayOf } from '@/lib/shifts/time'
-import { forShift, worst, type Warning } from '@/lib/shifts/rules'
-import type { Assignment, ISODate, Shift } from '@/lib/shifts/types'
+import { AlertTriangle, ArrowLeftRight, BellRing, Check, Plus, UserX } from 'lucide-react'
+import { Person, Pill } from '@/components/shifts/ui'
+import { hoursFor, matchPreset } from '@/lib/shifts/presets'
+import { nameOf, indexByShift, pendingRequestsByShift, swapPendingAssignmentIds, shiftFacts } from '@/lib/shifts/view'
+import { formatDateLabel, formatShiftLabel, hasStarted, relativeDayLabel, weekDates, weekdayLongLabel } from '@/lib/shifts/time'
+import { staffColor } from '@/lib/shifts/people'
+import type { Assignment, Shift, ShiftsDB, Warning } from '@/lib/shifts/types'
 
-// The week, drawn once and reused three times: the manager's builder (with
-// every affordance), the staff view (read-only, own shifts lit up) and the
-// print sheet (read-only, no affordances at all).
-//
-// Keeping it one component rather than three is what guarantees the paper
-// matches the screen. A separate print renderer is exactly how a schedule ends
-// up saying two different things — and the printed one is the one taped to the
-// wall, so it is the one people believe.
+// The manager's week board. (The employee's own view is EmployeeSchedule.tsx.)
+// Every state is a word + an icon + a colour (never colour alone):
+//   ללא שיבוץ      nobody is on it
+//   חסר/ה …        it needs more people than it has
+//   מאוישת         it has everyone it asked for
+//   החלפה ממתינה   a swap involving it is waiting (the schedule itself is unchanged)
+//   N בקשות        employees asked to join
+//   שימו לב        a rule is bent (rest, hours, availability, a person who left)
 
-export interface WeekGridProps {
-  weekStart: ISODate
+type Props = {
+  weekStart: string
+  db: ShiftsDB
   shifts: Shift[]
   assignments: Assignment[]
-  dayNotes: Record<ISODate, string>
-  /** Manager only. Absent = read-only. */
-  onShiftClick?: (shift: Shift) => void
-  onAddShift?: (date: ISODate) => void
-  onDayNote?: (date: ISODate) => void
   warnings?: Warning[]
-  /** Draws this person's chips in their own colour and everyone else's muted. */
-  highlightStaffId?: string | null
-  /** Hide shifts this person is not on. */
-  onlyStaffId?: string | null
+  onShiftClick?: (shift: Shift) => void
+  /** Add a shift on this date. */
+  onAdd?: (date: string) => void
+  /** Edit the note of this date. */
+  onEditNote?: (date: string) => void
+  dayNotes?: Record<string, string>
 }
 
-export default function WeekGrid({
-  weekStart, shifts, assignments, dayNotes,
-  onShiftClick, onAddShift, onDayNote, warnings = [],
-  highlightStaffId = null, onlyStaffId = null,
-}: WeekGridProps) {
-  const { db, t, lang, today } = useShifts()
-  const { settings } = db
+// Warnings the coverage pills already say in their own words.
+const COVERED_BY_PILLS = new Set(['understaffed', 'overstaffed', 'unassigned_shift'])
+
+export default function WeekGrid({ weekStart, db, shifts, assignments, warnings, onShiftClick, onAdd, onEditNote, dayNotes }: Props) {
+  const dates = weekDates(weekStart)
+  const viewer = db.viewerStaffId
+  const byShift = indexByShift(assignments)
+  const swapIds = swapPendingAssignmentIds(db.swaps)
+  const requestsByShift = pendingRequestsByShift(db.requests)
+  const roleById = new Map(db.settings.roles.map((r) => [r.id, r]))
+
+  const warningsByShift = new Map<string, Warning[]>()
+  for (const w of warnings ?? []) {
+    if (!w.shiftId) continue
+    const list = warningsByShift.get(w.shiftId) ?? []
+    list.push(w)
+    warningsByShift.set(w.shiftId, list)
+  }
+
+  const shiftsByDate = new Map<string, Shift[]>()
+  for (const s of shifts) {
+    const list = shiftsByDate.get(s.date) ?? []
+    list.push(s)
+    shiftsByDate.set(s.date, list)
+  }
+  for (const list of shiftsByDate.values()) list.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime))
 
   return (
-    <div className="sh-week">
-      {weekDates(weekStart).map((date) => {
-        const weekday = weekdayOf(date)
-        const closed = !settings.workingDays.includes(weekday)
-        const note = dayNotes[date]
-
-        let dayShifts = shifts
-          .filter((s) => s.date === date)
-          .sort((a, b) => a.start.localeCompare(b.start))
-
-        if (onlyStaffId) {
-          const mine = new Set(assignments.filter((a) => a.staffId === onlyStaffId).map((a) => a.shiftId))
-          dayShifts = dayShifts.filter((s) => mine.has(s.id))
-        }
-
+    <div className="sch-week sch-week--manager">
+      {dates.map((date, dow) => {
+        const dayShifts = shiftsByDate.get(date) ?? []
+        const isWorkingDay = db.settings.workingDays.includes(dow)
+        const isToday = date === db.now.date
+        const hours = hoursFor(date, db.settings)
+        const relative = relativeDayLabel(date, db.now)
+        const note = dayNotes?.[date]
         return (
-          <div key={date} className="sh-day" data-closed={closed} data-today={date === today}>
-            <div className="sh-dayhead">
-              <span className="sh-dayname">{dayShort(weekday, lang)}</span>
-              <span className="sh-daydate">{dayNumeric(date)}</span>
-            </div>
+          <section key={date} className={`sch-day${isToday ? ' sch-day--today' : ''}${isWorkingDay ? '' : ' sch-day--closed'}`} aria-label={`${weekdayLongLabel(dow)} ${formatDateLabel(date)}`}>
+            <header className="sch-day__head">
+              <h3 className="sch-day__title">
+                {weekdayLongLabel(dow)}
+                <small className="ltr-isolate">{formatDateLabel(date)}</small>
+              </h3>
+              {relative && <Pill tone="mine">{relative}</Pill>}
+              {!isWorkingDay && <Pill tone="neutral">יום סגור</Pill>}
+              {dow === 6 && isWorkingDay && <Pill tone="info">שבת · 150%</Pill>}
+              {onAdd && (
+                <button type="button" className="sch-add press" onClick={() => onAdd(date)} aria-label={`הוספת משמרת ל${weekdayLongLabel(dow)} ${formatDateLabel(date)}`}>
+                  <Plus size={16} aria-hidden="true" /> משמרת
+                </button>
+              )}
+            </header>
 
-            {closed && !dayShifts.length && (
-              <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-faint)' }}>{t('closedDay')}</p>
+            {(isWorkingDay || note || onEditNote) && (
+              <p className="sch-day__meta">
+                {isWorkingDay && (
+                  <span>
+                    שעות פעילות <span className="ltr-isolate">{hours.open}–{hours.close}</span>
+                  </span>
+                )}
+                {note && <span style={{ color: 'var(--neon-soft)', fontWeight: 600 }}>· {note}</span>}
+                {onEditNote && (
+                  <button type="button" className="sch-note" onClick={() => onEditNote(date)}>
+                    {note ? 'עריכת הערה' : 'הערה ליום'}
+                  </button>
+                )}
+              </p>
             )}
 
-            {note && (
-              <button
-                type="button"
-                onClick={onDayNote ? () => onDayNote(date) : undefined}
-                disabled={!onDayNote}
-                style={{
-                  textAlign: 'start', font: 'inherit', fontSize: '0.72rem', lineHeight: 1.5,
-                  color: 'var(--neon-2)', background: 'rgba(56,225,255,0.08)',
-                  border: '1px solid rgba(56,225,255,0.22)', borderRadius: 10,
-                  padding: '6px 8px', cursor: onDayNote ? 'pointer' : 'default',
-                }}
-              >
-                📌 {note}
-              </button>
+            {dayShifts.length === 0 ? (
+              onAdd ? (
+                <button type="button" className="sch-add sch-add--block press" onClick={() => onAdd(date)}>
+                  <Plus size={16} aria-hidden="true" /> הוספת משמרת
+                </button>
+              ) : (
+                <p className="sch-sub sch-faint">אין משמרות</p>
+              )
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {dayShifts.map((shift) => (
+                  <ShiftCard
+                    key={shift.id}
+                    shift={shift}
+                    db={db}
+                    assignments={byShift.get(shift.id) ?? []}
+                    warnings={warningsByShift.get(shift.id) ?? []}
+                    swapIds={swapIds}
+                    requestCount={(requestsByShift.get(shift.id) ?? []).length}
+                    roleById={roleById}
+                    viewer={viewer}
+                    onClick={onShiftClick}
+                  />
+                ))}
+              </div>
             )}
-
-            {dayShifts.map((shift) => (
-              <ShiftCard
-                key={shift.id}
-                shift={shift}
-                assignments={assignments.filter((a) => a.shiftId === shift.id)}
-                warnings={forShift(warnings, shift.id)}
-                onClick={onShiftClick}
-                highlightStaffId={highlightStaffId}
-              />
-            ))}
-
-            {!dayShifts.length && !closed && !onAddShift && (
-              <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-faint)' }}>{t('emptyDay')}</p>
-            )}
-
-            {onAddShift && (
-              <button type="button" className="sh-slot sh-noprint press" onClick={() => onAddShift(date)}>
-                <span aria-hidden>＋</span>{t('addShift')}
-              </button>
-            )}
-
-            {onDayNote && !note && (
-              <button
-                type="button" className="sh-noprint"
-                onClick={() => onDayNote(date)}
-                style={{
-                  font: 'inherit', fontSize: '0.7rem', color: 'var(--text-faint)',
-                  background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
-                  textAlign: 'start',
-                }}
-              >
-                {`📌 ${t('dayNote')}`}
-              </button>
-            )}
-          </div>
+          </section>
         )
       })}
     </div>
@@ -123,105 +134,123 @@ export default function WeekGrid({
 }
 
 function ShiftCard({
-  shift, assignments, warnings, onClick, highlightStaffId,
+  shift,
+  db,
+  assignments,
+  warnings,
+  swapIds,
+  requestCount,
+  roleById,
+  viewer,
+  onClick,
 }: {
   shift: Shift
+  db: ShiftsDB
   assignments: Assignment[]
   warnings: Warning[]
+  swapIds: Set<string>
+  requestCount: number
+  roleById: Map<string, ShiftsDB['settings']['roles'][number]>
+  viewer: string | null
   onClick?: (shift: Shift) => void
-  highlightStaffId: string | null
 }) {
-  const { db, t, tri } = useShifts()
-  const preset = db.settings.presets.find((p) => p.id === shift.presetId)
-  const station = db.settings.stations.find((s) => s.id === shift.stationId)
-  const severity = worst(warnings)
-  const interactive = !!onClick
+  const { coverage } = shiftFacts(shift, assignments)
+  const mine = !!viewer && assignments.some((a) => a.staffId === viewer)
+  const past = hasStarted(shift, db.now)
+  const swapPending = assignments.some((a) => swapIds.has(a.id))
+  const preset = matchPreset(shift, db.settings.presets) ?? (shift.presetId ? db.settings.presets.find((p) => p.id === shift.presetId) : undefined)
+  const station = shift.stationId ? db.settings.stations.find((s) => s.id === shift.stationId) : undefined
+  const otherWarnings = warnings.filter((w) => !COVERED_BY_PILLS.has(w.code))
+  const hasError = otherWarnings.some((w) => w.severity === 'error')
 
-  const body = (
+  const classes = ['sch-shift']
+  if (coverage.state === 'unassigned') classes.push('sch-shift--empty')
+  if (hasError) classes.push('sch-shift--problem')
+  if (mine) classes.push('sch-shift--mine')
+  if (past) classes.push('sch-shift--past')
+
+  const peopleNames = assignments.map((a) => nameOf(db, a.staffId, a.staffName))
+  const label = `${formatShiftLabel(shift.date, shift.startTime, shift.endTime)}. ${
+    peopleNames.length ? `משובצים: ${peopleNames.join(', ')}` : 'ללא שיבוץ'
+  }${onClick ? '. לחצו לפרטים' : ''}`
+
+  const content = (
     <>
-      <div className="sh-cardhead">
-        <span className="sh-time">{shift.start}–{shift.end}</span>
-        {preset && (
-          <span className="sh-preset" style={{
-            color: preset.color, background: `${preset.color}18`,
-            border: `1px solid ${preset.color}40`,
-          }}>
-            {tri(preset.name)}
-          </span>
-        )}
-        {severity && (
-          <span
-            aria-hidden
-            style={{ marginInlineStart: 'auto', fontSize: '0.8rem' }}
-            title={warnings.map((w) => tri(w.message)).join('\n')}
-          >
-            {severity === 'error' ? '⛔' : severity === 'warn' ? '⚠️' : 'ℹ️'}
+      <div className="sch-shift__top">
+        <span className="sch-time">
+          {shift.startTime}–{shift.endTime}
+        </span>
+        {preset && <span className="sch-shift__label">{preset.name}</span>}
+        {station && (
+          <span className="sch-shift__label">
+            · {station.emoji} {station.name}
           </span>
         )}
       </div>
 
-      {station && (
-        <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)' }}>
-          {station.emoji} {tri(station.name)}
-        </span>
-      )}
+      <div className="sch-shift__chips">
+        {assignments.length === 0 ? (
+          <Pill tone="warn" icon={<UserX size={13} aria-hidden="true" />}>
+            ללא שיבוץ — לחצו לשיבוץ
+          </Pill>
+        ) : (
+          assignments.map((a) => {
+            const row = a.staffId ? db.roster.find((r) => r.staffId === a.staffId) : undefined
+            return (
+              <Person
+                key={a.id}
+                name={nameOf(db, a.staffId, a.staffName)}
+                role={a.roleId ? roleById.get(a.roleId) : null}
+                color={staffColor(a.staffId, db.roster)}
+                emoji={row?.avatarEmoji}
+                faded={swapIds.has(a.id) || (!!row && !row.active)}
+                note={row && !row.active ? 'לא פעיל/ה' : undefined}
+              />
+            )
+          })
+        )}
+      </div>
 
-      {assignments.length ? (
-        <div className="sh-people">
-          {assignments.map((a) => (
-            <PersonChip
-              key={a.id} assignment={a}
-              muted={!!highlightStaffId && a.staffId !== highlightStaffId}
-            />
-          ))}
-        </div>
-      ) : (
-        <span style={{ fontSize: '0.72rem', color: '#ff6b6b', fontWeight: 600 }}>
-          {t('unassigned')}
-        </span>
-      )}
-
-      {shift.note && (
-        <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', lineHeight: 1.45 }}>
-          {shift.note}
-        </span>
-      )}
+      <div className="sch-shift__chips">
+        {coverage.state === 'partial' && (
+          <Pill tone="warn" icon={<UserX size={13} aria-hidden="true" />}>
+            {coverage.short.length > 0
+              ? `חסר/ה ${coverage.short.map((s) => `${s.missing > 1 ? `${s.missing} ` : ''}${roleById.get(s.roleId)?.name ?? 'עובד/ת'}`).join(', ')}`
+              : `חסרים ${coverage.missing}`}
+          </Pill>
+        )}
+        {coverage.state === 'full' && (
+          <Pill tone="ok" icon={<Check size={13} aria-hidden="true" />}>
+            מאוישת ({coverage.assigned}/{coverage.needed})
+          </Pill>
+        )}
+        {swapPending && (
+          <Pill tone="swap" icon={<ArrowLeftRight size={13} aria-hidden="true" />}>
+            החלפה ממתינה
+          </Pill>
+        )}
+        {requestCount > 0 && (
+          <Pill tone="info" icon={<BellRing size={13} aria-hidden="true" />}>
+            {requestCount === 1 ? 'בקשה להצטרף' : `${requestCount} בקשות להצטרף`}
+          </Pill>
+        )}
+        {otherWarnings.length > 0 && (
+          <Pill tone={hasError ? 'danger' : 'warn'} icon={<AlertTriangle size={13} aria-hidden="true" />}>
+            {otherWarnings[0]!.message}
+            {otherWarnings[0]!.staffId ? ` · ${nameOf(db, otherWarnings[0]!.staffId)}` : ''}
+            {otherWarnings.length > 1 ? ` (+${otherWarnings.length - 1})` : ''}
+          </Pill>
+        )}
+        {shift.note && <span className="sch-sub">{shift.note}</span>}
+      </div>
     </>
   )
 
-  if (!interactive) {
-    return <div className="sh-card" data-severity={severity ?? undefined} style={{ cursor: 'default' }}>{body}</div>
-  }
-  return (
-    <button
-      type="button" className="sh-card press"
-      data-severity={severity ?? undefined}
-      onClick={() => onClick?.(shift)}
-    >
-      {body}
+  return onClick ? (
+    <button type="button" className={`${classes.join(' ')} press`} onClick={() => onClick(shift)} aria-label={label}>
+      {content}
     </button>
-  )
-}
-
-export function PersonChip({ assignment, muted = false }: { assignment: Assignment; muted?: boolean }) {
-  const { db, tri } = useShifts()
-  const person = db.staff.find((s) => s.id === assignment.staffId)
-  const role = db.settings.roles.find((r) => r.id === assignment.roleId)
-  const colour = person?.colour ?? 'var(--text-faint)'
-  const initial = person?.initial ?? person?.name?.[0] ?? '?'
-
-  return (
-    <span
-      className="sh-chip"
-      data-swap={assignment.status === 'swap_pending'}
-      style={muted ? undefined : { borderColor: `${colour}55`, color: 'var(--text)' }}
-      title={role ? tri(role.name) : undefined}
-    >
-      <span className="sh-dot" style={{ background: muted ? 'var(--line-strong)' : colour }} aria-hidden>
-        {initial}
-      </span>
-      <span className="sh-chipname">{person?.name ?? '—'}</span>
-      {role && <span aria-hidden style={{ opacity: 0.75 }}>{role.emoji}</span>}
-    </span>
+  ) : (
+    <div className={classes.join(' ')}>{content}</div>
   )
 }

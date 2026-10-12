@@ -19,7 +19,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { AYEKA_VENUE } from '@/lib/shifts/config'
-import { dayIndex, fmtDuration, intervalOf, nowMinutesIn } from '@/lib/shifts/time'
+import { absoluteInterval, dayIndex, fmtDuration, nowMinutesIn } from '@/lib/shifts/legacy-clock'
 import { readTodayShifts } from './signals'
 
 type Service = ReturnType<typeof createServiceClient>
@@ -77,7 +77,7 @@ async function earliestUpcomingShift(service: Service): Promise<NextShiftStatus 
   for (const s of shifts) {
     if (!s.start || !s.date) continue
     const end = s.end || s.start
-    const interval = intervalOf(s.date, s.start, end)
+    const interval = absoluteInterval(s.date, s.start, end)
     // Skip a shift whose whole window is already behind us — "today's
     // shift" that ended hours ago isn't the next one, whatever's left today
     // (or tomorrow) is.

@@ -1,0 +1,168 @@
+/* Primitives the scheduler's sheets and pickers share (components/shifts/kit). Self-contained so
+   the rest of the app's own sheet/wheel styles are untouched. */
+
+/* Visually hidden but reachable by screen readers/keyboard focus — for a
+   label that would be visually redundant next to its control. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.sr-only:focus-within,
+.sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Numerals/prices/times must never mirror inside RTL text. */
+.ltr-isolate {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+
+/* Closing state — opt-in via a class swap (see hooks/useSheetExit), played
+   for ~200ms before the caller actually unmounts, so a sheet closes with
+   the same directional motion it opened with instead of just vanishing. */
+.sheet-scrim--closing {
+  animation: fade-out 0.2s var(--ease) forwards;
+}
+.sheet-scrim--closing .sheet-panel {
+  animation: sheet-down 0.22s var(--ease) forwards;
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+@media (min-width: 720px) {
+  .sheet-scrim--closing .sheet-panel {
+    animation: fall-out 0.2s var(--ease) forwards;
+  }
+  @keyframes fall-out {
+    to {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* COLLAPSE: for the opening pair the motion WAS the appearance, so the
+     sheet must still appear — it simply appears instead of rising. */
+  .sheet-scrim,
+  .sheet-panel {
+    animation: none;
+  }
+  /* The closing pair needs care rather than a blanket none. fade-out /
+     sheet-down / fall-out run with `forwards`, so they are what visually
+     removes the sheet during the ~200ms useSheetExit waits before it
+     actually unmounts. Kill them naively and the sheet sits fully opaque
+     for that window and then blinks out of existence. Collapsing them to
+     an instant opacity 0 keeps the disappearance immediate and motionless,
+     which is the honest reduced-motion equivalent of closing. */
+  .sheet-scrim--closing,
+  .sheet-scrim--closing .sheet-panel {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+
+.kit-wheel-picker {
+  position: relative;
+  /* A numeric control (hour column, then minute column) reads left-to-right
+     even on an RTL page, same reasoning as .price's isolation — baked in
+     here rather than relying on every call site to remember an
+     `ltr-isolate` wrapper, which is exactly how this shipped broken: two
+     of three TimeWheel call sites forgot it, and under RTL a flex row's
+     children lay out right-to-left by default, silently swapping the
+     hour and minute columns. */
+  direction: ltr;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 0 24px;
+}
+/* One rail across the whole picker, the way iOS draws it — a per-column
+   band reads as two chips stapled around the digits. It sits UNDER the
+   numbers (z-index 0 vs 1 below), not on top of them. */
+.kit-wheel-rail {
+  position: absolute;
+  inset-inline: 12px;
+  top: 50%;
+  height: 40px; /* WHEEL_ITEM_H */
+  transform: translateY(-50%);
+  border-radius: 10px;
+  background: rgba(255, 94, 58, 0.12);
+  border-block: 1px solid var(--line-strong);
+  pointer-events: none;
+  z-index: 0;
+}
+.kit-wheel-scroll {
+  position: relative;
+  z-index: 1;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* UP AND DOWN AND NOTHING ELSE. pan-y stops a slightly-diagonal drag
+     being read as a horizontal swipe and abandoning the dial mid-turn;
+     contain stops a flick that reaches the end from chaining into a
+     parent sheet and scrolling the form out from under the finger. */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  cursor: grab;
+  user-select: none;
+  /* Ends fade so the column reads as a cylinder. NOT to zero —
+     neighbouring values stay legible, which is what makes it scannable. */
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.22), #000 34%, #000 66%, rgba(0, 0, 0, 0.22));
+}
+.kit-wheel-scroll::-webkit-scrollbar {
+  display: none;
+}
+.kit-wheel-scroll:active {
+  cursor: grabbing;
+}
+.kit-wheel-scroll:focus-visible {
+  outline: 2px solid var(--neon-2);
+  outline-offset: 2px;
+}
+.kit-wheel-item {
+  scroll-snap-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.kit-wheel-item[aria-selected='true'] {
+  color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-wheel-scroll {
+    scroll-behavior: auto;
+  }
+}
