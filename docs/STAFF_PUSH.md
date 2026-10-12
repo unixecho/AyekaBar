@@ -16,6 +16,7 @@ pending; the sender claims rows (sets `push_sent_at`) *before* sending, so overl
    ```sql
    select vault.create_secret('https://<your-domain>', 'staff_push_url');
    ```
+   Use the host of the **Next app** (Vercel project `ayeka-bar`, `https://www.ayeka.bar`). `staff.ayeka.bar` is the separate Vite order-management app and does not serve `/api/cron/staff-push`.
    Migration `055` creates the random bearer secret (`staff_push_cron`) in Vault itself; it never leaves the
    database and is verified by `staff_push_verify_cron()`. `CRON_SECRET` also works if you prefer an env secret.
    Until `staff_push_url` exists the tick does nothing, harmlessly.
