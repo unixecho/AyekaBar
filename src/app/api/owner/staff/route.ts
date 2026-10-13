@@ -109,13 +109,22 @@ export async function POST(request: NextRequest) {
   const badge = body?.badge?.trim() || null
   const role = body?.role === 'owner' ? 'owner' : 'staff'
 
+  // The name the OWNER typed, valid for both shapes below. Added 2026-10-13:
+  // the Gmail ("with account") form had no name fields at all, so a pending
+  // invite showed up on the roster and in the scheduler as the first three
+  // letters of an email address until the person happened to sign in. Typed
+  // here, the name survives the claim — claim_staff_invite() (041) only ever
+  // fills a NULL first/last name from the Google profile, never overwrites.
+  const typedFirst = typeof body?.firstName === 'string' ? body.firstName.trim() : ''
+  const typedLast = typeof body?.lastName === 'string' ? body.lastName.trim() : ''
+  if (typedFirst.length > 60 || typedLast.length > 60) {
+    return NextResponse.json({ error: 'השם ארוך מדי' }, { status: 400 })
+  }
+
   if (!email) {
-    const first = body?.firstName?.trim()
-    const last = body?.lastName?.trim() || null
+    const first = typedFirst
+    const last = typedLast || null
     if (!first) return NextResponse.json({ error: 'חסר שם או אימייל' }, { status: 400 })
-    if (first.length > 60 || (last && last.length > 60)) {
-      return NextResponse.json({ error: 'השם ארוך מדי' }, { status: 400 })
-    }
     // Admin rights are meaningless on a row that can never authenticate, and
     // storing role='owner' here would inflate the "last owner" guard in DELETE
     // with an account nobody can sign into. Forced to 'staff'.
@@ -138,11 +147,20 @@ export async function POST(request: NextRequest) {
   // back to life rather than staying invisible, the same "re-invite ==
   // restore" shortcut reactivateTable() gives the floor plan.
   const { data: existing } = await auth.service
-    .from('staff').select('id, active').ilike('email', likeExact(email)).maybeSingle()
+    .from('staff').select('id, active, auth_user_id, first_name').ilike('email', likeExact(email)).maybeSingle()
   if (existing) {
+    const update: Record<string, unknown> = { role, badge, active: true }
+    // Re-inviting someone who never signed in is the natural moment to fix a
+    // misspelt name. A LINKED row keeps its name — that is their Google
+    // profile, and the owner's display-name override is the tool for the
+    // public side.
+    if (typedFirst && !existing.auth_user_id) {
+      update.first_name = typedFirst
+      update.last_name = typedLast || null
+    }
     const { data, error } = await auth.service
       .from('staff')
-      .update({ role, badge, active: true })
+      .update(update)
       .eq('id', existing.id)
       .select(COLS)
       .single()
@@ -151,7 +169,13 @@ export async function POST(request: NextRequest) {
   }
 
   const user = await findAuthUserByEmail(auth.service, email)
-  const names = user ? splitName(user) : { first: null, last: null }
+  const google = user ? splitName(user) : { first: null, last: null }
+  // What the owner typed wins over the Google profile — it is the name this
+  // person is known by at work. The profile only fills what was left blank.
+  const names = {
+    first: typedFirst || google.first,
+    last: typedFirst ? (typedLast || null) : google.last,
+  }
 
   const { data, error } = await auth.service
     .from('staff')
@@ -229,9 +253,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'אימייל לא תקין' }, { status: 400 })
     }
     const { data: existingEmail } = await auth.service
-      .from('staff').select('id').ilike('email', likeExact(email)).maybeSingle()
+      .from('staff').select('id, active').ilike('email', likeExact(email)).maybeSingle()
     if (existingEmail) {
-      return NextResponse.json({ error: 'האימייל הזה כבר משויך לאיש/אשת צוות אחר/ת' }, { status: 400 })
+      // A REMOVED person still holds their address (the row is kept for the
+      // history that points at it), so say that — "assigned to someone else"
+      // sent the owner hunting through a roster that does not show them.
+      return NextResponse.json({
+        error: existingEmail.active
+          ? 'האימייל הזה כבר משויך לאיש/אשת צוות אחר/ת'
+          : 'האימייל הזה שייך למי שהוסר/ה מהצוות — שחזר/י אותו/ה מרשימת "הוסרו" במקום',
+      }, { status: 400 })
     }
     const user = await findAuthUserByEmail(auth.service, email)
     patch.email = user?.email ?? email
@@ -239,16 +270,18 @@ export async function PATCH(request: NextRequest) {
     patch.claimed_at = user ? new Date().toISOString() : null
   }
 
-  // Real name, editable for offline rows ONLY. For everyone else first/last
-  // are a snapshot of their Google profile and `claim_staff_invite()` writes
-  // them on first sign-in — letting the owner edit those would produce a name
-  // that silently reverts, which is worse than not offering the field. An
-  // offline row has no profile to snapshot and no claim path, so its name is
-  // the only name it will ever have, and a typo in it must be fixable.
+  // Real name, editable until the person has signed in: an offline row (no
+  // account at all) or a pending invite (an address, but nobody has claimed
+  // it yet). Once a row is LINKED, first/last are a snapshot of the person's
+  // Google profile and editing them here would fight the profile — the
+  // display-name override is the tool for that. A pending row was widened in
+  // 2026-10-13, when the Gmail form gained name fields: claim_staff_invite()
+  // only fills a NULL name from Google (migration 041), so a name typed here
+  // survives the person's first sign-in, and a typo in it must be fixable.
   if (body && ('firstName' in body || 'lastName' in body)) {
-    if (!isOffline(row)) {
+    if (row.auth_user_id) {
       return NextResponse.json(
-        { error: 'אפשר לערוך שם רק לאיש/אשת צוות ללא חשבון' },
+        { error: 'אפשר לערוך שם רק עד לכניסה הראשונה של איש/אשת הצוות' },
         { status: 400 }
       )
     }

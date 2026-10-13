@@ -18,7 +18,10 @@ import Link from 'next/link'
 // isn't back, it's a shortcut wearing a back button's icon.
 export default function OwnerHeader({ right, backHref }: { right: ReactNode; backHref?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22, gap: 12 }}>
+    // flexWrap (2026-10-13): the right slot can now carry two short pills plus
+    // sign-out (employee view / developer / manage). On a 280px Fold the row
+    // wraps to a second line instead of pushing the page wider than the screen.
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: 22, gap: 12 }}>
       <div className="rise" style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         {backHref && (
           <Link

@@ -1,19 +1,53 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getLoyaltyEnabled } from '@/lib/settings/server'
 import { badgeMeta } from '@/lib/staff/badges'
-import { canEditMenu } from '@/lib/staff/access'
-import QRDisplay from '@/components/QRDisplay'
+import { isDev, isOp } from '@/lib/staff/access'
+import { readMyShifts } from '@/lib/staff/my-shifts'
+import { zonedNow } from '@/lib/shifts/presence'
+import { Z_REPORT_TILE, STAFF_CATEGORIES, STAFF_EXCLUDE, sectionsFor } from '@/lib/dashboard/tiles'
+import { zAccessFor } from '@/lib/zreport/server'
+import OwnerHeader from '@/components/OwnerHeader'
 import SignOutButton from '@/components/SignOutButton'
+import DashboardSections, { type LockedTiles } from '@/components/dashboard/DashboardSections'
+import ShiftQuickView from '@/components/dashboard/ShiftQuickView'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'אזור הצוות · אייכה בר' }
+export const dynamic = 'force-dynamic'
+
+// The employee's home (rebuilt 2026-10-13). It used to be a check-in QR, a
+// "my shifts" button and — for the general manager — an editor button. It is a
+// dashboard now:
+//
+//   1. who you are, and where you are in your shift (the quick view — the
+//      owner asked for it by name),
+//   2. the work tiles: my shifts · the POS · the loyalty club,
+//   3. whatever else this person's role opens (the GM's editor and schedule,
+//      the shift manager's floor), and
+//   4. — only inside the 23:00 window, only for someone who may file — the Z
+//      report.
+//
+// The loyalty club is on this screen but LOCKED while the owner's switch is off
+// (today), so staff can see it is coming rather than wonder where it went.
+//
+// The tile list itself is the shared registry (lib/dashboard/tiles.ts); this
+// page decides only what is dynamic about it.
+
+async function posShiftOpen(): Promise<boolean | null> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from('waiter_shift_sessions').select('id').eq('status', 'active').limit(1)
+    return error ? null : (data?.length ?? 0) > 0
+  } catch {
+    return null
+  }
+}
 
 export default async function StaffDashboardPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-
   if (!user) redirect('/login')
 
   // Being signed in with Google is not being staff. Middleware gates this too
@@ -21,106 +55,70 @@ export default async function StaffDashboardPage() {
   // same defense-in-depth pattern as the /owner/* pages.
   const { data: me } = await supabase
     .from('staff')
-    .select('role, badge')
+    .select('id, role, badge, first_name, display_name')
     .eq('auth_user_id', user.id)
     .maybeSingle()
   if (!me) redirect('/no-access')
 
-  // The check-in QR only means anything while the club is running. Staff can
-  // still sign in when it's off — they just see why the code isn't here,
-  // rather than being bounced to a public coming-soon page that reads like a
-  // failed login.
-  const loyaltyLive = await getLoyaltyEnabled()
+  const service = createServiceClient()
+  const [loyaltyLive, myShifts, posOpen, zAccess] = await Promise.all([
+    getLoyaltyEnabled(),
+    readMyShifts(me.id),
+    posShiftOpen(),
+    zAccessFor(service, { staffId: me.id, role: me.role, badge: me.badge }),
+  ])
+
   const meta = badgeMeta(me.badge, me.role)
+  const firstName = me.display_name?.trim() || me.first_name?.trim() || null
+
+  const sections = sectionsFor(me, STAFF_CATEGORIES, STAFF_EXCLUDE)
+  // The Z report is a tile only while the window is open for this person.
+  if (zAccess.canFile) {
+    const work = sections.find((s) => s.category.id === 'mywork')
+    if (work) work.tiles = [...work.tiles, Z_REPORT_TILE]
+  }
+  const locked: LockedTiles = loyaltyLive ? {} : { loyalty: 'בקרוב' }
 
   return (
-    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
-      <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 24, textAlign: 'center' }}>
-        {/* Header */}
-        <div className="rise" style={{ animationDelay: '20ms', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/logo.svg" alt="" width={48} height={48} style={{ display: 'block' }} />
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text)', textShadow: '0 0 18px rgba(255,94,58,0.5)', margin: 0 }}>
-            אייכה<span style={{ color: 'var(--neon)' }}> · </span>בר
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+      <OwnerHeader right={<SignOutButton />} />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="rise" style={{ animationDelay: '30ms', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text)' }}>
+            {firstName ? `שלום, ${firstName}` : 'שלום'}
           </h1>
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             background: `${meta.color}18`, border: `1px solid ${meta.color}44`, color: meta.color,
-            borderRadius: 999, padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700,
+            borderRadius: 999, padding: '3px 11px', fontSize: '0.76rem', fontWeight: 700,
           }}>
             <span aria-hidden>{meta.emoji}</span>{meta.he}
           </span>
-        </div>
-
-        {loyaltyLive ? (
-          <>
-            <div className="rise" style={{ animationDelay: '110ms' }}>
-              <QRDisplay />
-            </div>
-
-            {/* Instructions for staff */}
-            <div className="rise" style={{
-              background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 18,
-              padding: 16, textAlign: 'start', animationDelay: '200ms',
+          {/* Owners and the developer are employees too. Their own dashboards
+              are one tap away from here, and this is theirs to open as an
+              employee — the view the staff actually see. */}
+          {isOp(me) && (
+            <Link href={isDev(me) ? '/owner/dev' : '/owner/dashboard'} className="press" style={{
+              marginInlineStart: 'auto', fontSize: '0.8rem', fontWeight: 700, color: 'var(--neon-soft)',
+              textDecoration: 'none', border: '1px solid var(--line-strong)', borderRadius: 999, padding: '5px 12px',
             }}>
-              <p style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 8px' }}>הוראות לצוות:</p>
-              <ol style={{ margin: 0, padding: '0 20px 0 0', color: 'var(--text-dim)', fontSize: '0.85rem', lineHeight: 1.7 }}>
-                <li>הצג את הקוד ללקוח לפני שעוזב</li>
-                <li>הלקוח סורק עם המצלמה שלו</li>
-                <li>הנקודה נצברת אוטומטית</li>
-              </ol>
-              <p style={{ fontSize: '0.76rem', color: 'var(--text-faint)', margin: '10px 0 0' }}>
-                הקוד מתחדש כל 15 דקות ותקף לשימוש חד-פעמי
-              </p>
-            </div>
-          </>
-        ) : (
-          <div className="rise" style={{
-            background: 'var(--bg-elev)', border: '1px dashed var(--line-strong)', borderRadius: 18,
-            padding: '22px 18px', animationDelay: '110ms',
-          }}>
-            <div aria-hidden style={{ fontSize: '1.8rem', marginBottom: 8 }}>⏳</div>
-            <p style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>
-              מועדון הנאמנות עדיין לא פעיל
-            </p>
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-dim)', margin: '6px 0 0', lineHeight: 1.6 }}>
-              קוד ה-QR יופיע כאן ברגע שהבעלים יפעיל/תפעיל את המועדון. אין צורך לעשות כלום — הכניסה שלך פעילה.
-            </p>
-          </div>
-        )}
-
-        {/* Every staff member reaches their own published shifts from here.
-            Unlike the editor link below it, this one is not gated: the whole
-            point of the schedule is that the person working the shift can see
-            it. What they see is limited by the data, not by this button. */}
-        <Link href="/staff/schedule" className="press rise" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          padding: '13px 16px', borderRadius: 14, textDecoration: 'none',
-          border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
-          color: 'var(--text)', fontWeight: 600, fontSize: '0.92rem',
-          animationDelay: '215ms',
-        }}>
-          🗓️ המשמרות שלי
-        </Link>
-
-        {/* The GM reaches the menu from here — they have no owner dashboard. */}
-        {canEditMenu(me) && (
-          <Link href="/owner/editor" className="press rise" style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            padding: '13px 16px', borderRadius: 14, textDecoration: 'none',
-            border: '1px solid var(--line-strong)', background: 'var(--bg-elev)',
-            color: 'var(--text)', fontWeight: 600, fontSize: '0.92rem',
-            animationDelay: '230ms',
-          }}>
-            📝 עריכת התפריט
-          </Link>
-        )}
-
-        {/* Shared-device bars hand this screen between shifts, so staff need a
-            way off it without clearing browser data. */}
-        <div className="rise" style={{ animationDelay: '260ms', display: 'flex', justifyContent: 'center' }}>
-          <SignOutButton />
+              {isDev(me) ? '🛠️ לוח מפתח' : '⚙️ לוח ניהול'}
+            </Link>
+          )}
         </div>
+
+        <ShiftQuickView
+          shifts={myShifts.shifts}
+          roleLabels={myShifts.roleLabels}
+          staffId={me.id}
+          timezone={myShifts.timezone}
+          known={myShifts.known}
+          posOpen={posOpen}
+          initialNow={zonedNow(myShifts.timezone)}
+        />
+
+        <DashboardSections sections={sections} locked={locked} baseDelay={150} />
       </div>
     </main>
   )

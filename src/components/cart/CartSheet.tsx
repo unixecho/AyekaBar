@@ -11,6 +11,7 @@ import { CART_UI } from '@/lib/cart/i18n'
 import { MAX_DINERS, TABLE_COLOUR, type Cart, type CartLine } from '@/lib/cart/types'
 import { useCart } from './CartProvider'
 import SheetShell from './SheetShell'
+import CallWaiterSheet from './CallWaiterSheet'
 
 // The cart itself: what's in it, who it's for, what it comes to.
 //
@@ -36,6 +37,8 @@ export default function CartSheet({ lang }: { lang: Lang }) {
   // In read-out mode, show only the round that has not been given to the
   // waiter yet. That IS the useful view the second time they come over.
   const [readoutAll, setReadoutAll] = useState(false)
+  // "קריאה למלצר" opens its own sheet on top of this one (2026-10-13).
+  const [callOpen, setCallOpen] = useState(false)
 
   const dir = RTL[lang] ? 'rtl' : 'ltr'
   const groups = useMemo(() => groupByDiner(cart), [cart])
@@ -132,7 +135,11 @@ export default function CartSheet({ lang }: { lang: Lang }) {
     })
   }
 
-  const nested = prompt !== null || confirm !== null
+  const nested = prompt !== null || confirm !== null || callOpen
+  // Both locks, as for every action here: the owner/dev switch AND the build
+  // constant. The switch ships OFF, so the button stays visibly inert until
+  // the developer turns it on to test.
+  const callLive = actions.call && PHASE_3_BUILT
 
   const footer = (
     <div className="cart-foot">
@@ -175,13 +182,17 @@ export default function CartSheet({ lang }: { lang: Lang }) {
               {CART_UI.sendToWaiter[lang]}
               <span className="cart-soon-badge">{CART_UI.soon[lang]}</span>
             </button>
-            <button type="button" className="cart-soon" disabled={!(actions.call && PHASE_3_BUILT)}>
+            <button
+              type="button" className={callLive ? 'cart-secondary press' : 'cart-soon'}
+              disabled={!callLive}
+              onClick={() => { haptic('select'); setCallOpen(true) }}
+            >
               {CART_UI.callWaiter[lang]}
-              <span className="cart-soon-badge">{CART_UI.soon[lang]}</span>
+              {!callLive && <span className="cart-soon-badge">{CART_UI.soon[lang]}</span>}
             </button>
           </div>
 
-          <p className="cart-foot-note" style={{ margin: '2px 0 0' }}>{CART_UI.soonHint[lang]}</p>
+          <p className="cart-foot-note" style={{ margin: '2px 0 0' }}>{callLive ? CART_UI.soonHintOrder[lang] : CART_UI.soonHint[lang]}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -345,6 +356,10 @@ export default function CartSheet({ lang }: { lang: Lang }) {
       {/* Both portal above the sheet; `suspended` hands them the Escape key. */}
       <PromptSheet request={prompt} onClose={() => setPrompt(null)} />
       <ConfirmSheet request={confirm} onClose={() => setConfirm(null)} />
+      <CallWaiterSheet
+        open={callOpen} onClose={() => setCallOpen(false)} lang={lang}
+        cartItems={cart.lines.reduce((n, l) => n + l.qty, 0)} cartAgorot={agorot}
+      />
     </>
   )
 }
@@ -355,7 +370,7 @@ export default function CartSheet({ lang }: { lang: Lang }) {
  *  Typed `boolean` rather than inferred as the literal `false` so the checks
  *  above read as real conditions to both the compiler and the next reader. */
 const PHASE_2_BUILT: boolean = false
-const PHASE_3_BUILT: boolean = false
+const PHASE_3_BUILT: boolean = true // 2026-10-13: POST /api/table/call + migration 057 ship with this flip
 
 function LineRow({
   line, lang, cart, dispatch, picking, onPick, onPicked, onEditNote,

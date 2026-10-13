@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isOp, canEditMenu } from '@/lib/staff/access'
+import { isOp, isDev } from '@/lib/staff/access'
 import { getLoyaltyEnabled } from '@/lib/settings/server'
 
 // After Google sign-in we route by the user's actual ACCESS LEVEL, not by a
@@ -45,8 +45,12 @@ export async function GET(request: NextRequest) {
           // in, so nobody lands on a page that immediately denies them —
           // unless a specific return path was requested (e.g. /checkin).
           if (next) dest = next
+          else if (isDev(staff)) dest = '/owner/dev'
           else if (isOp(staff)) dest = '/owner/dashboard'
-          else if (canEditMenu(staff)) dest = '/owner/editor'
+          // Everyone else — the general manager included — lands on the staff
+          // dashboard (2026-10-13). It is the employee home AND the door to
+          // the menu editor for those allowed in, so the GM no longer needs
+          // to be sent straight into the editor to find it.
           else dest = '/staff/dashboard'
         } else if (!next && !(await getLoyaltyEnabled())) {
           // Not staff, and the loyalty club isn't running — there is nothing

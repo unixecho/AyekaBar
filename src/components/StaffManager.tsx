@@ -53,7 +53,7 @@ const T = {
   lastNamePh: 'שם משפחה (לא חובה)',
   addedOffline: 'נוסף/ה לצוות לצורכי סידור עבודה. אין למנוי הזה כניסה למערכת.',
   offlineChip: 'לסידור בלבד',
-  offlineNote: 'אין חשבון מקושר — אי אפשר להיכנס למערכת ולא להופיע בעמוד הצוות באתר. אפשר לשבץ בסידור העבודה.',
+  offlineNote: 'אין חשבון מקושר — אי אפשר להיכנס למערכת ולא להופיע בעמוד הצוות באתר. אפשר לשבץ בסידור העבודה, ובכל שלב לקשר חשבון Gmail כדי שיוכל/תוכל להיכנס. המשמרות וההיסטוריה נשארות על אותו אדם.',
   realNameLabel: 'שם',
   realNameHint: 'השם שיופיע בסידור העבודה.',
   levels: '🔑 הרשאות מלאות = גישה לכל אזור הניהול. תפקיד "בעלים" מקבל זאת אוטומטית. "מנהל/ת כללי/ת" יכול/ה לערוך את התפריט גם בלי הרשאות מלאות. כל השאר — חלון הצוות בלבד (קוד QR).',
@@ -86,7 +86,7 @@ const T = {
   reactivated: 'המנוי שוחזר לצוות.',
   restoredNotice: 'שוחזר/ה לצוות.',
   restoreFailed: 'השחזור נכשל',
-  addEmail: '+ הוספת אימייל',
+  addEmail: '+ קישור חשבון Gmail',
   addEmailHint: 'מוסיף/ה כניסה עם Google — יוכל/תוכל להיכנס לחלון הצוות ולסידור העבודה, ולמערכת ה-OMS אם תינתן לו/ה הרשאה.',
   addEmailPh: 'name@gmail.com',
   addEmailBtn: 'קישור',
@@ -177,7 +177,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
     try {
       const payload = mode === 'offline'
         ? { firstName, lastName, badge }
-        : { email, badge, role: asOwner ? 'owner' : 'staff' }
+        : { email, firstName, lastName, badge, role: asOwner ? 'owner' : 'staff' }
 
       const res = await fetch('/api/owner/staff', {
         method: 'POST',
@@ -324,25 +324,32 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
           {mode === 'offline' ? T.modeOfflineHint : T.modeAccountHint}
         </p>
 
-        {mode === 'account' ? (
+        {/* The name comes first in BOTH modes (2026-10-13). The with-account
+            form used to ask for an email and nothing else, so an invited
+            person was an anonymous address on the roster and in the scheduler
+            until they signed in. The name typed here survives the sign-in —
+            the claim only fills a name that is still blank. */}
+        <div style={{ display: 'flex', gap: 8 }}>
           <input
-            type="email" required dir="ltr" value={email} autoComplete="email"
+            type="text" required value={firstName} maxLength={60} autoComplete="off"
+            aria-label={T.firstNamePh}
+            onChange={(e) => setFirstName(e.target.value)} placeholder={T.firstNamePh}
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <input
+            type="text" value={lastName} maxLength={60} autoComplete="off"
+            aria-label={T.lastNamePh}
+            onChange={(e) => setLastName(e.target.value)} placeholder={T.lastNamePh}
+            style={{ ...inputStyle, flex: 1 }}
+          />
+        </div>
+        {mode === 'account' && (
+          <input
+            type="email" required dir="ltr" value={email} autoComplete="off"
+            aria-label={T.emailPh}
             onChange={(e) => setEmail(e.target.value)} placeholder={T.emailPh}
             style={inputStyle}
           />
-        ) : (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="text" required value={firstName} maxLength={60} autoComplete="given-name"
-              onChange={(e) => setFirstName(e.target.value)} placeholder={T.firstNamePh}
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <input
-              type="text" value={lastName} maxLength={60} autoComplete="family-name"
-              onChange={(e) => setLastName(e.target.value)} placeholder={T.lastNamePh}
-              style={{ ...inputStyle, flex: 1 }}
-            />
-          </div>
         )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {BADGE_OPTIONS.map((b) => {
@@ -384,7 +391,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
         )}
         <button
           type="submit"
-          disabled={adding || (mode === 'account' ? !email : !firstName.trim())}
+          disabled={adding || !firstName.trim() || (mode === 'account' && !email.trim())}
           className="press" style={addBtnStyle}
         >
           {adding ? T.adding : T.addBtn}
@@ -634,12 +641,13 @@ function MemberRow({
         </p>
       )}
 
-      {/* Real name — offline rows ONLY. For everyone else first/last are a
-          snapshot of the Google profile that claim_staff_invite() rewrites on
-          sign-in, so an edit there would silently revert. An offline row has
-          no profile behind it: this is the only name it will ever have, and a
-          typo in it has to be fixable. The API enforces the same rule. */}
-      {offline && (
+      {/* Real name — until the person has signed in: an offline row, or a
+          pending invite. Once a row is LINKED, first/last are a snapshot of
+          the Google profile and an edit here would fight it. A name typed
+          before the first sign-in survives it (claim_staff_invite() only
+          fills a blank), and a typo in it has to be fixable. The API
+          enforces the same rule. */}
+      {!m.auth_user_id && (
         <div>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 5 }}>
             {T.realNameLabel}

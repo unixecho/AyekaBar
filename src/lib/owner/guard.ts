@@ -1,7 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { isOp, canEditMenu, type AccessRow } from '@/lib/staff/access'
+import { isOp, isDev, canEditMenu, type AccessRow } from '@/lib/staff/access'
 
 type Guarded =
   | { ok: true; service: SupabaseClient; userId: string; staff: AccessRow }
@@ -35,4 +35,12 @@ export function requireOwner(): Promise<Guarded> {
  *  without holding full admin rights. */
 export function requireMenuEditor(): Promise<Guarded> {
   return guard(canEditMenu)
+}
+
+/** The developer (an OP row carrying the Dev badge) — the in-development
+ *  switches on /owner/dev. Narrower than OP on purpose: a feature that is
+ *  built but not yet ready for the bar's customers is not the owner's lever to
+ *  pull, and a mis-tap there reaches the public. */
+export function requireDev(): Promise<Guarded> {
+  return guard(isDev)
 }

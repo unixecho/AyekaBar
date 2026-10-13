@@ -7,7 +7,7 @@
 
 export type BadgeKey =
   | 'owner' | 'general_manager' | 'manager'
-  | 'bartender' | 'waiter' | 'cook' | 'busboy' | 'receptionist'
+  | 'bartender' | 'waiter' | 'cook' | 'busboy' | 'receptionist' | 'dev'
 
 export interface BadgeMeta {
   key: string
@@ -28,6 +28,10 @@ export const BADGES: Record<BadgeKey, BadgeMeta> = {
   cook:            { key: 'cook',            he: 'טבח/ית',         en: 'Cook',            ar: 'طاهٍ/طاهية',      emoji: '👨‍🍳', color: '#fbbf24' },
   busboy:          { key: 'busboy',          he: 'עוזר/ת טבח',     en: 'Busboy',          ar: 'مساعد/ة طاهٍ',    emoji: '🔪', color: '#a3e635' },
   receptionist:    { key: 'receptionist',    he: 'מארח/ת',         en: 'Host',            ar: 'مضيف/ة',          emoji: '🛎️', color: '#2dd4bf' },
+  // The developer's title. Deliberately NOT in BADGE_OPTIONS below — it is
+  // assigned by hand, once, and `isDev()` (access.ts) additionally requires
+  // admin rights, so a badge on its own opens nothing.
+  dev:             { key: 'dev',             he: 'מפתח',           en: 'Developer',       ar: 'مطوّر',           emoji: '🛠️', color: '#38e1ff' },
 }
 
 /** Selectable job titles in the owner UI. `owner` is in here as a real title —
@@ -84,6 +88,10 @@ const STAFF_FALLBACK: BadgeMeta = {
  *  label someone "Dev" or anything else the presets don't cover. */
 export function badgeMeta(badge: string | null | undefined, role: string): BadgeMeta {
   if (badge && badge in BADGES) return BADGES[badge as BadgeKey]
+  // The developer's row was typed by hand as "Dev" — match the preset
+  // regardless of case so it gets the real chip instead of a grey free-text one.
+  const folded = badge?.trim().toLowerCase()
+  if (folded && folded in BADGES) return BADGES[folded as BadgeKey]
   if (badge) return freeText(badge)
   if (role === 'owner') return BADGES.owner
   return STAFF_FALLBACK

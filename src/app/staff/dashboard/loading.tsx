@@ -1,11 +1,17 @@
+import OwnerHeaderSkeleton from '@/components/OwnerHeaderSkeleton'
+
+// Mirrors the rebuilt staff dashboard (2026-10-13): greeting, the shift quick
+// view, then the work tiles — so the page swaps in with no layout shift.
 export default function StaffDashboardLoading() {
   return (
-    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
-      <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center' }}>
-        <div className="sk" style={{ width: 48, height: 48, borderRadius: 999 }} />
-        <div className="sk" style={{ width: 120, height: 20, borderRadius: 6 }} />
-        <div className="sk" style={{ width: 268, height: 268, borderRadius: 20 }} />
-        <div className="sk" style={{ width: '100%', height: 90, borderRadius: 18 }} />
+    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
+      <OwnerHeaderSkeleton />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="sk" style={{ width: 180, height: 24, borderRadius: 8 }} />
+        <div className="sk" style={{ height: 120, borderRadius: 18 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+          {[0, 1, 2].map((i) => <div key={i} className="sk" style={{ height: 92, borderRadius: 14 }} />)}
+        </div>
       </div>
     </main>
   )

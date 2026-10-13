@@ -345,8 +345,13 @@ section('the owner\'s switch — the gate, the API, the page, the tile')
     /if \(!user\) redirect\('\/login'\)/.test(page) && /if \(!isOp\(me\)\) redirect\('\/no-access'\)/.test(page))
   check('the page reads the switch and shows the real lengths from the real timeline',
     /getIntroEnabled\(\)/.test(page) && /planTimeline\(/.test(page) && /<IntroCard initial=\{enabled\}/.test(page))
+  // 2026-10-13: the tiles moved out of the dashboard page into the shared
+  // registry (lib/dashboard/tiles.ts) when the owner dashboard was organised
+  // into categories; the page now renders them through <DashboardSections>.
   const dash = read('src/app/owner/dashboard/page.tsx')
-  check('the dashboard has a tile for it', /<Link href="\/owner\/intro" style=\{navCard\}>/.test(dash) && /מסך פתיחה/.test(dash))
+  const tiles = read('src/lib/dashboard/tiles.ts')
+  check('the dashboard has a tile for it',
+    /id: 'intro'[^\n]*href: '\/owner\/intro'[^\n]*מסך פתיחה/.test(tiles) && /<DashboardSections[^>]*OWNER_CATEGORIES/.test(dash))
 
   const cardSrc = read('src/components/IntroCard.tsx')
   // Code only: the card's own comments name `<Link>` and `disabled` while

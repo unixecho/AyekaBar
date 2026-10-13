@@ -207,6 +207,13 @@ export const CART_UI = {
     en: 'Sending your order and calling a waiter from here are coming soon. For now — just show them the list.',
     ar: 'إرسال الطلب واستدعاء النادل من هنا قريباً. في الوقت الحالي — اعرض القائمة عليه.',
   },
+  // Shown instead of soonHint once the waiter call is live: only the order
+  // submission is still "soon".
+  soonHintOrder: {
+    he: 'בקרוב אפשר יהיה לשלוח את ההזמנה ישירות מכאן. בינתיים — קראו למלצר והראו לו את הרשימה.',
+    en: 'Sending your order from here is coming soon. For now — call a waiter and show them the list.',
+    ar: 'إرسال الطلب من هنا قريباً. في الوقت الحالي — استدعوا النادل واعرضوا عليه القائمة.',
+  },
 
   // ── Transparency ───────────────────────────────────────────────────
   localOnly: {

@@ -1,4 +1,4 @@
-import { isOp } from '@/lib/staff/access'
+import { isDev, isOp } from '@/lib/staff/access'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
@@ -6,6 +6,10 @@ import { splitName } from '@/lib/staff/name'
 import OwnerHeader from '@/components/OwnerHeader'
 import DashboardLive from '@/components/DashboardLive'
 import SignOutButton from '@/components/SignOutButton'
+import DashboardSections from '@/components/dashboard/DashboardSections'
+import ZReportCard from '@/components/dashboard/ZReportCard'
+import { OWNER_CATEGORIES, sectionsFor } from '@/lib/dashboard/tiles'
+import { readZOverview } from '@/lib/zreport/server'
 import { readDashboardSignals, OVERALL_DEMO_SIGNAL_ID } from '@/lib/owner/signals'
 import { readDashboardDetails } from '@/lib/owner/signal-details'
 import { readShiftStatus } from '@/lib/owner/shift-status'
@@ -64,10 +68,11 @@ export default async function OwnerDashboardPage() {
       .eq('auth_user_id', user.id)
   }
 
-  const [{ stats, signals }, details, shiftStatus] = await Promise.all([
+  const [{ stats, signals }, details, shiftStatus, zOverview] = await Promise.all([
     readDashboardSignals(),
     readDashboardDetails(),
     readShiftStatus(),
+    readZOverview(createServiceClient()),
   ])
   // Derived from the SAME signals read, not a second call to
   // getOverallDemoMode() — that read has its own 60s cache, and a switch
@@ -80,7 +85,13 @@ export default async function OwnerDashboardPage() {
     <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
       <OwnerHeader right={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>ניהול</span>
+          {/* The owner is an employee too — this is the employee dashboard,
+              exactly as the staff see it (2026-10-13). The developer's own
+              dashboard is a superset of both and is reached from here. */}
+          {isDev(me) && (
+            <Link href="/owner/dev" className="press" style={headerLink}>🛠️ מפתח</Link>
+          )}
+          <Link href="/staff/dashboard" className="press" style={headerLink}>🧑‍🍳 תצוגת עובד</Link>
           <SignOutButton />
         </div>
       } />
@@ -102,89 +113,27 @@ export default async function OwnerDashboardPage() {
         initialOverallDemoMode={overallDemoMode} initialShiftStatus={shiftStatus}
       />
 
-      {/* 4. Everything else. Eight tiles before this rebuild, ten as of
-          2026-09-01, eleven as of 2026-09-29 (שפות האתר — which of English and
-          Arabic the public site offers; a set-and-forget switch, so it lives
-          one tap away like the portal links rather than on this screen),
-          twelve as of 2026-10-03 (מסך פתיחה — the portal's opening screen,
-          on/off, with a preview of each of its two versions; same reasoning).
-          The accessibility statement joined the grid rather
-          than staying signal-only, because once its required fields are
-          filled the dashboard signal correctly disappears ("no empty
-          state" is the whole mechanism) and it would otherwise become
-          unreachable without typing the URL by hand — unlike a stuck
-          order, the statement is something the owner may come back to
-          edit again long after it's first "done". The feedback inbox is the
-          tenth, and joined for exactly the same reason: `feedback-new` goes
-          silent the moment everything is read, and the queue is worth
-          re-opening (and its box worth closing) long after that. */}
-      <div className="rise" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, animationDelay: '140ms' }}>
-        <Link href="/owner/editor" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🍽️</span>
-          <span>תפריט</span>
-        </Link>
-        <Link href="/owner/schedule" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🗓️</span>
-          <span>סידור עבודה</span>
-        </Link>
-        <Link href="/owner/floor" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🗺️</span>
-          <span>מפת השולחנות</span>
-        </Link>
-        <Link href="/owner/staff" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>👥</span>
-          <span>ניהול צוות</span>
-        </Link>
-        <Link href="/owner/loyalty" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🎁</span>
-          <span>מועדון נאמנות</span>
-        </Link>
-        <Link href="/owner/links" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🔗</span>
-          <span>קישורי פורטל</span>
-        </Link>
-        <Link href="/owner/languages" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🌐</span>
-          <span>שפות האתר</span>
-        </Link>
-        <Link href="/owner/intro" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🎬</span>
-          <span>מסך פתיחה</span>
-        </Link>
-        <Link href="/owner/reports" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🧮</span>
-          <span>קבלות ומשמרות</span>
-        </Link>
-        <Link href="/owner/accessibility" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>♿</span>
-          <span>הצהרת נגישות</span>
-        </Link>
-        <Link href="/owner/feedback" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>💬</span>
-          <span>משוב מלקוחות</span>
-        </Link>
-        <Link href="/owner/audit" style={navCard}>
-          <span style={{ fontSize: '1.3rem' }} aria-hidden>🧾</span>
-          <span>יומן שינויים</span>
-        </Link>
-      </div>
+      {/* 3b. The night's Z report: filed, awaited, or missing. */}
+      <ZReportCard overview={zOverview} />
+
+      {/* 4. Everything else, in CATEGORIES (2026-10-13: "organise the dashboard
+          for the owner with categories"). It was twelve flat tiles after the
+          configuration moved off this screen; they are now grouped by what the
+          owner is trying to do — run tonight, change what customers see, look
+          after people, keep the system honest. The list lives in the shared
+          registry (lib/dashboard/tiles.ts), which the staff and developer
+          dashboards read too, so a tile added once appears wherever it belongs.
+          Nothing was removed: every tile that was here is still here, and the
+          Z-report archive joined under "תפעול שוטף". The accessibility
+          statement and the feedback inbox are still tiles for the reason their
+          signals go silent when everything is done — they are worth coming back
+          to long after the dashboard stops pointing at them. */}
+      <DashboardSections sections={sectionsFor(me, OWNER_CATEGORIES)} baseDelay={150} />
     </main>
   )
 }
 
-const navCard: React.CSSProperties = {
-  flex: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 6,
-  padding: '14px 8px',
-  borderRadius: 14,
-  border: '1px solid var(--line)',
-  background: 'var(--bg-elev)',
-  color: 'var(--text)',
-  textDecoration: 'none',
-  fontSize: '0.78rem',
-  fontWeight: 600,
-  textAlign: 'center',
+const headerLink: React.CSSProperties = {
+  fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-dim)', textDecoration: 'none',
+  border: '1px solid var(--line-strong)', borderRadius: 999, padding: '5px 11px', whiteSpace: 'nowrap',
 }

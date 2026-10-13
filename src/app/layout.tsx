@@ -1,8 +1,25 @@
 import type { Metadata } from 'next'
+import { Rubik } from 'next/font/google'
 import './globals.css'
 import PageTransitions from '@/components/PageTransitions'
 import IntroGate from '@/components/intro/IntroGate'
-import { A11yWidget } from 'a11y-widget'
+import LegacyCleanup from '@/components/privacy/LegacyCleanup'
+import A11yGate from '@/components/A11yGate'
+
+// The one typeface, SELF-HOSTED (2026-10-04). It used to be an @import of Google
+// Fonts at the top of globals.css, which made every visitor's browser contact
+// Google — their IP address and the page they were on went to a company that is
+// not our hosting provider — before a single word rendered. next/font downloads
+// the files once, at build time, and serves them from our own domain: same
+// typeface, same weights (it is a variable font, 300–900), no third party, and one
+// fewer thing the /cookies page would have to confess. The three subsets are the
+// site's three languages; the browser fetches only the ones a page actually uses.
+// scripts/check-privacy.mjs fails if a remote font import comes back.
+const rubik = Rubik({
+  subsets: ['hebrew', 'latin', 'arabic'],
+  display: 'swap',
+  variable: '--font-rubik',
+})
 
 export const metadata: Metadata = {
   title: 'אייכה · בר',
@@ -15,7 +32,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl">
+    <html lang="he" dir="rtl" className={rubik.variable}>
       <body style={{ color: 'var(--text)', minHeight: '100dvh' }}>
         {/* WCAG 2.4.1 Bypass Blocks (Level A). Must be the FIRST focusable
             thing in the document, which is why it lives here rather than in
@@ -64,7 +81,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <body> by its own launcher/panel, so it renders outside
             #a11y-scope and is never itself affected by the filter it
             controls. */}
-        <A11yWidget config={{ storageKey: 'ayeka.a11y.prefs.v1', statementHref: '/accessibility' }} />
+        {/* 2026-10-13: mounted through <A11yGate>, which keeps the widget off
+            everything under /owner and /staff (the dashboards) and tears down
+            whatever it had applied on the way in. The config above moved with
+            it — same storage key, same statement link. */}
+        <A11yGate />
+        {/* Renders nothing. Removes what older versions of the site left in the
+            visitor's browser — Negishot's cookie and storage keys above all — on
+            whichever page they happen to land first. See lib/privacy/registry.ts. */}
+        <LegacyCleanup />
         {/* Negishot (negishot.co.il) REMOVED 2026-09-12 on the owner's
             explicit instruction, replaced by the in-house widget above.
             At the time of that removal, no one other than the author had

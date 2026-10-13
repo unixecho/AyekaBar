@@ -16,6 +16,16 @@
 //   STAFF     any row in public.staff
 //             The employee gateway: the check-in QR screen. A shift manager
 //             signs in but never reaches the owner panel.
+//
+// …and one lens on top of the three, not a fourth level:
+//
+//   DEV       OP  AND  badge = 'Dev'
+//             The developer's own dashboard (/owner/dev): every category the
+//             owner sees, the employee experience, and the in-development
+//             switches. It grants NOTHING the row's OP rights did not already
+//             grant — it is a view, and the `isOp` half of the test is what
+//             stops a badge typed onto a non-admin row from opening anything.
+//             No SQL twin: nothing in the database asks "is this the dev".
 
 export interface AccessRow {
   role?: string | null
@@ -37,6 +47,14 @@ export function canEditMenu(row: AccessRow | null | undefined): boolean {
 /** Has any staff access at all — the QR gateway at /staff/dashboard. */
 export function isStaff(row: AccessRow | null | undefined): boolean {
   return !!row
+}
+
+/** The developer's dashboard and dev-only switches. OP is required as well as
+ *  the badge, so a badge alone can never open anything. The badge is compared
+ *  case-insensitively because the live row was typed by hand as "Dev". */
+export function isDev(row: AccessRow | null | undefined): boolean {
+  if (!row || !isOp(row)) return false
+  return (row.badge ?? '').trim().toLowerCase() === 'dev'
 }
 
 /** Owner-panel sections that are NOT the editor. Kept as a list so middleware
@@ -63,7 +81,22 @@ export const OP_ONLY_PREFIXES = [
   // handed customer correspondence, so this deliberately does NOT follow the
   // editor's wider circle. /api/owner/feedback takes the same view.
   '/owner/feedback',
+  // Found missing 2026-10-13 by scripts/check-dashboard.mjs: both pages already
+  // re-check isOp() server-side and always have, but middleware — the FIRST gate
+  // — did not know about them, so an anonymous visitor got the page's own
+  // redirect instead of the middleware's. Listed now so every OP-only tile on
+  // the dashboard is also OP-only at the door.
+  '/owner/reports',
+  '/owner/accessibility',
+  // The daily Z-report archive. The takings of the night — OP only, like the
+  // receipts page it sits beside. (Filing one is a different, wider circle:
+  // see lib/zreport/rules.ts, reached from the STAFF dashboard.)
+  '/owner/z-reports',
 ]
+
+/** Sections only the developer opens. Also OP-gated by middleware (a dev row
+ *  is an OP row), then narrowed by `isDev` — see middleware.ts. */
+export const DEV_ONLY_PREFIXES = ['/owner/dev']
 
 export const MENU_EDITOR_PREFIX = '/owner/editor'
 

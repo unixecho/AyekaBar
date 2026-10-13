@@ -1,15 +1,23 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { LOYALTY_ENABLED } from '@/lib/settings/keys'
-import { isOp, canEditMenu, OP_ONLY_PREFIXES, MENU_EDITOR_PREFIX } from '@/lib/staff/access'
+import { isOp, isDev, canEditMenu, OP_ONLY_PREFIXES, DEV_ONLY_PREFIXES, MENU_EDITOR_PREFIX } from '@/lib/staff/access'
 import { SCHEDULE_PREFIXES } from '@/lib/shifts/access'
 import { canManageFloor, FLOOR_PREFIXES } from '@/lib/waiter/access'
 
+// The employee area. /staff/dashboard is the home; the other two were added
+// 2026-10-13 with it (the staff member's loyalty-club tile, and the Z-report
+// form a shift/general manager files after 23:00). Each page also re-checks
+// server-side and the Z-report API enforces its own gate — this is only the
+// first door.
+const STAFF_PREFIXES = ['/staff/dashboard', '/staff/loyalty', '/staff/z-report']
+
 const PROTECTED_ROUTES = [
   '/customer/dashboard',
-  '/staff/dashboard',
+  ...STAFF_PREFIXES,
   MENU_EDITOR_PREFIX,
   ...OP_ONLY_PREFIXES,
+  ...DEV_ONLY_PREFIXES,
   ...SCHEDULE_PREFIXES,
   ...FLOOR_PREFIXES,
 ]
@@ -100,9 +108,12 @@ export async function middleware(request: NextRequest) {
   // save is snapshotted into waiter_floor_history with its actor, so it stays
   // attributable. Mirrors is_floor_manager() (migration 022).
   const scheduleProtected = SCHEDULE_PREFIXES.some((p) => pathname.startsWith(p))
-  const staffProtected = pathname.startsWith('/staff/dashboard') || scheduleProtected
+  const staffProtected = STAFF_PREFIXES.some((p) => pathname.startsWith(p)) || scheduleProtected
   const editorProtected = pathname.startsWith(MENU_EDITOR_PREFIX)
-  const opProtected = OP_ONLY_PREFIXES.some((p) => pathname.startsWith(p))
+  const devProtected = DEV_ONLY_PREFIXES.some((p) => pathname.startsWith(p))
+  // The dev's pages are OP pages first (a dev row is an OP row) and then
+  // narrowed to the dev by `isDev` below.
+  const opProtected = OP_ONLY_PREFIXES.some((p) => pathname.startsWith(p)) || devProtected
   const floorProtected = FLOOR_PREFIXES.some((p) => pathname.startsWith(p))
   const ownerProtected = editorProtected || opProtected || floorProtected
 
@@ -135,6 +146,7 @@ export async function middleware(request: NextRequest) {
       !row
       || (editorProtected && !canEditMenu(row))
       || (opProtected && !isOp(row))
+      || (devProtected && !isDev(row))
       || (floorProtected && !canManageFloor(row))
 
     if (denied) {

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAccessibilityStatement, getAccessibilityStatementUpdatedAt } from '@/lib/settings/server'
 import { WIDGET_COVERAGE } from 'a11y-widget'
+import { COOKIES_PATH } from '@/lib/privacy/notice'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'הצהרת נגישות · אייכה בר' }
@@ -75,10 +76,14 @@ export default async function AccessibilityPage() {
 
         <Section title="תפריט הנגישות">
           <p>
-            בפינה הימנית התחתונה של המסך מופיע כפתור נגישות (סמל דמות בעיגול). לחיצה עליו — או
-            הקשה על <b>F2</b> מהמקלדת בכל מקום באתר — פותחת תפריט התאמות אישיות לביקור זה; אותה
-            הקשה, או <b>Esc</b>, סוגרת אותו. ההתאמות נשמרות במכשיר ונשארות פעילות בביקורים הבאים,
-            עד לאיפוס ידני מתוך התפריט עצמו.
+            בפינה הימנית התחתונה של המסך מופיע כפתור נגישות (סמל דמות בעיגול). אפשר להעביר אותו
+            לכל אחת מארבע הפינות מתוך התפריט, ואפשר גם להסתיר אותו — הוא חוזר ברענון הדף או בהקשה
+            על <b>F2</b>. הכפתור מופיע בכל עמודי הלקוחות של האתר (עמוד הבית, התפריט, מועדון הנאמנות
+            ועמודי המידע); אזור הצוות והניהול, שאינו פתוח לציבור, אינו כולל אותו. לחיצה עליו — או
+            הקשה על <b>F2</b> מהמקלדת בכל עמוד לקוח — פותחת תפריט
+            התאמות אישיות לביקור זה; אותה הקשה, או <b>Esc</b>, סוגרת אותו. ההתאמות ובחירת הפינה
+            נשמרות במכשיר ונשארות פעילות בביקורים הבאים, עד לאיפוס ידני מתוך התפריט עצמו. מה בדיוק
+            נשמר, ואיך מוחקים אותו — בדף <Link href={COOKIES_PATH} style={{ color: 'inherit' }}>עוגיות ואחסון</Link>.
           </p>
           <p style={{ margin: '10px 0 0', fontWeight: 700 }}>מה יש בתפריט:</p>
           <ul style={listStyle}>
