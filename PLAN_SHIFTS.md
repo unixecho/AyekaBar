@@ -1290,3 +1290,105 @@ pass did exercise in Hebrew at desktop width.
 **Not yet done:** `SCHEDULER.md` (phase 7's other half — the portable-module
 manual), `D14` (the view-as picker on `/staff/schedule`), and the
 second-venue catalog-seeding gap noted above.
+
+---
+
+## 27. Responsiveness pass (2026-08-29) — decision D15, and two bugs
+
+Owner feedback after using the live builder. Nothing about what it does;
+everything about how it feels. Recorded here because one of it is a decision
+that reverses something §D10 explicitly chose.
+
+### D15 — writes are optimistic; the server stays the authority
+
+`POST /api/shifts/dispatch` writes and then re-reads the whole three-week
+window before answering, and its own header argued for that: *"slightly more
+latency than optimistic updates, considerably fewer ways for the UI to drift
+… which for a shared draft several people can edit is the trade worth
+making."* That reasoning is still right about the SERVER. It was wrong about
+the client waiting for it.
+
+The route is unchanged. What changed is who waits. `ShiftsProvider.dispatch()`
+now runs the action through `reduce()` — the same pure reducer the mock uses
+and the server-side writer agrees with — paints that immediately, and sends
+the request behind it. When the server's re-read lands it **replaces** the
+state wholesale, exactly as before. The drift D10 feared is still impossible:
+no state survives that the server did not produce, and every response is still
+a fresh read rather than a merge.
+
+Three pieces make it safe:
+
+- **`pending`** — actions sent but unanswered, in order. Each response has the
+  still-outstanding actions replayed on top of it, so a slow answer to "remove
+  Dana" cannot erase the "add Yossi" that came after it.
+- **`chain`** — the network calls are serialised. `shift.create` followed by an
+  edit to that shift must reach Postgres in that order; HTTP promises nothing.
+- **`confirmed`** — the last state the server vouched for. A refused write
+  rolls back to it plus whatever is still pending, and surfaces a toast.
+  Silently reverting would be worse than the blocking behaviour, not better.
+
+Consequence worth knowing: a row created optimistically holds a client-minted
+id (`OPTIMISTIC_ID_PREFIX` in `store.ts`) until the server answers. Any action
+addressing it BY id in that sub-second window would be sent with an id
+Postgres has never seen, so `ShiftSheet` withholds save/delete/assign while
+`isOptimisticId(shift.id)`. A full temp-id → real-id remapping table is the
+general solution and was judged not worth its failure modes for a window this
+narrow.
+
+### Bug — the workspace re-ran the whole rules engine on every render
+
+`ScheduleWorkspace` called `draftWeek(db, weekStart)` in the render body. It
+allocates, so the `warnings` `useMemo` had a dependency that was never equal
+to the previous render's, and `evaluate()` ran in full on every state change
+on that screen — opening a sheet, switching a tab, typing in the note sheet.
+`bundle` and `neighbouring` are now memoised on `[db, weekStart]`. This was
+the bulk of the "the modal takes a moment to open" complaint; the sheet has
+nothing async to wait for, so no skeleton was added.
+
+### Bug — the clock dial fought a finger that was still down
+
+`WheelPicker`: pause mid-drag for longer than the 120ms settle and the timer
+committed whatever row you were over, the parent re-rendered with a new
+`value`, and the park effect scrolled the column to it — under a finger that
+had not let go. The guard could not be pointer-based: `touch-action` hands the
+gesture to the browser's scroller, which fires `pointercancel` the moment the
+pan starts. Touch handlers now maintain a `holding` flag that suppresses both
+the commit and the re-park until release. Also added `touch-action: pan-y` and
+`overscroll-behavior: contain` on the column (a diagonal drag no longer leaks
+into a horizontal swipe; a flick past the ends no longer scrolls the sheet
+away), and moved the initial park to `useLayoutEffect` so the wheel no longer
+paints at 00 and jumps to its real value one frame later.
+
+### The change log renders fields, not JSON
+
+`src/lib/shifts/audit-view.ts` is new. It walks a diff's before/after, drops
+plumbing keys and unchanged fields, resolves ids to names, recurses one level
+into `safety`/`features`, and formats enums and clock columns. It has to cope
+with two writers that will never agree on shape — the reducer's camelCase
+domain objects and migration 027's snake_case whole rows — which is why it
+walks both sides rather than templating per action. Raw JSON stays behind a
+toggle: the log is a record, and a record you cannot inspect literally is a
+summary. Fixed in passing: `week.copy` / `week.clear` are written by 027's SQL
+but were absent from `AuditAction`, so those rows showed a bare English key.
+
+### Haptics
+
+New `src/lib/haptics.ts`, app-wide, not scheduler-specific. `navigator.vibrate`
+where it exists; on iOS Safari — which has no Vibration API — a hidden
+`<input type="checkbox" switch>` is clicked, which produces a haptic tap on
+17.4+. Nothing at all anywhere else, which is the correct outcome: every
+control must still read correctly without it.
+
+### Verification
+
+`tsc --noEmit` clean, `npm run build` clean with `ƒ Middleware`,
+`scripts/check-shift-rules.mjs` 115/115. The wheel, the sheet and the diff
+renderer were driven in a real browser on a throwaway route. The
+optimistic-dispatch algorithm was checked 19/19 against the real reducer with
+a fake slow/failing source — covering out-of-order responses, a refused write,
+and a refusal with a successful edit queued behind it.
+
+**NOT verified this session: `/owner/schedule` itself against live data.**
+Local Supabase was down and the live builder needs a signed-in OP session,
+which this session had no way to obtain. Everything above is component-level
+and logic-level. The first live open of the builder is the real test.
