@@ -2,12 +2,24 @@
 -- Ayeka Bar — customers calling a waiter from the menu, and the POS reading the
 -- shift SCHEDULE.
 --
--- ⚠️ NOT YET APPLIED. Apply after 056 (or independently — it does not depend on
---    056). Depends on 019 (waiter_tables), 020 (is_staff_client), 027
+-- ⚠️ NOT YET APPLIED. Numbered 057 because 052–055 are the scheduler rebuild
+--    (PR #6, 2026-10-12); it is independent of those and of 056, and works
+--    BEFORE or AFTER they are applied (see "two snapshot shapes" below).
+--    Depends on 019 (waiter_tables), 020 (is_staff_client), 027
 --    (schedule_weeks), 034 (waiter_shift_sessions), 041 (staff.active) and 048
 --    (waiter_table_calls, already in production). Needs the owner's explicit
 --    go-ahead — CLAUDE.md: "Never apply a Supabase migration without explicit,
 --    per-migration approval".
+--
+-- ── TWO SNAPSHOT SHAPES ──────────────────────────────────────────────
+-- `schedule_weeks.published_snapshot` is nested in production today (027:
+-- `{shifts:[{id,date,start,end,assignments:[{staffId,…}]}]}`) and becomes FLAT
+-- when migration 052 converts it and `sched_publish_week()` starts writing it
+-- (`{shifts:[{id,shift_date,start_time,end_time}], assignments:[{shift_id,
+-- staff_id,role_id}]}`). `waiter_published_shifts_near()` reads BOTH, so this
+-- file does not care which of those migrations ran first, and the TypeScript
+-- twin (lib/shifts/snapshot.ts) reads both the same way. Pinned by
+-- scripts/check-migrations-056-057.mjs, which runs every recipient case on each.
 --
 -- WHAT IT IS FOR (owner, 2026-10-13):
 --
@@ -89,10 +101,25 @@ as $$
     x.asg
   from (
     select
-      (sh->>'date')::date                      as d,
-      (sh->>'start')::time                     as st,
-      (sh->>'end')::time                       as en,
-      coalesce(sh->'assignments', '[]'::jsonb) as asg
+      coalesce(sh->>'shift_date', sh->>'date')::date                                        as d,
+      left(coalesce(sh->>'start_time', sh->>'startTime', sh->>'start'), 5)::time            as st,
+      left(coalesce(sh->>'end_time',   sh->>'endTime',   sh->>'end'),   5)::time            as en,
+      -- Normalised to [{staffId, roleId}] whichever shape the week was frozen in.
+      case
+        when jsonb_typeof(w.published_snapshot->'assignments') = 'array' then
+          -- FLAT (052+): assignments live beside the shifts, joined by shift_id
+          (select coalesce(jsonb_agg(jsonb_build_object(
+                    'staffId', coalesce(a->>'staff_id', a->>'staffId'),
+                    'roleId',  coalesce(a->>'role_id',  a->>'roleId'))), '[]'::jsonb)
+             from jsonb_array_elements(w.published_snapshot->'assignments') a
+            where coalesce(a->>'shift_id', a->>'shiftId') = sh->>'id')
+        else
+          -- NESTED (027): assignments sit under each shift
+          (select coalesce(jsonb_agg(jsonb_build_object(
+                    'staffId', coalesce(a->>'staffId', a->>'staff_id'),
+                    'roleId',  coalesce(a->>'roleId',  a->>'role_id'))), '[]'::jsonb)
+             from jsonb_array_elements(coalesce(sh->'assignments', '[]'::jsonb)) a)
+      end                                                                                    as asg
     from public.schedule_weeks w
     cross join lateral jsonb_array_elements(coalesce(w.published_snapshot->'shifts', '[]'::jsonb)) sh
     where w.status = 'published'
@@ -101,7 +128,8 @@ as $$
                            and ((now() at time zone 'Asia/Jerusalem')::date + 1)
   ) x
   where x.d between ((now() at time zone 'Asia/Jerusalem')::date - 1)
-                and ((now() at time zone 'Asia/Jerusalem')::date + 1);
+                and ((now() at time zone 'Asia/Jerusalem')::date + 1)
+    and x.st is not null and x.en is not null;
 $$;
 
 -- Internal: reached only through the SECURITY DEFINER functions below, which

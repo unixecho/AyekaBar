@@ -42,7 +42,7 @@ export function settleNavigation() {
   settle = null
 }
 
-function prefersReducedMotion() {
+export function prefersReducedMotion() {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 }
 

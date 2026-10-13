@@ -45,12 +45,13 @@ function emit(rel) {
     .replace(/from '(?:\.\.\/shifts\/|\.\/)([^']+)'/g, "from './$1.mjs'")
   writeFileSync(join(outDir, name.replace(/\.ts$/, '.mjs')), js)
 }
-for (const f of ['shifts/time.ts', 'shifts/presence.ts', 'zreport/rules.ts', 'waiter/calls.ts']) emit(f)
+for (const f of ['shifts/wall.ts', 'shifts/presence.ts', 'shifts/snapshot.ts', 'zreport/rules.ts', 'waiter/calls.ts']) emit(f)
 
 const load = (n) => import(pathToFileURL(join(outDir, n)).href)
 const P = await load('presence.mjs')
 const Z = await load('rules.mjs')
 const C = await load('calls.mjs')
+const SN = await load('snapshot.mjs')
 
 // ── harness ────────────────────────────────────────────────────────────
 
@@ -254,6 +255,53 @@ section('presence — my shifts, the call rule, announcements')
   check('the id is stable per (shift, kind) so devices agree', a[0].id === 's1:ended')
   a = P.liveShiftAnnouncements([evening, tomorrow], at('2026-10-13T15:02:00Z'))
   check('two shifts, one live moment → one announcement (no backlog)', a.length === 1)
+}
+
+// ── the published snapshot, in BOTH shapes ─────────────────────────────
+section('shiftsFromSnapshot — the old nested shape and the rebuilt flat one')
+{
+  const f = SN.shiftsFromSnapshot
+  // OLD (migration 027, until 052 converts it in place)
+  const old = { shifts: [{ id: 's1', date: '2026-10-13', start: '18:00', end: '01:00', presetId: null,
+    assignments: [{ id: 'a1', staffId: 'ann', staffName: 'Ann', roleId: 'waiter', status: 'assigned' }, { id: 'a2', staffId: 'ben', staffName: 'Ben', roleId: 'shift_leader' }] }] }
+  let r = f(old)
+  check('OLD shape: one shift, correct date/start/end', r.length === 1 && r[0].date === '2026-10-13' && r[0].start === '18:00' && r[0].end === '01:00')
+  check('OLD shape: both nested assignments are read, with staff and role', r[0].assignments.length === 2 && r[0].assignments[0].staffId === 'ann' && r[0].assignments[1].roleId === 'shift_leader')
+
+  // NEW (what sched_publish_week writes since 052): to_jsonb of the real rows
+  const flat = {
+    shifts: [
+      { id: 's1', venue_id: 'v', week_id: 'w', shift_date: '2026-10-13', start_time: '18:00', end_time: '01:00', requests_open: false, note: null },
+      { id: 's2', venue_id: 'v', week_id: 'w', shift_date: '2026-10-14', start_time: '18:00:00', end_time: '23:30:00' },
+    ],
+    assignments: [
+      { id: 'a1', shift_id: 's1', staff_id: 'ann', staff_name: 'Ann', role_id: 'waiter', status: 'assigned' },
+      { id: 'a2', shift_id: 's1', staff_id: 'ben', staff_name: 'Ben', role_id: 'shift_leader', status: 'assigned' },
+      { id: 'a3', shift_id: 's2', staff_id: 'ann', staff_name: 'Ann', role_id: 'waiter', status: 'swap_pending' },
+    ],
+  }
+  r = f(flat)
+  check('NEW shape: two shifts', r.length === 2)
+  check('NEW shape: shift_date / start_time / end_time are read', r[0].date === '2026-10-13' && r[0].start === '18:00' && r[0].end === '01:00')
+  check('NEW shape: a time column rendered "HH:MM:SS" is trimmed to HH:MM', r[1].start === '18:00' && r[1].end === '23:30')
+  check('NEW shape: assignments are joined to their shift by shift_id', r[0].assignments.length === 2 && r[1].assignments.length === 1 && r[1].assignments[0].staffId === 'ann')
+  check('NEW shape: staff_id / role_id map to staffId / roleId', r[0].assignments[1].staffId === 'ben' && r[0].assignments[1].roleId === 'shift_leader')
+
+  // camelCase on the flat shape (the TS serializer accepts both)
+  r = f({ shifts: [{ id: 'x', date: '2026-10-13', startTime: '10:00', endTime: '12:00' }], assignments: [{ shiftId: 'x', staffId: 'cy', roleId: 'host' }] })
+  check('camelCase flat shape is read too', r.length === 1 && r[0].start === '10:00' && r[0].assignments[0].staffId === 'cy')
+
+  // junk never throws and never invents anything
+  for (const junk of [null, undefined, 5, 'x', [], {}, { shifts: 'no' }, { shifts: [null] }, { shifts: [{}] }, { shifts: [{ date: '2026-10-13' }] }]) {
+    let out, threw = false
+    try { out = f(junk) } catch { threw = true }
+    check(`junk ${JSON.stringify(junk)} → no shifts, no throw`, !threw && Array.isArray(out) && out.length === 0)
+  }
+  check('a shift with no assignments is kept, with an empty list', f({ shifts: [{ id: 'q', shift_date: '2026-10-13', start_time: '10:00', end_time: '11:00' }], assignments: [] })[0].assignments.length === 0)
+  // the rule consumers rely on: a snapshot read feeds straight into the presence rules
+  const asShifts = f(flat)
+  const st = P.myShiftState(asShifts, 'ann', P.zonedNow('Asia/Jerusalem', new Date('2026-10-13T16:00:00Z')))
+  check('end to end: the flat snapshot drives myShiftState (Ann is on at 19:00)', st.current?.id === 's1')
 }
 
 // ── the customer's call ────────────────────────────────────────────────

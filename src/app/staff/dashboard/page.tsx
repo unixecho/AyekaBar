@@ -12,6 +12,7 @@ import OwnerHeader from '@/components/OwnerHeader'
 import SignOutButton from '@/components/SignOutButton'
 import DashboardSections, { type LockedTiles } from '@/components/dashboard/DashboardSections'
 import ShiftQuickView from '@/components/dashboard/ShiftQuickView'
+import StaffPushCard from '@/components/staff/StaffPushCard'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'אזור הצוות · אייכה בר' }
@@ -119,6 +120,14 @@ export default async function StaffDashboardPage() {
         />
 
         <DashboardSections sections={sections} locked={locked} baseDelay={150} />
+
+        {/* Alerts on the phone: shift changes, a reminder before a shift, colleagues giving shifts away.
+            The card asks first and only then triggers the browser's one-shot permission dialog; on an
+            iPhone in a plain tab it shows the home-screen steps instead. (Added by the scheduler rebuild,
+            PR #6; kept here after the 2026-10-13 dashboard rewrite.) */}
+        <div className="rise" style={{ animationDelay: '205ms', textAlign: 'start' }}>
+          <StaffPushCard variant="home" />
+        </div>
       </div>
     </main>
   )

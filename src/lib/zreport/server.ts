@@ -12,9 +12,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { isDev, isOp } from '@/lib/staff/access'
 import { AYEKA_VENUE } from '@/lib/shifts/config'
 import { readPublishedShifts } from '@/lib/shifts/published'
-import { addDays } from '@/lib/shifts/time'
+import { addDays } from '@/lib/shifts/wall'
 import type { PresenceShift } from '@/lib/shifts/presence'
-import type { ISODate } from '@/lib/shifts/types'
+import type { ISODate } from '@/lib/shifts/wall'
 import {
   BUSINESS_DAY_ROLLOVER_HOUR, hasZReportTitle, zEligibility, zWindow, type ZEligibility, type ZWindow,
 } from './rules'

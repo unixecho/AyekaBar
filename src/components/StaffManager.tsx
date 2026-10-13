@@ -271,6 +271,9 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       // auth_user_id locally too, so a removed row that gets re-rendered
       // before the next full load() doesn't briefly still look "מחובר/ת".
       setMembers((cur) => cur?.map((x) => x.id === m.id ? { ...x, active: false, auth_user_id: null } : x) ?? cur)
+      // Still on shifts that have not happened yet: removing someone does not quietly empty the board.
+      const left = Number((json as { futureShifts?: number }).futureShifts ?? 0)
+      if (left > 0) setNotice({ kind: 'ok', text: `הוסר/ה. עדיין משובצ/ת ב־${left} משמרות עתידיות — כדאי לעבור על הלוח ולהחליף.` })
     } catch (err) {
       setNotice({ kind: 'err', text: err instanceof Error ? err.message : 'ההסרה נכשלה' })
     } finally {

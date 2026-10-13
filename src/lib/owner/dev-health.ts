@@ -42,7 +42,7 @@ export async function readDevHealth(): Promise<HealthRow[]> {
       return error ? { state: 'bad', detail: error.message } : { state: 'ok', detail: 'מגיב' }
     }),
 
-    safe('m052', 'מיגרציה 056 — ארכיון דוחות Z', async () => {
+    safe('m056', 'מיגרציה 056 — ארכיון דוחות Z', async () => {
       const { error } = await service.from('z_reports').select('id').limit(1)
       if (!error) return { state: 'ok', detail: 'הטבלה קיימת' }
       return isMissingTable(error)
@@ -50,7 +50,7 @@ export async function readDevHealth(): Promise<HealthRow[]> {
         : { state: 'bad', detail: error.message }
     }),
 
-    safe('m053', 'מיגרציה 057 — קריאת מלצר וסנכרון סידור', async () => {
+    safe('m057', 'מיגרציה 057 — קריאת מלצר וסנכרון סידור', async () => {
       // A harmless probe: with no signed-in user it just returns false. A
       // missing function is the signal.
       const { error } = await service.rpc('waiter_is_call_recipient')

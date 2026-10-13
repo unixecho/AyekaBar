@@ -17,19 +17,12 @@
 // read serves the page.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { addDays } from './time'
+import { addDays } from './wall'
 import type { PresenceShift } from './presence'
-import type { ISODate } from './types'
+import type { ISODate } from './wall'
+import { shiftsFromSnapshot } from './snapshot'
 
 type Service = SupabaseClient
-
-interface RawSnapshotShift {
-  id?: string
-  date?: string
-  start?: string
-  end?: string
-  assignments?: { roleId?: string; staffId?: string | null; staffName?: string }[]
-}
 
 export interface PublishedRead {
   /** False only when the read itself failed — "nothing published" is
@@ -64,22 +57,21 @@ export async function readPublishedShifts(service: Service, from: ISODate, to: I
 
     const shifts: PresenceShift[] = []
     for (const w of weeks ?? []) {
-      const snap = w.published_snapshot as { shifts?: RawSnapshotShift[] } | null
-      for (const s of snap?.shifts ?? []) {
-        if (!s.date || !s.start || !s.end) continue
+      // Both snapshot shapes — see snapshot.ts.
+      for (const s of shiftsFromSnapshot(w.published_snapshot)) {
         if (s.date < from || s.date > to) continue
-        shifts.push({
-          id: s.id, date: s.date, start: s.start.slice(0, 5), end: s.end.slice(0, 5),
-          assignments: s.assignments ?? [],
-        })
+        shifts.push(s)
       }
     }
 
     const roleNames: Record<string, string> = {}
     const { data: settings } = await service
       .from('shift_settings').select('roles').eq('venue_id', venue.id).maybeSingle()
-    for (const r of (settings?.roles as { id?: string; name?: { he?: string } }[] | null) ?? []) {
-      if (r.id && r.name?.he) roleNames[r.id] = r.name.he
+    // A role's name is a plain string since migration 052; before it, a {he,en,ar}
+    // object. Read either.
+    for (const r of (settings?.roles as { id?: string; name?: string | { he?: string } }[] | null) ?? []) {
+      const name = typeof r.name === 'string' ? r.name : r.name?.he
+      if (r.id && name) roleNames[r.id] = name
     }
 
     return { known: true, venueId: venue.id, shifts, roleNames }

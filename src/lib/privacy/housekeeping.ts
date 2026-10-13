@@ -1,11 +1,13 @@
 // ── leftovers from things the site no longer uses ──────────────────────────
 // Negishot (a third-party accessibility overlay) was removed 2026-09-12 and left a
 // cookie and two kinds of localStorage key on every browser that had seen it;
-// `ayeka.shifts.prototype.v1` is the staff demo's previous format. Nothing here is
+// `ayeka.shifts.prototype.` (v1 and v2) is the old shift-scheduler demo's storage — v2 became
+// legacy on 2026-10-13, when the scheduler rebuild (PR #6) deleted the demo that wrote it.
+// It is the staff demo's previous format. Nothing here is
 // written by the site any more — `cleanupLegacy` (below) removes it. They live in
 // THIS file, not the registry, because LegacyCleanup is mounted in the root layout
 // and so ships with every page: it must not drag the registry along.
-export const LEGACY_STORAGE_PREFIXES: readonly string[] = ['negishot_', 'ayeka.shifts.prototype.v1']
+export const LEGACY_STORAGE_PREFIXES: readonly string[] = ['negishot_', 'ayeka.shifts.prototype.']
 export const LEGACY_COOKIE_PREFIXES: readonly string[] = ['negishot']
 
 export const isLegacyStorageKey = (key: string): boolean =>

@@ -1,0 +1,628 @@
+// Independent test harness for the scheduling feature's PURE modules
+// (src/lib/shifts/*, minus the server-only ones) — and for the places where the
+// TypeScript and the SQL must say the SAME thing.
+//
+//   node scripts/check-schedule.mjs
+//
+// It transpiles and runs the REAL TypeScript sources (the check-pos.mjs / check-a11y.mjs
+// technique) — nothing is re-implemented here. The oracle is the product spec
+// (docs/STAFF_SCHEDULING.md) and migration 052, not the code under test.
+//
+// The "TS == SQL" section boots an in-process Postgres (PGlite), applies every
+// migration, and compares the two implementations of each rule that exists twice:
+// shift labels, overlap, headcount, names, and who may view/manage. Drift between
+// them is the single bug class this codebase's own history warns about most.
+
+import ts from 'typescript'
+import { PGlite } from '@electric-sql/pglite'
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { inspect } from 'node:util'
+
+const ROOT = fileURLToPath(new URL('../', import.meta.url))
+const SRC = join(ROOT, 'src')
+const SHIFTS = join(SRC, 'lib', 'shifts')
+const MIG = join(ROOT, 'supabase', 'migrations')
+const outDir = join(tmpdir(), `check-schedule-${process.pid}`)
+mkdirSync(outDir, { recursive: true })
+process.on('exit', () => {
+  try {
+    rmSync(outDir, { recursive: true, force: true })
+  } catch {
+    /* a leftover temp dir is harmless */
+  }
+})
+
+// ---- Emit: transpile the real sources into a temp tree -------------------------------------------
+const ZOD_URL = import.meta.resolve('zod')
+const emittedPath = (tsPath) => join(outDir, relative(SRC, tsPath)).replace(/\.ts$/, '.mjs')
+
+function rewrite(spec, tsPath, to) {
+  if (spec === 'zod') return ZOD_URL
+  let target
+  if (spec.startsWith('@/')) target = join(SRC, spec.slice(2))
+  else if (spec.startsWith('.')) target = resolve(dirname(tsPath), spec)
+  else return spec
+  const file = [target + '.ts', join(target, 'index.ts')].find(existsSync)
+  if (!file) return spec
+  const rel = relative(dirname(to), emittedPath(file)).split(sep).join('/')
+  return rel.startsWith('.') ? rel : `./${rel}`
+}
+
+function emit(tsPath) {
+  const to = emittedPath(tsPath)
+  const source = readFileSync(tsPath, 'utf8')
+  let js = ts.transpileModule(source, {
+    fileName: tsPath,
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, isolatedModules: true },
+  }).outputText
+  js = js.replace(/(\bfrom\s+|\bimport\s+)(['"])([^'"\n]+)\2/g, (_m, kw, q, spec) => `${kw}${q}${rewrite(spec, tsPath, to)}${q}`)
+  mkdirSync(dirname(to), { recursive: true })
+  writeFileSync(to, js)
+}
+
+// Pure modules only. Server-only files (guard, state-query, dispatch-write) and
+// type-only files are deliberately NOT here — and the purity check below proves it.
+const PURE = ['time', 'names', 'presets', 'coverage', 'messages', 'snapshot-diff', 'rules', 'view', 'access', 'schema', 'config', 'serialize', 'actions', 'people', 'hours-edit', 'draft', 'poster-model', 'poster-pdf']
+for (const n of PURE) emit(join(SHIFTS, `${n}.ts`))
+emit(join(SRC, 'lib', 'staff', 'access.ts'))
+
+const load = (rel) => import(pathToFileURL(join(outDir, rel)).href)
+const T = await load('lib/shifts/time.mjs')
+const N = await load('lib/shifts/names.mjs')
+const P = await load('lib/shifts/presets.mjs')
+const C = await load('lib/shifts/coverage.mjs')
+const Msg = await load('lib/shifts/messages.mjs')
+const D = await load('lib/shifts/snapshot-diff.mjs')
+const R = await load('lib/shifts/rules.mjs')
+const V = await load('lib/shifts/view.mjs')
+const A = await load('lib/shifts/access.mjs')
+const S = await load('lib/shifts/schema.mjs')
+const Z = await load('lib/shifts/serialize.mjs')
+const People = await load('lib/shifts/people.mjs')
+const HE = await load('lib/shifts/hours-edit.mjs')
+const Dr = await load('lib/shifts/draft.mjs')
+const PM = await load('lib/shifts/poster-model.mjs')
+const PDF = await load('lib/shifts/poster-pdf.mjs')
+
+// ---- Output ---------------------------------------------------------------------------------------------
+let pass = 0
+const failures = []
+const show = (v) => inspect(v, { depth: 5, breakLength: Infinity, maxStringLength: 140 })
+function check(name, ok, detail = '') {
+  if (ok) {
+    pass++
+    console.log(`  ✓ ${name}`)
+  } else {
+    failures.push(name)
+    console.log(`  ✗ ${name}${detail ? ` — ${detail}` : ''}`)
+  }
+}
+const eq = (name, actual, expected) => check(name, JSON.stringify(actual) === JSON.stringify(expected), `got ${show(actual)}, want ${show(expected)}`)
+const section = (t) => console.log(`\n${t}`)
+const throwsZod = (fn) => {
+  try {
+    fn()
+    return false
+  } catch (e) {
+    return e?.name === 'ZodError'
+  }
+}
+
+// ============================================================================================================
+section('names — a person without an email is never "unnamed"')
+eq('display name wins', N.staffDisplayName({ display_name: 'דנה כהן', first_name: 'דנה', handle: 'dana' }), 'דנה כהן')
+eq('first + last name next', N.staffDisplayName({ first_name: 'נועה', last_name: 'לוי', handle: 'noa' }), 'נועה לוי')
+eq('first name only (the live data: no email, no display name)', N.staffDisplayName({ email: null, first_name: 'תמר', display_name: null, handle: 'תמר' }), 'תמר')
+eq('the POS nickname is the next fallback', N.staffDisplayName({ handle: 'סיני' }), 'סיני')
+eq('email is the LAST resort, never the first', N.staffDisplayName({ email: 'a@b.co' }), 'a@b.co')
+eq('whitespace-only fields do not count', N.staffDisplayName({ display_name: '   ', first_name: ' ', handle: 'x1' }), 'x1')
+eq('nothing at all → a label, not a crash', N.staffDisplayName({}), N.UNNAMED)
+eq('null row → label', N.staffDisplayName(null), N.UNNAMED)
+eq('initials: one word', N.initialsOf('תמר'), 'ת')
+eq('initials: first + last', N.initialsOf('Dana Cohen'), 'DC')
+eq('initials: empty', N.initialsOf('  '), '?')
+
+section('roster privacy — an employee never receives a colleague\'s private notes')
+const staffRow = { id: 's1', display_name: null, first_name: 'דנה', badge: 'barista', active: true, auth_user_id: null }
+const member = { schedulable: true, default_role_id: 'barista', max_weekly_hours: 30, employment_type: 'part', sort_order: 2, note: 'לא לשבץ בשישי — סיבה אישית' }
+const asManager = Z.serializeRosterRow(staffRow, member, true)
+const asEmployee = Z.serializeRosterRow(staffRow, member, false)
+check('a manager sees the bookkeeping', asManager.note === member.note && asManager.maxWeeklyHours === 30 && asManager.defaultRoleId === 'barista')
+check('an employee sees a name and nothing private', asEmployee.displayName === 'דנה' && asEmployee.note === null && asEmployee.maxWeeklyHours === null && asEmployee.defaultRoleId === null && asEmployee.employmentType === null)
+check('…and whether the person can answer a swap (hasLogin) is shared', asEmployee.hasLogin === false && Z.serializeRosterRow({ ...staffRow, auth_user_id: 'x' }, undefined, false).hasLogin === true)
+check('no member row = not on the roster (nobody is scheduled until the owner switches them on)', Z.serializeRosterRow(staffRow, undefined, false).schedulable === false)
+check('owner without an explicit member row is not schedulable', Z.serializeRosterRow({ ...staffRow, role: 'owner', badge: 'owner' }, undefined, true).schedulable === false)
+check('developer display role keeps owner powers out of scheduling by default', Z.serializeRosterRow({ ...staffRow, role: 'owner', badge: 'developer' }, undefined, true).schedulable === false)
+check('an explicit "off" is respected', Z.serializeRosterRow(staffRow, { ...member, schedulable: false }, true).schedulable === false)
+
+// ============================================================================================================
+section('time — labels, intervals, the venue clock')
+eq('weekday label', T.weekdayLongLabel(2), 'יום שלישי')
+eq('shift range', T.formatShiftRange('07:00', '13:00'), '07:00–13:00')
+eq('day label (2030-01-08 is a Tuesday)', T.formatDayLabel('2030-01-08'), 'יום שלישי 8/1')
+eq('shift label (the time range is bidi-isolated so it reads in clock order inside Hebrew)', T.formatShiftLabel('2030-01-08', '07:00', '13:00'), 'יום שלישי 8/1 · ⁦07:00–13:00⁩')
+eq('duration', T.durationMinutes({ startTime: '07:00', endTime: '13:00' }), 360)
+eq('duration across midnight', T.durationMinutes({ startTime: '22:00', endTime: '02:00' }), 240)
+check('crossesMidnight', T.crossesMidnight({ startTime: '22:00', endTime: '02:00' }) && !T.crossesMidnight({ startTime: '07:00', endTime: '13:00' }))
+check('valid times', T.isValidShiftTimes('07:00', '13:00') && T.isValidShiftTimes('22:00', '02:00'))
+check('invalid times are rejected', !T.isValidShiftTimes('07:00', '07:00') && !T.isValidShiftTimes('7:00', '13:00') && !T.isValidShiftTimes('07:00', '25:00') && !T.isValidShiftTimes('07:60', '13:00'))
+eq('week starts on Sunday', T.weekStartOf('2030-01-09'), '2030-01-06')
+eq('a Sunday is its own week start', T.weekStartOf('2030-01-06'), '2030-01-06')
+eq('addDays across a month', T.addDays('2030-01-30', 3), '2030-02-02')
+const now = { date: '2030-01-08', time: '10:30' }
+eq('"היום"', T.relativeDayLabel('2030-01-08', now), 'היום')
+eq('"מחר"', T.relativeDayLabel('2030-01-09', now), 'מחר')
+eq('no label for later days', T.relativeDayLabel('2030-01-12', now), null)
+check('a shift later today has not started', !T.hasStarted({ date: '2030-01-08', startTime: '11:00' }, now))
+check('a shift at exactly this minute HAS started (matches sched_is_past: start <= now)', T.hasStarted({ date: '2030-01-08', startTime: '10:30' }, now))
+check('a shift yesterday has started; tomorrow has not', T.hasStarted({ date: '2030-01-07', startTime: '23:00' }, now) && !T.hasStarted({ date: '2030-01-09', startTime: '00:00' }, now))
+const jer = T.wallClockNow('Asia/Jerusalem', new Date('2030-07-01T21:30:00Z')) // IDT = UTC+3 → 00:30 next day
+eq('the venue clock follows ITS timezone, not the server\'s', jer, { date: '2030-07-02', time: '00:30' })
+eq('…and winter time (IST = UTC+2)', T.wallClockNow('Asia/Jerusalem', new Date('2030-01-01T21:30:00Z')), { date: '2030-01-01', time: '23:30' })
+check('midnight is 00:xx, never 24:xx', T.wallClockNow('Asia/Jerusalem', new Date('2030-01-01T22:05:00Z')).time === '00:05')
+check('a bad timezone falls back instead of throwing', typeof T.wallClockNow('Not/AZone').date === 'string')
+const nowMs = Date.parse('2030-01-08T12:00:00Z')
+eq('timeAgo: now', T.timeAgoHe('2030-01-08T11:59:40Z', nowMs), 'ממש עכשיו')
+eq('timeAgo: minutes', T.timeAgoHe('2030-01-08T11:35:00Z', nowMs), 'לפני 25 דקות')
+eq('timeAgo: an hour', T.timeAgoHe('2030-01-08T11:00:00Z', nowMs), 'לפני שעה')
+eq('timeAgo: hours', T.timeAgoHe('2030-01-08T07:00:00Z', nowMs), 'לפני 5 שעות')
+eq('timeAgo: yesterday', T.timeAgoHe('2030-01-07T11:00:00Z', nowMs), 'אתמול')
+eq('timeAgo: bad input → empty, no crash', T.timeAgoHe('nonsense', nowMs), '')
+
+// ============================================================================================================
+section('default shift times — they come from Settings, never from the code')
+const presets = [
+  { id: 'morning', name: 'בוקר', startTime: '07:00', endTime: '13:00' },
+  { id: 'evening', name: 'ערב', startTime: '13:00', endTime: '19:00' },
+]
+const settings = { presets, openTime: '08:00', closeTime: '19:00', dayHours: { 5: { open: '08:00', close: '13:00' }, 6: { open: '09:00', close: '14:00' } } }
+eq('first template on an empty day', P.defaultTimesFor('2030-01-08', settings, []), { startTime: '07:00', endTime: '13:00', presetId: 'morning', source: 'template' })
+eq('a day that already has "morning" suggests "evening"', P.defaultTimesFor('2030-01-08', settings, [{ startTime: '07:00', endTime: '13:00' }]).presetId, 'evening')
+eq('every template used → fall back to the first, not nothing', P.defaultTimesFor('2030-01-08', settings, [{ startTime: '07:00', endTime: '13:00' }, { startTime: '13:00', endTime: '19:00' }]).presetId, 'morning')
+eq('NO templates configured → the day\'s own opening hours (Friday override)', P.defaultTimesFor('2030-01-11', { ...settings, presets: [] }, []), { startTime: '08:00', endTime: '13:00', presetId: null, source: 'hours' })
+eq('…and the global hours on an ordinary day', P.defaultTimesFor('2030-01-08', { ...settings, presets: [] }, []), { startTime: '08:00', endTime: '19:00', presetId: null, source: 'hours' })
+eq('changing a template changes the NEXT shift\'s default…', P.defaultTimesFor('2030-01-08', { ...settings, presets: [{ id: 'morning', name: 'בוקר', startTime: '06:30', endTime: '12:30' }] }, []).startTime, '06:30')
+check('…and the answer never depends on a hardcoded 08:00–16:00', !JSON.stringify(P.defaultTimesFor('2030-01-08', { ...settings, presets: [{ id: 'x', name: 'x', startTime: '05:15', endTime: '09:45' }] }, [])).includes('16:00'))
+eq('matchPreset finds the exact template', P.matchPreset({ startTime: '13:00', endTime: '19:00' }, presets)?.id, 'evening')
+eq('custom times match nothing', P.matchPreset({ startTime: '13:30', endTime: '19:00' }, presets), null)
+eq('hoursFor: Saturday override', P.hoursFor('2030-01-12', settings), { open: '09:00', close: '14:00' })
+const dayHoursFromJson = JSON.parse(JSON.stringify(settings.dayHours))
+eq('hoursFor works with the string keys JSON gives back', P.hoursFor('2030-01-11', { ...settings, dayHours: dayHoursFromJson }), { open: '08:00', close: '13:00' })
+
+// ============================================================================================================
+section('coverage — "is this shift staffed?" (and the same rule the database applies)')
+const shiftNeeds2 = { requirements: [{ roleId: 'barista', min: 2 }] }
+eq('nobody → unassigned', C.coverageOf(shiftNeeds2, []).state, 'unassigned')
+eq('one of two → partial, missing 1', [C.coverageOf(shiftNeeds2, [{ roleId: 'barista' }]).state, C.coverageOf(shiftNeeds2, [{ roleId: 'barista' }]).missing], ['partial', 1])
+eq('two of two → full', C.coverageOf(shiftNeeds2, [{ roleId: 'barista' }, { roleId: 'cashier' }]).state, 'full')
+eq('which role is still short', C.coverageOf({ requirements: [{ roleId: 'barista', min: 1 }, { roleId: 'cashier', min: 1 }] }, [{ roleId: 'barista' }, { roleId: 'barista' }]).short, [{ roleId: 'cashier', missing: 1 }])
+eq('no declared need + someone on it → staffed (never "full")', C.coverageOf({ requirements: [] }, [{ roleId: null }]).state, 'staffed')
+check('a shift with no declared need is never "full" — anyone may ask to join', C.isFull(C.coverageOf({ requirements: [] }, [{ roleId: null }, { roleId: null }])) === false)
+check('…but one that reached its need is', C.isFull(C.coverageOf(shiftNeeds2, [{ roleId: 'a' }, { roleId: 'b' }])))
+eq('neededFor ignores junk', C.neededFor([{ roleId: 'a', min: 2 }, { roleId: 'b', min: -1 }, { roleId: 'c', min: 1.5 }]), 2)
+
+// ============================================================================================================
+section('plain-Hebrew messages — every refusal says what happened and what to do')
+const REASONS = ['forbidden', 'not_found', 'stale', 'bad_request', 'bad_time', 'bad_date', 'not_published', 'past', 'not_pending', 'duplicate_request', 'overlapping_request', 'duplicate_swap', 'already_assigned', 'shift_gone', 'assignment_changed', 'bad_target', 'source_empty', 'inactive_staff', 'not_schedulable', 'self', 'last_owner', 'is_owner', 'has_history', 'needs_confirmation', 'conflict', 'busy', 'target_busy', 'actor_busy', 'target_already_on_shift', 'target_not_schedulable', 'unavailable_day', 'shift_full', 'duplicate_person', 'rate_limited']
+check('every reason the database can return has a Hebrew sentence', REASONS.every((r) => /[֐-׿]/.test(Msg.scheduleMessage(r, {}))), REASONS.filter((r) => !/[֐-׿]/.test(Msg.scheduleMessage(r, {}))).join())
+check('no message leaks a code or a technical word', REASONS.every((r) => !/(null|undefined|error|exception|sql|constraint|uuid|\b[a-z_]{6,}\b)/i.test(Msg.scheduleMessage(r, { name: 'דנה' }))), REASONS.filter((r) => /(null|undefined|error|exception|sql|constraint|uuid|\b[a-z_]{6,}\b)/i.test(Msg.scheduleMessage(r, { name: 'דנה' }))).join())
+check('an unknown reason still gets a safe sentence', /[֐-׿]/.test(Msg.scheduleMessage('something_new', {})))
+const clashLabel = T.formatShiftLabel('2030-01-07', '07:00', '13:00')
+const clash = Msg.scheduleMessage('conflict', { conflicts: [{ name: 'דנה', with: { label: clashLabel } }] })
+check('a conflict NAMES the person and the shift they are already on', clash.includes('דנה') && clash.includes(clashLabel), clash)
+check('a double-booking message explains the rule', clash.includes('אי אפשר') )
+const busy = Msg.scheduleMessage('busy', { name: 'יוסי', with: { date: '2030-01-08', start: '09:00', end: '11:00' } })
+check('"busy" falls back to date/time when there is no label', busy.includes('יוסי') && busy.includes('09:00–11:00'), busy)
+check('unavailable day names the date', Msg.scheduleMessage('unavailable_day', { date: '2030-01-08' }).includes('יום שלישי 8/1'))
+check('inactive staff names the person when known', Msg.scheduleMessage('inactive_staff', { name: 'גונה' }).includes('גונה'))
+eq('statuses: forbidden/not found/conflict/rate/other', ['forbidden', 'not_found', 'stale', 'rate_limited', 'bad_time'].map(Msg.scheduleStatus), [403, 404, 409, 429, 400])
+eq('issuesOf only returns well-formed issues', Msg.issuesOf({ issues: [{ code: 'full', message: 'מלאה' }, { code: 'x' }, null, 'junk'] }), [{ code: 'full', message: 'מלאה' }])
+eq('issuesOf of nothing', Msg.issuesOf(undefined), [])
+
+// ============================================================================================================
+section('access — who may view / manage / delegate (the TS twin of sched_can_*)')
+const owner = { id: 'o', role: 'owner', badge: 'owner', active: true }
+const developer = { id: 'd', role: 'owner', badge: 'developer', active: true }
+const gm = { id: 'g', role: 'staff', badge: 'general_manager', active: true }
+const barista = { id: 'b', role: 'staff', badge: 'bartender', active: true }
+check('an owner manages the schedule with no delegation', A.canManageSchedule(owner, []) && A.canManageSchedule(developer, []))
+check('a general manager manages it too', A.canManageSchedule(gm, []))
+check('a bartender manages nothing…', !A.canManageSchedule(barista, []))
+check('…until the owner delegates to them', A.canManageSchedule(barista, ['b']) && !A.canManageSchedule(barista, ['someone-else']))
+check('every staff row may VIEW the schedule', [owner, gm, barista].every((r) => A.canViewSchedule(r)))
+check('delegating the schedule is narrower than managing it', A.canDelegateSchedule(owner) && A.canDelegateSchedule(gm) && !A.canDelegateSchedule(barista))
+check('a delegate cannot delegate', !A.canDelegateSchedule({ ...barista }) && A.canManageSchedule(barista, ['b']))
+check('null row = no access to anything', !A.canViewSchedule(null) && !A.canManageSchedule(null, []) && !A.canDelegateSchedule(undefined))
+check('the schedule pages are listed once, for the middleware', A.SCHEDULE_PREFIXES.includes('/owner/schedule') && A.SCHEDULE_PREFIXES.includes('/staff/schedule'))
+
+// ============================================================================================================
+section('the action schema — strict, so a wrong or malicious body is a 400, not a write')
+const U = '123e4567-e89b-42d3-a456-426614174000'
+const U2 = '223e4567-e89b-42d3-a456-426614174001'
+const good = S.parseAction({ type: 'saveShift', weekId: U, date: '2030-01-08', startTime: '07:00', endTime: '13:00', requirements: [{ roleId: 'barista', min: 2 }], assignees: [{ staffId: U2, roleId: 'barista' }] })
+check('a well-formed saveShift parses', good.type === 'saveShift' && good.assignees.length === 1)
+check('an UNKNOWN field is refused (nobody can name an actor or a status)', throwsZod(() => S.parseAction({ type: 'publishWeek', weekId: U, actor: U2 })))
+check('…including inside a nested object', throwsZod(() => S.parseAction({ type: 'saveShift', weekId: U, date: '2030-01-08', startTime: '07:00', endTime: '13:00', requirements: [], assignees: [{ staffId: U2, isOwner: true }] })))
+check('a status can never be sent to a decision', throwsZod(() => S.parseAction({ type: 'decideSwap', swapId: U, approve: true, status: 'approved' })))
+check('bad uuid refused', throwsZod(() => S.parseAction({ type: 'deleteShift', shiftId: 'abc' })))
+check('bad date refused', throwsZod(() => S.parseAction({ type: 'saveShift', weekId: U, date: '8/1/2030', startTime: '07:00', endTime: '13:00', requirements: [], assignees: [] })))
+check('bad time refused', throwsZod(() => S.parseAction({ type: 'saveShift', weekId: U, date: '2030-01-08', startTime: '7am', endTime: '13:00', requirements: [], assignees: [] })))
+check('an unknown action type refused', throwsZod(() => S.parseAction({ type: 'dropDatabase' })))
+check('a note over 300 chars refused', throwsZod(() => S.parseAction({ type: 'requestShift', shiftId: U, note: 'x'.repeat(301) })))
+check('more than 60 assignees refused', throwsZod(() => S.parseAction({ type: 'saveShift', weekId: U, date: '2030-01-08', startTime: '07:00', endTime: '13:00', requirements: [], assignees: Array.from({ length: 61 }, () => ({ staffId: U2 })) })))
+check('requestSwap accepts a named person + a return shift', S.parseAction({ type: 'requestSwap', assignmentId: U, targetStaffId: U2, returnAssignmentId: U }).type === 'requestSwap')
+check('decideRequest carries force only as a boolean', throwsZod(() => S.parseAction({ type: 'decideRequest', requestId: U, approve: true, force: 'yes' })))
+check('markNotificationsRead takes nothing, or a list of ids', S.parseAction({ type: 'markNotificationsRead' }).type === 'markNotificationsRead' && throwsZod(() => S.parseAction({ type: 'markNotificationsRead', ids: ['x'] })))
+const settingsOk = S.parseAction({ type: 'updateSettings', venueId: U, patch: { presets: [{ id: 'm', name: 'בוקר', startTime: '07:00', endTime: '13:00' }], openTime: '08:00' } })
+check('a settings patch of presets + hours parses', settingsOk.patch.presets.length === 1)
+check('a template with equal start and end is refused', throwsZod(() => S.parseAction({ type: 'updateSettings', venueId: U, patch: { presets: [{ id: 'm', name: 'x', startTime: '07:00', endTime: '07:00' }] } })))
+check('duplicate template ids are refused', throwsZod(() => S.parseAction({ type: 'updateSettings', venueId: U, patch: { presets: [{ id: 'm', name: 'a', startTime: '07:00', endTime: '08:00' }, { id: 'm', name: 'b', startTime: '09:00', endTime: '10:00' }] } })))
+check('an unknown settings key is refused (no free-form writes)', throwsZod(() => S.parseAction({ type: 'updateSettings', venueId: U, patch: { owner_override: true } })))
+check('out-of-range safety values are refused', throwsZod(() => S.parseAction({ type: 'updateSettings', venueId: U, patch: { safety: { maxWeeklyHours: 999, minRestHours: 10, maxDailyHours: 10, maxConsecutiveDays: 6 } } })))
+check('a member patch is limited to its own fields', throwsZod(() => S.parseAction({ type: 'setMember', venueId: U, staffId: U2, patch: { role: 'owner' } })))
+
+// ============================================================================================================
+section('the warnings engine + "what would approving this change?"')
+const wk = '2030-01-06'
+const baseSettings = {
+  venueId: 'B1', workingDays: [0, 1, 2, 3, 4, 5, 6], openTime: '07:00', closeTime: '19:00', dayHours: {},
+  roles: [{ id: 'barista', name: 'בריסטה', color: '#fff' }], stations: [], presets: [],
+  safety: { maxWeeklyHours: 20, minRestHours: 10, maxDailyHours: 10, maxConsecutiveDays: 6 }, ruleSeverity: {},
+  features: { availability: true, swaps: true }, scheduleManagers: [], onboardedAt: null,
+}
+const roster = ['dana', 'yossi'].map((id) => ({ staffId: id, displayName: id, avatarEmoji: null, badge: null, active: true, schedulable: true, defaultRoleId: null, maxWeeklyHours: null, employmentType: null, sortOrder: null, note: null, hasLogin: true }))
+const sh = (id, date, s, e, req = []) => ({ id, venueId: 'B1', weekId: 'W', date, startTime: s, endTime: e, presetId: null, stationId: null, requirements: req, requestsOpen: false, note: null, updatedAt: null })
+const as = (id, shiftId, staffId) => ({ id, shiftId, staffId, staffName: staffId, roleId: 'barista', status: 'assigned' })
+const shifts = [sh('s1', '2030-01-07', '07:00', '17:00'), sh('s2', '2030-01-08', '07:00', '17:00'), sh('s3', '2030-01-09', '07:00', '17:00')]
+const input = { weekStart: wk, settings: baseSettings, roster, shifts, assignments: [as('a1', 's1', 'dana'), as('a2', 's2', 'yossi'), as('a3', 's3', 'yossi')], availability: [] }
+const base = R.evaluate(input)
+check('a schedule that respects every rule has no staff warnings', base.filter((w) => w.staffId).length === 0, show(base))
+const over = R.evaluate({ ...input, assignments: [...input.assignments, as('a4', 's2', 'dana'), as('a5', 's3', 'dana')] })
+check('three 10-hour shifts exceed a 20-hour cap → a weekly-hours warning for that person', over.some((w) => w.code === 'max_weekly_hours' && w.staffId === 'dana'), show(over))
+check('the engine reports an overlap if one ever exists (defence in depth)', R.evaluate({ ...input, shifts: [...shifts, sh('s4', '2030-01-07', '12:00', '14:00')], assignments: [...input.assignments, as('a9', 's4', 'dana')] }).some((w) => w.code === 'overlap'))
+check('a deactivated person still on a shift is flagged', R.evaluate({ ...input, roster: roster.map((r) => (r.staffId === 'dana' ? { ...r, active: false } : r)) }).some((w) => w.code === 'inactive_staff' && w.staffId === 'dana'))
+check('availability "unavailable" is a warning on that day', R.evaluate({ ...input, availability: [{ id: 'v', staffId: 'dana', weekStart: wk, entries: [{ date: '2030-01-07', kind: 'unavailable' }], note: null, status: 'submitted' }] }).some((w) => w.code === 'availability_conflict'))
+const swapWarn = R.swapImpact({ ...input, assignments: [as('a1', 's1', 'dana'), as('a2', 's2', 'yossi'), as('a3', 's3', 'yossi'), as('a6', 's2', 'dana')] }, { assignmentId: 'a2', returnAssignmentId: null, fromStaffId: 'yossi', toStaffId: 'dana' })
+check('swap impact: only what is NEW and about the two people is reported', swapWarn.every((w) => ['dana', 'yossi'].includes(w.staffId)), show(swapWarn))
+check('swap impact: a pending swap with nobody yet has no impact', R.swapImpact(input, { assignmentId: 'a1', returnAssignmentId: null, fromStaffId: 'dana', toStaffId: null }).length === 0)
+const reqWarn = R.requestImpact(input, { shiftId: 's2', staffId: 'dana' })
+check('request impact: Dana taking a second 10h shift pushes her past 20h? (20h is the cap, so no)', reqWarn.length === 0, show(reqWarn))
+const reqWarn2 = R.requestImpact({ ...input, assignments: [...input.assignments, as('a7', 's2', 'dana')] }, { shiftId: 's3', staffId: 'dana' })
+check('request impact: a third long shift does', reqWarn2.some((w) => w.code === 'max_weekly_hours'), show(reqWarn2))
+check('request impact never invents "unassigned shift" noise', !reqWarn2.some((w) => w.code === 'unassigned_shift'))
+
+// ============================================================================================================
+section('"unpublished changes" — the manager is told the team is seeing an old version')
+const week = (snap) => ({ id: 'W', venueId: 'B1', weekStart: wk, status: 'published', version: 1, publishedAt: null, dayNotes: {}, dismissedWarnings: [], publishedSnapshot: snap })
+const live = { shifts, assignments: [as('a1', 's1', 'dana'), as('a2', 's2', 'yossi')] }
+const toSnapShift = (s) => s
+eq('identical → none', D.unpublishedChanges(week({ shifts: shifts.map(toSnapShift), assignments: live.assignments }), shifts, live.assignments).total, 0)
+const rawWeek = Z.serializeWeek({
+  id: 'W', venue_id: 'B1', week_start: wk, status: 'published', version: 1,
+  published_snapshot: {
+    shifts: shifts.map((shift) => ({ id: shift.id, venue_id: shift.venueId, week_id: shift.weekId, shift_date: shift.date, start_time: shift.startTime, end_time: shift.endTime, preset_id: null, station_id: null, requirements: shift.requirements, requests_open: false, note: null, updated_at: null })),
+    assignments: live.assignments.map((assignment) => ({ id: assignment.id, shift_id: assignment.shiftId, staff_id: assignment.staffId, staff_name: assignment.staffName, role_id: assignment.roleId, status: assignment.status })),
+  },
+})
+eq('raw PostgreSQL snapshot normalizes before comparison', D.unpublishedChanges(rawWeek, shifts, live.assignments).total, 0)
+check('opening employee requests after publish is a real shift change', D.unpublishedChanges(week({ shifts, assignments: live.assignments }), shifts.map((shift, index) => index === 0 ? { ...shift, requestsOpen: true } : shift), live.assignments).shifts === 1)
+check('a draft week has nothing to compare', D.unpublishedChanges({ ...week(null), status: 'draft' }, shifts, live.assignments).total === 0 && D.unpublishedChanges(undefined, shifts, []).total === 0)
+const added = D.unpublishedChanges(week({ shifts: shifts.slice(0, 2), assignments: live.assignments }), shifts, live.assignments)
+check('a new shift since publishing is counted', added.shifts === 1, show(added))
+const moved = D.unpublishedChanges(week({ shifts: [{ ...shifts[0], startTime: '08:00' }, shifts[1], shifts[2]], assignments: live.assignments }), shifts, live.assignments)
+check('a changed time is counted', moved.shifts === 1, show(moved))
+const people = D.unpublishedChanges(week({ shifts, assignments: [as('a1', 's1', 'dana')] }), shifts, live.assignments)
+check('a person added since publishing is counted', people.people === 1, show(people))
+const swapped = D.unpublishedChanges(week({ shifts, assignments: [as('a1', 's1', 'dana'), as('a2', 's2', 'dana')] }), shifts, live.assignments)
+check('a person swapped for another counts as two changes (one out, one in)', swapped.people === 2, show(swapped))
+
+section('staff identity — default roles and colors')
+const roles = [{ id: 'barista', name: 'בריסטה', color: '#fff' }, { id: 'cashier', name: 'קופה', color: '#000' }]
+check('an explicit personal default role wins', People.suggestedRoleId({ ...roster[0], defaultRoleId: 'cashier' }, roles, undefined, [], []) === 'cashier')
+check('a legacy staff badge maps to the same role automatically', People.suggestedRoleId({ ...roster[0], badge: 'barista' }, roles, undefined, [], []) === 'barista')
+check('an unmet requirement is used before a generic fallback', People.suggestedRoleId(roster[0], roles, undefined, [{ roleId: 'cashier', min: 1 }], []) === 'cashier')
+check('staff colors are stable and distinct inside one roster', People.staffColor('dana', roster) === People.staffColor('dana', [...roster].reverse()) && People.staffColor('dana', roster) !== People.staffColor('yossi', roster))
+
+// ============================================================================================================
+section('view helpers — names, clashes, what is waiting on whom')
+const db = { roster: [{ staffId: 'dana', displayName: 'דנה כהן' }], viewerStaffId: 'dana' }
+eq('a live roster name wins over the snapshot', V.nameOf(db, 'dana', 'שם ישן'), 'דנה כהן')
+eq('a person no longer on the roster falls back to the snapshotted name', V.nameOf(db, 'gone', 'גונה'), 'גונה')
+eq('…and to a plain label if even that is missing', V.nameOf(db, null, null), 'עובד/ת שהוסר/ה')
+const swaps = [
+  { id: '1', status: 'open', assignmentId: 'a1', returnAssignmentId: null, fromStaffId: 'x', toStaffId: 'dana' },
+  { id: '2', status: 'peer_accepted', assignmentId: 'a2', returnAssignmentId: 'a3', fromStaffId: 'y', toStaffId: 'z' },
+  { id: '3', status: 'approved', assignmentId: 'a4', returnAssignmentId: null, fromStaffId: 'y', toStaffId: 'z' },
+]
+eq('a pending swap marks BOTH its assignments (derived — the schedule is never altered)', [...V.swapPendingAssignmentIds(swaps)].sort(), ['a1', 'a2', 'a3'])
+eq('manager inbox: swaps the peer already accepted + pending requests', V.managerInbox({ requests: [{ status: 'pending' }, { status: 'approved' }], swaps }).count, 2)
+eq('employee inbox: proposals addressed to me that I have not answered', V.employeeInbox({ swaps, viewerStaffId: 'dana' }).count, 1)
+const wsh = [sh('c1', '2030-01-07', '07:00', '13:00'), sh('c2', '2030-01-07', '12:00', '16:00'), sh('c3', '2030-01-07', '13:00', '16:00'), sh('c4', '2030-01-08', '01:00', '03:00'), sh('n1', '2030-01-07', '22:00', '02:00')]
+const wa = [as('x1', 'c1', 'dana'), as('x2', 'n1', 'dana')]
+eq('overlap (07–13 vs 12–16) is a clash', V.clashesFor('dana', wsh[1], wk, wsh, wa).map((s) => s.id), ['c1'])
+eq('back-to-back (13:00 / 13:00) is NOT a clash', V.clashesFor('dana', wsh[2], wk, wsh, wa).map((s) => s.id), [])
+eq('a night shift\'s tail clashes with 01:00–03:00 the next morning', V.clashesFor('dana', wsh[3], wk, wsh, wa).map((s) => s.id), ['n1'])
+eq('ignoring the shift being edited', V.clashesFor('dana', wsh[0], wk, wsh, wa, 'c1').map((s) => s.id), ['n1'].filter(() => false))
+eq('requests by shift only groups PENDING ones', [...V.pendingRequestsByShift([{ status: 'pending', shiftId: 's1' }, { status: 'approved', shiftId: 's1' }, { status: 'pending', shiftId: null }]).keys()], ['s1'])
+
+section('taking a colleague\'s shift — who started it, who answers, what can be offered')
+check('requestTake parses an assignment and an optional note', S.parseAction({ type: 'requestTake', assignmentId: U }).type === 'requestTake' && S.parseAction({ type: 'requestTake', assignmentId: U, reason: 'אשמח' }).type === 'requestTake')
+check('requestTake refuses a field it does not know (no staff id can be named)', throwsZod(() => S.parseAction({ type: 'requestTake', assignmentId: U, targetStaffId: U2 })))
+check('…or a note over 300 characters', throwsZod(() => S.parseAction({ type: 'requestTake', assignmentId: U, reason: 'x'.repeat(301) })))
+const giveSwap = { direction: 'give', fromStaffId: 'yossi', toStaffId: 'dana', fromStaffName: 'Yossi', toStaffName: 'Dana' }
+const takeSwap = { direction: 'take', fromStaffId: 'yossi', toStaffId: 'dana', fromStaffName: 'Yossi', toStaffName: 'Dana' }
+eq('a give is started by the giver and answered by the named taker', [V.swapInitiatorId(giveSwap), V.swapResponderId(giveSwap)], ['yossi', 'dana'])
+eq('a take is started by the person who wants the shift and answered by whoever holds it', [V.swapInitiatorId(takeSwap), V.swapResponderId(takeSwap)], ['dana', 'yossi'])
+eq('an open hand-over has nobody who must answer yet', V.swapResponderId({ direction: 'give', fromStaffId: 'yossi', toStaffId: null }), null)
+eq('the recorded names follow the same sides', [V.swapInitiatorName(takeSwap), V.swapResponderName(takeSwap)], ['Dana', 'Yossi'])
+const takeInbox = { swaps: [{ ...takeSwap, id: 't', status: 'open' }, { ...giveSwap, id: 'g', status: 'open', fromStaffId: 'x', toStaffId: 'yossi' }], viewerStaffId: 'yossi' }
+eq('the holder sees a colleague asking for their shift (and a hand-over aimed at them)', V.employeeInbox(takeInbox).proposals.map((s) => s.id), ['t', 'g'])
+eq('the asker does NOT see their own ask as waiting on them', V.employeeInbox({ ...takeInbox, viewerStaffId: 'dana' }).count, 0)
+eq('once the holder agreed it is no longer waiting on the holder', V.employeeInbox({ swaps: [{ ...takeSwap, id: 't', status: 'peer_accepted' }], viewerStaffId: 'yossi' }).count, 0)
+
+const xShifts = [
+  sh('t', '2030-01-07', '09:00', '13:00'), // the shift I want (Yossi\'s, Monday)
+  sh('m1', '2030-01-08', '09:00', '13:00'), // mine, Tuesday
+  sh('m5', '2030-01-10', '09:00', '13:00'), // mine, Thursday
+  sh('y3', '2030-01-10', '10:00', '12:00'), // Yossi works Thursday too
+  sh('past', '2030-01-06', '06:00', '08:00'), // mine, already started
+  { ...sh('other', '2030-01-09', '09:00', '13:00'), venueId: 'B2' }, // mine, another venue
+]
+const xAssign = [as('at', 't', 'yossi'), as('am1', 'm1', 'dana'), as('am5', 'm5', 'dana'), as('ay3', 'y3', 'yossi'), as('apast', 'past', 'dana'), as('aother', 'other', 'dana')]
+const xDb = (extra = {}) => ({ viewerStaffId: 'dana', shifts: xShifts, assignments: xAssign, swaps: [], now: { date: '2030-01-06', time: '12:00' }, ...extra })
+const offered = V.exchangeOffers(xDb(), xShifts[0], 'yossi')
+eq('only my upcoming shifts in the same venue can be offered, in date order', offered.map((o) => o.shift.id), ['m1', 'm5'])
+eq('a shift the colleague cannot work (they are already on another then) is blocked, the rest are free', offered.map((o) => o.blocked), [null, 'theirs_overlaps'])
+const withClash = V.exchangeOffers(xDb({ shifts: [...xShifts, sh('m3', '2030-01-07', '12:00', '16:00')], assignments: [...xAssign, as('am3', 'm3', 'dana')] }), xShifts[0], 'yossi')
+eq('if I already work when the wanted shift is, only the shift that overlaps it can be given back', withClash.map((o) => [o.shift.id, o.blocked]), [['m3', null], ['m1', 'mine_overlaps'], ['m5', 'mine_overlaps']])
+eq('a shift already promised in another swap cannot be offered again', V.exchangeOffers(xDb({ swaps: [{ status: 'open', assignmentId: 'am1', returnAssignmentId: null }] }), xShifts[0], 'yossi').map((o) => o.shift.id), ['m5'])
+eq('with no signed-in viewer there is nothing to offer', V.exchangeOffers(xDb({ viewerStaffId: null }), xShifts[0], 'yossi'), [])
+
+section('opening hours — one row per day, what customers see is what is edited')
+// Maor\'s real settings on 2026-10-11: the usual hours were changed to 07:30–18:30 but Sunday kept an old 07:00–19:00 entry.
+const maorHours = { workingDays: [0, 1, 2, 3, 4, 5], openTime: '07:30', closeTime: '18:30', dayHours: { 0: { open: '07:00', close: '19:00' }, 5: { open: '07:30', close: '13:00' } } }
+const maorWeek = HE.effectiveWeek(maorHours)
+eq('the week is each day\'s real hours, Saturday closed (what the public page shows)', maorWeek.map((h) => (h ? `${h.open}-${h.close}` : null)), ['07:00-19:00', '07:30-18:30', '07:30-18:30', '07:30-18:30', '07:30-18:30', '07:30-13:00', null])
+eq('writing a week back and reading it again changes nothing', HE.effectiveWeek(HE.settingsFromWeek(maorWeek)), maorWeek)
+const stored = HE.settingsFromWeek(maorWeek)
+eq('the usual hours are the pair most open days share, and only different days get an entry', [stored.openTime, stored.closeTime, Object.keys(stored.dayHours)], ['07:30', '18:30', ['0', '5']])
+const sundayFixed = HE.settingsFromWeek(maorWeek.map((h, d) => (d === 0 ? { open: '07:30', close: '18:30' } : h)))
+eq('setting Sunday to the same hours as the others removes the entry that was hiding the new hours', [Object.keys(sundayFixed.dayHours), sundayFixed.workingDays], [['5'], [0, 1, 2, 3, 4, 5]])
+const oneDay = HE.settingsFromWeek([null, null, { open: '09:00', close: '14:00' }, null, null, null, null])
+eq('a single open day becomes the usual hours with no entries', [oneDay.workingDays, oneDay.openTime, oneDay.closeTime, oneDay.dayHours], [[2], '09:00', '14:00', {}])
+eq('a week with every day closed keeps the hours the venue had', HE.settingsFromWeek(maorWeek.map(() => null), { open: '08:00', close: '20:00' }).openTime, '08:00')
+eq('a tie between two sets of hours goes to the earlier day', HE.settingsFromWeek([{ open: '08:00', close: '12:00' }, { open: '09:00', close: '15:00' }, null, null, null, null, null]).openTime, '08:00')
+const sunday = (time) => HE.openStatus(maorWeek, { date: '2026-10-11', time })
+eq('2026-10-11 is a Sunday: open until 19:00 and shown as today\'s hours', [sunday('10:08').today, sunday('10:08').openNow, sunday('18:59').openNow, sunday('19:00').openNow, sunday('06:59').openNow], [{ open: '07:00', close: '19:00' }, true, true, false, false])
+eq('a closed day is closed all day', HE.openStatus(maorWeek, { date: '2026-10-17', time: '12:00' }), { today: null, openNow: false })
+eq('a window that crosses midnight is open late and early', [HE.openStatus([{ open: '20:00', close: '02:00' }, null, null, null, null, null, null], { date: '2026-10-11', time: '23:30' }).openNow, HE.openStatus([{ open: '20:00', close: '02:00' }, null, null, null, null, null, null], { date: '2026-10-11', time: '01:00' }).openNow], [true, true])
+
+section('settings draft — what changed, what is invalid, what survives')
+const dRemote = { settings: { ...baseSettings, presets: [{ id: 'm', name: 'בוקר', startTime: '07:00', endTime: '13:00' }] }, roster: roster.map((r) => ({ ...r })) }
+eq('an empty draft changes nothing', Dr.draftChanges(dRemote, Dr.EMPTY_DRAFT).count, 0)
+eq('a value turned back to what is saved stops being a change', Dr.pruneDraft(dRemote, { settings: { openTime: '07:00' }, members: {} }), { settings: {}, members: {} })
+eq('…and a draft that has nothing to drop is returned as the same object', (() => { const d = { settings: { openTime: '08:00' }, members: {} }; return Dr.pruneDraft(dRemote, d) === d })(), true)
+const hoursDraft = { settings: { openTime: '07:30', closeTime: '18:30', dayHours: { 5: { open: '07:30', close: '13:00' } } }, members: { dana: { maxWeeklyHours: 30 } } }
+const hc = Dr.draftChanges(dRemote, hoursDraft)
+eq('three changed hours fields read as ONE thing, "opening hours", next to the one employee (4 changes, 2 labels)', [hc.count, hc.labels], [4, ['שעות פעילות', 'עובד/ת אחד/ת']])
+eq('two people read as a count', Dr.draftChanges(dRemote, { settings: {}, members: { dana: { schedulable: false }, yossi: { schedulable: false } } }).labels, ['2 עובדים'])
+eq('a person\'s flag equal to the saved one is dropped', Dr.pruneDraft(dRemote, { settings: {}, members: { dana: { schedulable: true } } }), { settings: {}, members: {} })
+eq('a name typed with stray spaces is sent trimmed, and equals the saved one once trimmed', [Dr.draftChanges(dRemote, { settings: { roles: [{ id: 'barista', name: '  בריסטה ', color: '#fff' }] }, members: {} }).count, Dr.draftChanges(dRemote, { settings: { roles: [{ id: 'barista', name: '  קופאי/ת ', color: '#fff' }] }, members: {} }).settings.roles[0].name], [0, 'קופאי/ת'])
+eq('the screens see the draft on top of what is saved', [Dr.withDraft(dRemote.settings, hoursDraft).openTime, Dr.rosterWithDraft(dRemote.roster, hoursDraft).find((r) => r.staffId === 'dana').maxWeeklyHours, Dr.rosterWithDraft(dRemote.roster, hoursDraft).find((r) => r.staffId === 'yossi').maxWeeklyHours], ['07:30', 30, null])
+const valid = Dr.editableOf(dRemote.settings)
+eq('valid settings have no problem', Dr.validateSettings(valid), null)
+check('a role with no name is refused, saying where', /תפקידים/.test(Dr.validateSettings({ ...valid, roles: [{ id: 'x', name: '  ', color: '#fff' }] }) ?? ''))
+check('a template whose start and end are the same is refused, naming it', /בוקר/.test(Dr.validateSettings({ ...valid, presets: [{ id: 'm', name: 'בוקר', startTime: '07:00', endTime: '07:00' }] }) ?? ''))
+check('a name over 40 characters is refused', Dr.validateSettings({ ...valid, stations: [{ id: 's', name: 'x'.repeat(41), emoji: '📍' }] }) !== null)
+check('a safety rule outside its range is refused', Dr.validateSettings({ ...valid, safety: { ...valid.safety, maxWeeklyHours: 5 } }) !== null)
+check('saveDraft parses settings and people together', S.parseAction({ type: 'saveDraft', venueId: U, settings: { openTime: '07:30', dayHours: { 5: { open: '07:30', close: '13:00' } } }, members: [{ staffId: U2, patch: { schedulable: false, maxWeeklyHours: 30 } }] }).type === 'saveDraft')
+check('saveDraft refuses an unknown settings key (nobody can slip a status in)', throwsZod(() => S.parseAction({ type: 'saveDraft', venueId: U, settings: { onboardedAt: 'x' } })))
+check('saveDraft refuses an unknown person field', throwsZod(() => S.parseAction({ type: 'saveDraft', venueId: U, members: [{ staffId: U2, patch: { active: false } }] })))
+check('saveDraft refuses more than 200 people', throwsZod(() => S.parseAction({ type: 'saveDraft', venueId: U, members: Array.from({ length: 201 }, () => ({ staffId: U2, patch: {} })) })))
+
+section('the employee\'s clock — how long until a shift, is it under way')
+const clock = (date, time) => ({ date, time })
+const mon = sh('mon', '2030-01-07', '07:00', '13:00')
+eq('minutes until a shift later today', T.minutesUntilStart(mon, clock('2030-01-07', '05:30')), 90)
+eq('…the evening before it', T.minutesUntilStart(mon, clock('2030-01-06', '20:00')), 11 * 60)
+eq('…and negative once it has started', T.minutesUntilStart(mon, clock('2030-01-07', '08:00')), -60)
+eq('a shift is under way between its start and its end', [T.hasStarted(mon, clock('2030-01-07', '10:00')) && !T.hasEnded(mon, clock('2030-01-07', '10:00')), T.hasEnded(mon, clock('2030-01-07', '13:00')), T.hasEnded(mon, clock('2030-01-07', '12:59'))], [true, true, false])
+const night = sh('night', '2030-01-07', '22:00', '02:00')
+eq('a shift past midnight is still on at 01:00 the next day and over at 02:00', [T.hasEnded(night, clock('2030-01-08', '01:00')), T.hasEnded(night, clock('2030-01-08', '02:00')), T.minutesUntilEnd(night, clock('2030-01-07', '23:00'))], [false, true, 180])
+eq('countdown wording: minutes, an hour, two hours, hours and minutes, days', [0, 25, 60, 120, 135, 5 * 60, 24 * 60, 3 * 24 * 60].map(T.formatCountdown), ['ממש עכשיו', '25 דק׳', 'שעה', 'שעתיים', 'שעתיים ו־15 דק׳', '5 שעות', 'יום', '3 ימים'])
+
+section('the shareable poster — what it says, and the PDF it can become')
+const posterRoster = ['dana', 'yossi', 'tamar'].map((id) => ({ ...roster[0], staffId: id, displayName: id === 'dana' ? 'דנה' : id === 'yossi' ? 'יוסי' : 'תמר', hasLogin: true }))
+const posterShifts = [sh('p1', '2030-01-07', '07:00', '17:00'), sh('p2', '2030-01-07', '17:00', '21:00'), sh('p3', '2030-01-09', '07:00', '17:00')]
+const posterAssign = [as('q1', 'p1', 'dana'), as('q2', 'p1', 'yossi'), as('q3', 'p2', 'tamar'), as('q4', 'p3', 'dana')]
+const posterDb = {
+  settings: { ...baseSettings, workingDays: [0, 1, 2, 3, 4, 5], presets: [{ id: 'm', name: 'בוקר', startTime: '07:00', endTime: '17:00' }], stations: [{ id: 'counter', name: 'דוכן', emoji: '☕' }] },
+  roster: posterRoster, weeks: [{ id: 'W', weekStart: wk, status: 'published', dayNotes: { '2030-01-07': 'סגירה מוקדמת' } }],
+  shifts: posterShifts, assignments: posterAssign, now: { date: '2030-01-06', time: '09:00' }, viewerStaffId: 'dana',
+}
+const mine = PM.buildPosterModel(posterDb, { weekStart: wk, scope: 'mine', venueName: 'מאור' })
+const everyone = PM.buildPosterModel(posterDb, { weekStart: wk, scope: 'everyone', venueName: 'מאור' })
+eq('the week is seven days from Sunday, Saturday closed when the venue does not open', [mine.days.length, mine.days[0].weekday, mine.days[6].closed, mine.days[1].closed], [7, 'יום ראשון', true, false])
+eq('my poster has only my shifts, but still every day', [mine.days.map((d) => d.rows.length).join(''), everyone.days.map((d) => d.rows.length).join('')], ['0101000', '0201000'])
+eq('on my poster I am "אתם" and my colleague on the same shift is named', mine.days[1].rows[0].people.map((p) => [p.name, p.mine]), [['אתם', true], ['יוסי', false]])
+eq('the summary counts my shifts and hours / the team\'s shifts and people', [mine.summary, everyone.summary], ['2 משמרות · 20 ש׳', '3 משמרות · 3 עובדים'])
+eq('titles, range, published state and the day note travel into the model', [mine.title, everyone.title, mine.rangeLabel, mine.published, mine.days[1].note], ['המשמרות שלי', 'לוח משמרות', everyone.rangeLabel, true, 'סגירה מוקדמת'])
+eq('today and tomorrow are marked from the venue\'s own clock', [mine.days[0].today, mine.days[0].relative, mine.days[1].relative], [true, 'היום', 'מחר'])
+eq('a shift reads as its time, template and place', [mine.days[1].rows[0].time, mine.days[1].rows[0].label, everyone.days[1].rows[0].mine, everyone.days[1].rows[1].mine], ['07:00–17:00', 'בוקר', true, false])
+eq('a draft week says so', PM.buildPosterModel({ ...posterDb, weeks: [{ ...posterDb.weeks[0], status: 'draft' }] }, { weekStart: wk, scope: 'everyone', venueName: 'מאור' }).published, false)
+eq('a week with no shifts says there is nothing yet', PM.buildPosterModel({ ...posterDb, shifts: [], assignments: [] }, { weekStart: wk, scope: 'everyone', venueName: 'מאור' }).summary, 'עוד אין משמרות בשבוע הזה')
+eq('a person with no shifts that week is told so', PM.buildPosterModel({ ...posterDb, viewerStaffId: 'tamar', assignments: [] }, { weekStart: wk, scope: 'mine', venueName: 'מאור' }).summary, 'אין לכם משמרות השבוע')
+
+const fakeJpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 0xff, 0xd9])
+const pdf = PDF.pdfFromJpeg(fakeJpeg, 1080, 2160, 'לוח משמרות')
+const pdfText = Buffer.from(pdf).toString('latin1')
+check('the PDF starts and ends like a PDF', pdfText.startsWith('%PDF-1.4') && pdfText.endsWith('%%EOF\n'))
+check('the cross-reference table points at every object', await (async () => {
+  const start = Number(/startxref\n(\d+)\n/.exec(pdfText)[1])
+  if (pdfText.slice(start, start + 4) !== 'xref') return false
+  const entries = [...pdfText.slice(start).matchAll(/^(\d{10}) 00000 n $/gm)].map((m) => Number(m[1]))
+  return entries.length === 6 && entries.every((offset, i) => pdfText.slice(offset).startsWith(`${i + 1} 0 obj`))
+})())
+check('the JPEG is embedded untouched, with its true length', Buffer.from(pdf).includes(Buffer.from(fakeJpeg)) && /\/Length 11 >>/.test(pdfText) && /\/Filter \/DCTDecode/.test(pdfText))
+eq('the page is A4-wide and as tall as the picture needs', /\/MediaBox \[0 0 (\d+) (\d+)\]/.exec(pdfText).slice(1).map(Number), [595, 1190])
+check('the title is stored as UTF-16 so Hebrew survives', /\/Title <FEFF05DC05D505D7/i.test(pdfText))
+
+// ============================================================================================================
+section('purity — these modules know nothing about React, Next or the database')
+for (const n of PURE.filter((n) => !['serialize'].includes(n))) {
+  const src = readFileSync(join(SHIFTS, `${n}.ts`), 'utf8')
+  const bad = /from\s+['"](react|next|@supabase)[^'"]*['"]/.test(src) || /createServiceRoleClient|document\.|window\./.test(src)
+  check(`lib/shifts/${n}.ts is pure`, !bad)
+}
+
+// ============================================================================================================
+section('TS == SQL: the rules that exist in both places agree')
+const db2 = new PGlite({ extensions: { pgcrypto } })
+await db2.exec(`
+  create role anon nologin; create role authenticated nologin; create role service_role nologin;
+  create schema auth;
+  create schema storage;
+  create schema cron;
+  create table cron.job (jobid serial primary key, jobname text, schedule text, command text);
+  create function cron.schedule(a text, b text, c text) returns bigint language sql as $$ select 1::bigint $$;
+  create function cron.unschedule(a bigint) returns boolean language sql as $$ select true $$;
+  create table storage.buckets(id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+  create table storage.objects(id uuid primary key default gen_random_uuid(), bucket_id text);
+  alter table storage.objects enable row level security;
+  create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}'::jsonb);
+  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+  create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb) $$;
+  create publication supabase_realtime;
+  grant usage on schema public to anon, authenticated, service_role; grant usage on schema auth to anon, authenticated, service_role;
+`)
+const stripCron = (sql) => sql.replace(/create extension if not exists pg_cron[^;]*;/g, '')
+for (const f of readdirSync(MIG).filter((x) => x.endsWith('.sql')).sort()) await db2.exec(stripCron(readFileSync(join(MIG, f), 'utf8')))
+const q1 = async (sql, params) => (await db2.query(sql, params)).rows[0]
+
+// Planning closes at the end of Tuesday in Jerusalem, including DST changes.
+eq('weekly requests deadline is preceding Tuesday', T.requestDeadline('2026-10-11'), '2026-10-06')
+check('Tuesday remains open until 23:59; Wednesday is closed', T.requestsOpen('2026-10-11', { date: '2026-10-06', time: '23:59' }) && !T.requestsOpen('2026-10-11', { date: '2026-10-07', time: '00:00' }))
+for (const at of ['2026-10-06T20:59:59Z', '2026-10-06T21:00:00Z', '2026-10-27T21:59:59Z', '2026-10-27T22:00:00Z']) {
+  const week = at.includes('10-06') ? '2026-10-11' : '2026-11-01'
+  const sql = (await q1('select public.sched_requests_open($1::date, $2::timestamptz) v', [week, at])).v
+  eq(`Jerusalem cutoff TS == SQL at ${at}`, T.requestsOpen(week, T.wallClockNow('Asia/Jerusalem', new Date(at))), sql)
+}
+
+// -- labels: the text baked into notifications must read exactly like the screens
+let labelOk = true
+let labelBad = ''
+for (const [date, s, e] of [['2030-01-06', '07:00', '13:00'], ['2030-01-07', '22:00', '02:00'], ['2030-02-28', '09:30', '17:45'], ['2030-12-31', '00:00', '23:59'], ['2031-03-01', '06:05', '06:10']]) {
+  const sql = (await q1(`select public.sched_fmt($1::date, $2, $3) v`, [date, s, e])).v
+  if (sql !== T.formatShiftLabel(date, s, e)) {
+    labelOk = false
+    labelBad = `${sql} ≠ ${T.formatShiftLabel(date, s, e)}`
+  }
+}
+check('shift labels: sched_fmt (notifications) === formatShiftLabel (screens)', labelOk, labelBad)
+
+// -- overlap: random shifts, same answer from both
+let seed = 7
+const rnd = (n) => {
+  seed = (seed * 1103515245 + 12345) & 0x7fffffff
+  return seed % n
+}
+const hm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+let overlapDisagree = 0
+let overlapChecked = 0
+for (let i = 0; i < 250; i++) {
+  const mk = () => {
+    const day = rnd(7)
+    const start = rnd(24 * 12) * 5
+    let end = rnd(24 * 12) * 5
+    if (end === start) end = (start + 30) % (24 * 60)
+    return { date: T.addDays(wk, day), startTime: hm(start), endTime: hm(end) }
+  }
+  const a = mk()
+  const b = mk()
+  const ia = T.intervalOf(wk, a)
+  const ib = T.intervalOf(wk, b)
+  const tsOverlap = ia.start < ib.end && ib.start < ia.end
+  const sqlOverlap = (await q1(`select public.sched_range($1::date, $2, $3) && public.sched_range($4::date, $5, $6) v`, [a.date, a.startTime, a.endTime, b.date, b.startTime, b.endTime])).v
+  overlapChecked++
+  if (tsOverlap !== sqlOverlap) overlapDisagree++
+}
+check(`overlap: ${overlapChecked} random shift pairs (incl. past-midnight) — TS intervalOf and SQL sched_range agree on every one`, overlapDisagree === 0, `${overlapDisagree} disagreements`)
+const durationSql = async (s, e) => Number((await q1(`select extract(epoch from upper(public.sched_range('2030-01-06', $1, $2)) - lower(public.sched_range('2030-01-06', $1, $2))) v`, [s, e])).v) / 60
+check('overlap: durations agree (a night shift, a day shift, and 24h for equal times — which writes refuse anyway)', (await durationSql('22:00', '02:00')) === T.durationMinutes({ startTime: '22:00', endTime: '02:00' }) && (await durationSql('07:00', '13:30')) === 390 && (await durationSql('08:00', '08:00')) === T.durationMinutes({ startTime: '08:00', endTime: '08:00' }))
+
+// -- headcount
+let needOk = true
+for (const reqs of [[], [{ roleId: 'a', min: 2 }], [{ roleId: 'a', min: 2 }, { roleId: 'b', min: 1 }], [{ roleId: 'a', min: 0 }], [{ roleId: 'a' }]]) {
+  const sql = (await q1(`select public.sched_needed($1::jsonb) v`, [JSON.stringify(reqs)])).v
+  if (sql !== C.neededFor(reqs)) needOk = false
+}
+check('headcount: sched_needed === neededFor', needOk)
+
+// -- names (Ayeka's staff table has no POS nickname, so the SQL ends at email)
+const nameCases = [
+  { display_name: 'דנה כהן', first_name: 'דנה', last_name: 'כהן', handle: 'dana', email: 'd@x.co' },
+  { display_name: null, first_name: 'תמר', last_name: null, handle: 'tamar', email: null },
+  { display_name: '', first_name: 'נועה', last_name: 'לוי', handle: 'noa1', email: null },
+  { display_name: null, first_name: null, last_name: null, handle: 'סיני', email: null },
+  { display_name: '  ', first_name: ' ', last_name: null, handle: 'ab', email: 'ab@x.co' },
+]
+let nameOkAll = true
+let nameBad = ''
+for (const c of nameCases) {
+  const r = await q1(`insert into public.staff (display_name, first_name, last_name, email) values ($1,$2,$3,$4) returning id`, [c.display_name, c.first_name, c.last_name, c.email])
+  const sql = (await q1(`select public.sched_name($1) v`, [r.id])).v
+  if (sql !== N.staffDisplayName({ ...c, handle: null })) {
+    nameOkAll = false
+    nameBad += `${sql} ≠ ${N.staffDisplayName({ ...c, handle: null })}; `
+  }
+}
+check('names: sched_name (notifications, audit, assignment snapshot) === staffDisplayName (screens)', nameOkAll, nameBad)
+
+// -- who may view / manage
+const venueId = (await q1(`select id from public.venues where slug = 'ayeka-bar'`)).id
+const people2 = [
+  { role: 'owner', badge: 'owner', active: true }, { role: 'owner', badge: 'developer', active: true },
+  { role: 'staff', badge: 'general_manager', active: true }, { role: 'staff', badge: 'bartender', active: true },
+  { role: 'staff', badge: null, active: true }, { role: 'staff', badge: 'general_manager', active: false },
+  { role: 'staff', badge: 'bartender', active: false },
+]
+let accessOk = true
+let accessBad = ''
+let accessCases = 0
+for (const delegated of [false, true]) {
+  for (const p of people2) {
+    const r = await q1(`insert into public.staff (first_name, role, badge, active) values ('t', $1, $2, $3) returning id`, [p.role, p.badge, p.active])
+    await db2.query(`update public.shift_settings set schedule_managers = $1::uuid[] where venue_id = $2`, [delegated ? [r.id] : [], venueId])
+    const row = { id: r.id, role: p.role, badge: p.badge, active: p.active }
+    const sqlManage = (await q1(`select public.sched_can_manage($1, $2) v`, [r.id, venueId])).v
+    const tsManage = p.active && A.canManageSchedule(row, delegated ? [r.id] : [])
+    const sqlView = (await q1(`select public.sched_can_view($1, $2) v`, [r.id, venueId])).v
+    const tsView = p.active && A.canViewSchedule(row)
+    accessCases++
+    if (sqlManage !== tsManage || sqlView !== tsView) {
+      accessOk = false
+      accessBad += `[${p.badge}/${p.role} active=${p.active} delegated=${delegated}: manage sql=${sqlManage} ts=${tsManage}; view sql=${sqlView} ts=${tsView}] `
+    }
+  }
+}
+check(`access: ${accessCases} role × activity × delegation combinations — sched_can_manage / sched_can_view === canManageSchedule / canViewSchedule (an inactive person is refused by the caller)`, accessOk, accessBad)
+
+// -- the past-clock rule (sched_is_past) vs hasStarted
+const pastOk = []
+for (const [date, st] of [['2020-01-01', '07:00'], ['2999-01-01', '07:00']]) {
+  const sql = (await q1(`select public.sched_is_past($1, $2::date, $3) v`, [venueId, date, st])).v
+  const nowClock = T.wallClockNow('Asia/Jerusalem')
+  pastOk.push(sql === T.hasStarted({ date, startTime: st }, nowClock))
+}
+check('"has it started?": sched_is_past === hasStarted, in the venue\'s own timezone', pastOk.every(Boolean))
+
+console.log(`\n${pass} passed, ${failures.length} failed`)
+if (failures.length) {
+  console.log('\nFailures:')
+  for (const f of failures) console.log(`  - ${f}`)
+  process.exit(1)
+}

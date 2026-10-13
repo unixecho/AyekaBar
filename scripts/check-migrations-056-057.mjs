@@ -2,7 +2,7 @@
 // Offline test of migrations 056 (Z reports) and 057 (waiter calls + schedule
 // sync) against an in-memory Postgres — PGlite, WebAssembly, no Docker.
 //
-//   npm i --no-save @electric-sql/pglite     (once; deliberately NOT a dependency)
+//   (PGlite is a devDependency since the scheduler rebuild, PR #6 — `npm install` is enough)
 //   node scripts/check-migrations-056-057.mjs
 //
 // WHY THIS EXISTS. There is no local Supabase stack in the authoring
@@ -88,7 +88,22 @@ const hhmm = (offsetMin) => hhmmCache.get(offsetMin)
 for (const m of [-300, -60, -45, -20, 40, 120, 300]) {
   hhmmCache.set(m, (await q(`select to_char((now() at time zone 'Asia/Jerusalem') + ($1::int * interval '1 minute'), 'HH24:MI') h`, [m]))[0].h)
 }
-const mkSnap = (shifts) => JSON.stringify({ shifts })
+// The snapshot is frozen in one of TWO shapes (see 057's header): NESTED (027,
+// what production holds until 052 converts it) or FLAT (052+, what
+// sched_publish_week writes). Every recipient case below runs on both.
+let SHAPE = 'nested'
+const mkSnap = (shifts) => {
+  if (SHAPE === 'nested') return JSON.stringify({ shifts })
+  const flatShifts = shifts.map((s, i) => ({
+    id: s.id ?? `shift-${i}`, venue_id: 'v', week_id: 'w', shift_date: s.date,
+    start_time: s.start, end_time: s.end, requests_open: false, note: null,
+  }))
+  const flatAsg = shifts.flatMap((s, i) => (s.assignments ?? []).map((a, j) => ({
+    id: `a-${i}-${j}`, venue_id: 'v', shift_id: s.id ?? `shift-${i}`,
+    staff_id: a.staffId, staff_name: a.staffName ?? null, role_id: a.roleId ?? null, status: 'assigned',
+  })))
+  return JSON.stringify({ shifts: flatShifts, assignments: flatAsg })
+}
 const setSchedule = async (shifts) => {
   await db.exec('delete from schedule_weeks')
   if (shifts) {
@@ -99,6 +114,9 @@ const setSchedule = async (shifts) => {
 const openShift = () => db.exec(`delete from waiter_shift_sessions; insert into waiter_shift_sessions(status) values ('active')`)
 const closeShift = () => db.exec(`delete from waiter_shift_sessions`)
 
+for (const shape of ['nested', 'flat']) {
+  SHAPE = shape
+  console.log(`\n── snapshot shape: ${shape} ──`)
 console.log('\nwaiter_is_call_recipient')
 await closeShift(); await setSchedule(null)
 await as(ann.auth_user_id)
@@ -148,6 +166,9 @@ await setSchedule([{ date: yesterday,
 // start 00:01 end 23:59 yesterday is over; use a proper overnight: 18:00 -> 06:00 dated yesterday covers early morning only
 // (clock-dependent; covered by the TS harness, so just assert it does not error)
 check('a yesterday-dated shift evaluates without error', (await q('select waiter_is_call_recipient() r')).length === 1)
+
+}
+SHAPE = 'nested'
 
 console.log('\nwaiter_open_calls / waiter_ack_call / create_table_call')
 await setSchedule(null); await openShift()
@@ -204,6 +225,9 @@ await as(ann.auth_user_id)
 calls = await q('select * from waiter_open_calls()')
 check('calls older than 2 hours are not offered', calls.length === 0)
 
+for (const shape of ['nested', 'flat']) {
+  SHAPE = shape
+  console.log(`\n── snapshot shape: ${shape} ──`)
 console.log('\nwaiter_schedule_today')
 await setSchedule([{ date: today, start: '18:00', end: '01:00', assignments: [{ staffId: ann.id, staffName: 'Ann' }, { staffId: ben.id, staffName: 'Ben' }] }])
 await as(ann.auth_user_id)
@@ -221,6 +245,9 @@ await setSchedule(null); await as(ann.auth_user_id)
 s = (await q('select waiter_schedule_today() j'))[0].j
 check('no schedule → in_use false, empty list (not an error)', s.in_use === false && s.shifts.length === 0)
 
+}
+SHAPE = 'nested'
+
 console.log('\nprivileges')
 const priv = async (fn, role) => (await q(`select has_function_privilege($1, $2, 'execute') p`, [role, fn]))[0].p
 for (const [fn, expect] of [
@@ -236,7 +263,7 @@ for (const [fn, expect] of [
   }
 }
 
-console.log('\n052 z_reports')
+console.log('\n056 z_reports')
 const zp = async (role, priv2) => (await q(`select has_table_privilege($1,'public.z_reports',$2) p`, [role, priv2]))[0].p
 check('anon/authenticated have NO table privileges', !(await zp('anon', 'select')) && !(await zp('authenticated', 'insert')) && !(await zp('authenticated', 'select')))
 check('RLS is enabled', (await q(`select relrowsecurity r from pg_class where relname='z_reports'`))[0].r === true)

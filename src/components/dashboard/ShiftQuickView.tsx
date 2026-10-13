@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { addDays, dayName, weekdayOf } from '@/lib/shifts/time'
+import { addDays, dayNameHe, weekdayOf } from '@/lib/shifts/wall'
 import {
   SHIFT_ENDING_MINUTES, SHIFT_SOON_MINUTES, fmtShiftRange, myShiftState, zonedNow,
   type PresenceShift, type ZonedNow,
@@ -36,7 +36,7 @@ export function humanMinutes(m: number): string {
 function dayLabel(date: string, today: string): string {
   if (date === today) return 'היום'
   if (date === addDays(today, 1)) return 'מחר'
-  return `יום ${dayName(weekdayOf(date), 'he')}`
+  return `יום ${dayNameHe(weekdayOf(date))}`
 }
 
 /** A time range read left-to-right in every language: in an RTL line the

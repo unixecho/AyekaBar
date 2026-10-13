@@ -285,24 +285,64 @@ export const STORAGE_REGISTRY: readonly StorageItem[] = [
 
   // ── staff tools — not part of the public site ───────────────────────────
   {
-    id: 'shifts-demo', kind: 'localStorage', name: 'ayeka.shifts.prototype.v2',
+    id: 'settings-draft', kind: 'sessionStorage', name: 'ayeka:settings-draft:v1:*',
     category: 'functional', audience: 'staff', sentToServer: false,
     what: t(
-      'סידור עבודה לדוגמה, במצב ההדגמה של מערכת השיבוצים.',
-      'A practice shift schedule, in the demo mode of the scheduling tool.',
-      'جدول مناوبات تجريبي، في وضع العرض التجريبي لأداة جدولة المناوبات.'),
+      'טיוטה של הגדרות סידור העבודה שעדיין לא נשמרה (החלק האחרון בשם הוא מזהה העסק).',
+      'A draft of the scheduling settings that has not been saved yet (the last part of the name is the venue id).',
+      'مسودة لإعدادات جدولة المناوبات لم تُحفظ بعد (آخر جزء من الاسم هو معرّف المكان).'),
     why: t(
-      'כדי שההדגמה לא תיעלם בטעינה מחדש. לא בשימוש באתר הציבורי.',
-      'So the demo is not lost on reload. Not used on the public site.',
-      'لكي لا يضيع العرض التجريبي عند إعادة التحميل. لا يُستخدم في الموقع العام.'),
+      'כדי שעריכה באמצע לא תלך לאיבוד ברענון או בחזרה למסך. לא בשימוש באתר הציבורי.',
+      'So an edit in progress is not lost on a refresh or when coming back to the screen. Not used on the public site.',
+      'لكي لا يضيع التعديل الجاري عند التحديث أو العودة إلى الشاشة. لا يُستخدم في الموقع العام.'),
     when: t(
-      'רק כשצוות או הבעלים עורכים משמרת במצב ההדגמה.',
-      'Only when staff or the owner edit a shift in demo mode.',
-      'فقط عندما يعدّل الطاقم أو المالك مناوبة في الوضع التجريبي.'),
+      'רק כשמנהל משנה הגדרות סידור ולא שמר עדיין.',
+      'Only while a manager has changed scheduling settings and not saved yet.',
+      'فقط عندما يغيّر المدير إعدادات الجدولة ولم يحفظ بعد.'),
     keeps: t(
-      'עד שימחקו אותו.',
-      'Until it is deleted.',
-      'حتى يُحذف.'),
+      'עד סגירת הלשונית, או עד שמירה/ביטול של הטיוטה.',
+      'Until the tab is closed, or the draft is saved or discarded.',
+      'حتى إغلاق اللسان، أو حفظ المسودة أو إلغائها.'),
+  },
+  {
+    id: 'staff-push-off', kind: 'localStorage', name: 'ayeka:staff-push-off:v1',
+    category: 'functional', audience: 'staff', sentToServer: false,
+    what: t(
+      'סימון שהתראות הטלפון של הצוות כבויות במכשיר הזה.',
+      'A mark that the staff phone alerts are switched off on this device.',
+      'علامة بأن تنبيهات الهاتف للطاقم متوقفة على هذا الجهاز.'),
+    why: t(
+      'כדי לכבד את הבחירה שלך ולא לבקש שוב. לא בשימוש באתר הציבורי.',
+      'To respect your choice and not ask again. Not used on the public site.',
+      'لاحترام اختيارك وعدم السؤال مجدداً. لا يُستخدم في الموقع العام.'),
+    when: t(
+      'רק כשעובד מכבה את ההתראות במכשיר.',
+      'Only when a staff member turns the alerts off on the device.',
+      'فقط عندما يوقف أحد أفراد الطاقم التنبيهات على الجهاز.'),
+    keeps: t(
+      'עד שימחקו אותו או יפעילו את ההתראות מחדש.',
+      'Until it is deleted or the alerts are switched on again.',
+      'حتى يُحذف أو تُفعَّل التنبيهات من جديد.'),
+  },
+  {
+    id: 'staff-push-snooze', kind: 'localStorage', name: 'ayeka:staff-push-snooze:v1',
+    category: 'functional', audience: 'staff', sentToServer: false,
+    what: t(
+      'מתי להזכיר שוב לעובד להפעיל התראות טלפון.',
+      'When to remind a staff member again about phone alerts.',
+      'متى نذكّر أحد أفراد الطاقم مجدداً بتنبيهات الهاتف.'),
+    why: t(
+      'כדי שבקשה שנדחתה לא תחזור בכל ביקור. לא בשימוש באתר הציבורי.',
+      'So a request that was postponed does not come back on every visit. Not used on the public site.',
+      'لكي لا يعود طلب تم تأجيله في كل زيارة. لا يُستخدم في الموقع العام.'),
+    when: t(
+      'רק כשעובד בוחר "אחר כך" בכרטיס ההתראות.',
+      'Only when a staff member chooses "later" on the alerts card.',
+      'فقط عندما يختار أحد أفراد الطاقم "لاحقاً" في بطاقة التنبيهات.'),
+    keeps: t(
+      'שלושה ימים, ואז היא נמחקת מעצמה.',
+      'Three days, then it clears itself.',
+      'ثلاثة أيام، ثم تُمحى من تلقاء نفسها.'),
   },
 ]
 

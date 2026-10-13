@@ -31,9 +31,9 @@
 // UI is only courtesy; /api/zreport re-derives the window from the server's
 // own clock with `zWindow()` and refuses a submission outside it.
 
-import { addDays, dayName, dayNumeric, weekdayOf } from '../shifts/time'
+import { addDays, dayNameHe, dayNumeric, weekdayOf } from '../shifts/wall'
 import { isAssignedTo, zonedNow, type PresenceShift, type ZonedNow } from '../shifts/presence'
-import type { ISODate } from '../shifts/types'
+import type { ISODate } from '../shifts/wall'
 
 export const Z_TIMEZONE = 'Asia/Jerusalem'
 /** The window opens at this local hour on the business day itself. */
@@ -203,7 +203,7 @@ export const zStoragePath = (businessDate: ISODate, id: string, mime: ZMime): st
 /** "יום שלישי, 13.10" — how a business date reads on the form and in the
  *  archive. Hebrew only (a staff/owner surface). */
 export const businessDateLabel = (date: ISODate): string =>
-  `יום ${dayName(weekdayOf(date), 'he')}, ${dayNumeric(date)}`
+  `יום ${dayNameHe(weekdayOf(date))}, ${dayNumeric(date)}`
 
 /** "₪12,345.50" from integer agorot. */
 export function fmtShekels(agorot: number | null | undefined): string | null {

@@ -10,7 +10,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { AYEKA_VENUE, DEFAULT_ROLES } from '@/lib/shifts/config'
-import { addDays } from '@/lib/shifts/time'
+import { addDays } from '@/lib/shifts/wall'
 import { zonedNow, type PresenceShift } from '@/lib/shifts/presence'
 import { readPublishedShifts } from '@/lib/shifts/published'
 
@@ -47,7 +47,7 @@ export async function readMyShifts(staffId: string): Promise<MyShiftsData> {
       for (const a of mine) {
         if (!a.roleId) continue
         roleLabels[a.roleId] = read.roleNames[a.roleId]
-          ?? DEFAULT_ROLES.find((r) => r.id === a.roleId)?.name.he
+          ?? DEFAULT_ROLES.find((r) => r.id === a.roleId)?.name
           ?? a.roleId
       }
       shifts.push({

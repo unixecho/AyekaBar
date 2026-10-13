@@ -44,10 +44,10 @@ const IMPORTS = {
   '@/lib/staff/access': './staff-access.mjs',
   '../staff/access': './staff-access.mjs',
   '../waiter/access': './waiter-access.mjs',
-  '../shifts/time': './time.mjs',
+  '../shifts/wall': './wall.mjs',
   '../shifts/presence': './presence.mjs',
 }
-FILES['lib/shifts/time.ts'] = 'time.mjs'
+FILES['lib/shifts/wall.ts'] = 'wall.mjs'
 FILES['lib/shifts/presence.ts'] = 'presence.mjs'
 
 for (const [rel, name] of Object.entries(FILES)) {
@@ -56,7 +56,7 @@ for (const [rel, name] of Object.entries(FILES)) {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, isolatedModules: true },
   }).outputText
   for (const [from, to] of Object.entries(IMPORTS)) js = js.split(`'${from}'`).join(`'${to}'`)
-  js = js.replace(/from '\.\/(time|presence)'/g, "from './$1.mjs'")
+  js = js.replace(/from '\.\/(wall|presence)'/g, "from './$1.mjs'")
   writeFileSync(join(out, name), js)
 }
 const load = (n) => import(pathToFileURL(join(out, n)).href)

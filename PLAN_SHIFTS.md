@@ -1,3 +1,5 @@
+> **Superseded:** the scheduler was rebuilt on the Sarcafe model — see `docs/STAFF_SCHEDULING.md` and `docs/STAFF_PUSH.md`. This plan is kept as history; `scripts/check-shift-rules.mjs` no longer exists (use `npm run check:schedule`).
+
 # PLAN_SHIFTS.md — shift scheduling (prototype + decision record)
 
 > **Read Part II first (bottom of this file, planned 2026-08-20).** It is the

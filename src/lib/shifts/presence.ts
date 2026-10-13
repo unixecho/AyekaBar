@@ -13,12 +13,12 @@
 // WALL-CLOCK, like the rest of the module (types.ts header): a shift is
 // `date + start + end` in the venue's local time and "now" is placed on the
 // same absolute-minutes line intervalOf() uses. The one thing this file adds
-// to time.ts is `zonedNow()`, which reads date AND minutes from a SINGLE
+// to the wall-clock helpers is `zonedNow()`, which reads date AND minutes from a SINGLE
 // formatter call — todayIn() + nowMinutesIn() are two separate clock reads,
 // and at 23:59:59.9 they can straddle midnight and answer "yesterday, 00:00".
 
-import { MINUTES_PER_DAY, dayIndex, intervalOf, parseHM, fmtHM, addDays } from './time'
-import type { HM, ISODate } from './types'
+import { MINUTES_PER_DAY, dayIndex, intervalOf, parseHM, fmtHM, addDays } from './wall'
+import type { HM, ISODate } from './wall'
 
 /** Staff keep working after the planned end — chairs up, tills counted. The
  *  waiter-call rule treats someone as still "on shift" for this long after

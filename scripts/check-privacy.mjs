@@ -207,8 +207,34 @@ section('code ↔ registry — every storage key the app reads or writes is decl
       found.get(k).add(f)
     }
   }
-  check('every storage key in the source can be resolved to a literal (use a constant or a literal, never a variable)',
-    unresolved.length === 0, unresolved.slice(0, 3).join(' | '))
+  // 2026-10-13 — WRAPPERS. The scheduler's settings draft and the staff push card reach
+  // storage through a helper (`sessionStorage.getItem(storageKey(venueId))`,
+  // `read(OFF_KEY)`), so the call itself cannot be resolved to a literal. For a file
+  // with such calls, every key-looking literal IN THAT FILE (`ayeka.…` / `ayeka:…`, a
+  // `${…}` tail meaning "per venue" and written `*`) is taken as a key that file uses —
+  // under the store its unresolved calls name — and still has to be declared. A file with
+  // an unresolved call and NO such literal still fails: that is a key we cannot see.
+  const stillUnresolved = []
+  const byFile = new Map()
+  for (const u of unresolved) {
+    const mm = u.match(/^(\S+):\d+\s+(localStorage|sessionStorage)\(/)
+    if (!mm) { stillUnresolved.push(u); continue }
+    if (!byFile.has(mm[1])) byFile.set(mm[1], { stores: new Set(), lines: [] })
+    byFile.get(mm[1]).stores.add(mm[2]); byFile.get(mm[1]).lines.push(u)
+  }
+  for (const [f, { stores, lines }] of byFile) {
+    const c = code.get(f) ?? ''
+    const lits = Array.from(c.matchAll(/(['"`])(ayeka[.:][A-Za-z0-9._:-]*(?:\$\{[^}]*\})?)\1/g)).map((m) => m[2].replace(/\$\{[^}]*\}/, '*'))
+    if (lits.length === 0 || stores.size !== 1) { stillUnresolved.push(...lines); continue }
+    const store = Array.from(stores)[0]
+    for (const lit of lits) {
+      const k = `${store}:${lit}`
+      if (!found.has(k)) found.set(k, new Set())
+      found.get(k).add(f)
+    }
+  }
+  check('every storage key in the source can be resolved to a literal (use a constant or a literal, or a helper whose file names its keys as `ayeka…` literals)',
+    stillUnresolved.length === 0, stillUnresolved.slice(0, 3).join(' | '))
 
   // The accessibility widget derives two keys from the one it is passed. Since
   // 2026-10-13 that is passed by components/A11yGate.tsx (which keeps the widget
@@ -404,8 +430,8 @@ section('tidying leftovers of things the site no longer uses')
   const jar = fakeJar('negishot_prefs=%7B%7D; foo=bar; negishotX=1; sb-abc-auth-token=secret', 'www.ayeka.bar')
   const r = H.cleanupLegacy({ local, session, cookies: jar })
   check('it removes the old overlay\'s keys and the old demo format — adjacent keys included',
-    same(local.keys().sort(), ['ayeka.a11y.prefs.v1', 'ayeka.shifts.prototype.v2', 'siteLanguage']) &&
-    same(session.keys(), ['ayeka:navStack']) && r.storage.length === 4)
+    same(local.keys().sort(), ['ayeka.a11y.prefs.v1', 'siteLanguage']) &&
+    same(session.keys(), ['ayeka:navStack']) && r.storage.length === 5)
   check('it expires only the old overlay\'s cookies — never the sign-in cookie, never anyone else\'s',
     same(r.cookies.sort(), ['negishotX', 'negishot_prefs']) &&
     jar.writes.every((w) => /^negishot/.test(w) && /Max-Age=0/.test(w) && /Path=\//.test(w)))
@@ -422,7 +448,7 @@ section('tidying leftovers of things the site no longer uses')
   check('storage and cookie access that throws never breaks the page', !threw)
   check('the legacy lists name what was actually left behind',
     H.isLegacyStorageKey('negishot_sid') && H.isLegacyStorageKey('negishot_prefs_NGS_160D202C7B8B') && H.isLegacyStorageKey('ayeka.shifts.prototype.v1') &&
-    !H.isLegacyStorageKey('ayeka.shifts.prototype.v2') && !H.isLegacyStorageKey('siteLanguage') &&
+    H.isLegacyStorageKey('ayeka.shifts.prototype.v2') && !H.isLegacyStorageKey('siteLanguage') &&
     H.isLegacyCookieName('negishot_prefs') && !H.isLegacyCookieName('sb-x-auth-token'))
   check('nothing in the source still writes a legacy key (they are only ever removed)',
     !Array.from(code.entries()).some(([f, c]) => !f.startsWith('src/lib/privacy/') && /(setItem|getItem)\(\s*['"](negishot|ayeka\.shifts\.prototype\.v1)/.test(c)))

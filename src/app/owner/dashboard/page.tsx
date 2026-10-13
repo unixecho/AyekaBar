@@ -8,6 +8,8 @@ import DashboardLive from '@/components/DashboardLive'
 import SignOutButton from '@/components/SignOutButton'
 import DashboardSections from '@/components/dashboard/DashboardSections'
 import ZReportCard from '@/components/dashboard/ZReportCard'
+import StaffPushCard from '@/components/staff/StaffPushCard'
+import DevPushPanel from '@/components/staff/DevPushPanel'
 import { OWNER_CATEGORIES, sectionsFor } from '@/lib/dashboard/tiles'
 import { readZOverview } from '@/lib/zreport/server'
 import { readDashboardSignals, OVERALL_DEMO_SIGNAL_ID } from '@/lib/owner/signals'
@@ -113,6 +115,11 @@ export default async function OwnerDashboardPage() {
         initialOverallDemoMode={overallDemoMode} initialShiftStatus={shiftStatus}
       />
 
+      {/* Phone alerts for the owner too: a colleague asking for a shift, a request or swap waiting for a decision. */}
+      <div className="rise" style={{ animationDelay: '120ms', marginBottom: 14 }}>
+        <StaffPushCard variant="home" />
+      </div>
+
       {/* 3b. The night's Z report: filed, awaited, or missing. */}
       <ZReportCard overview={zOverview} />
 
@@ -129,6 +136,9 @@ export default async function OwnerDashboardPage() {
           signals go silent when everything is done — they are worth coming back
           to long after the dashboard stops pointing at them. */}
       <DashboardSections sections={sectionsFor(me, OWNER_CATEGORIES)} baseDelay={150} />
+
+      {/* The owner's push test bench: sends real alerts to this owner only and shows what the server sees. */}
+      <DevPushPanel />
     </main>
   )
 }
