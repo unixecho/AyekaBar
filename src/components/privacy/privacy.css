@@ -1,0 +1,99 @@
+/* The one-time storage notice (StorageNotice.tsx) — and nothing else.
+   The /cookies page is styled inline, like /accessibility.
+
+   WHERE IT SITS. Bottom of the screen, above the band the floating buttons use:
+   the accessibility button is 48px tall at 16px from its corner, and the menu's
+   cart button is pinned at bottom: 16px. 84px clears both with room to spare, in
+   any corner the visitor has put the accessibility button. z-index 110 is under
+   the cart button (120), the cart's sheets (130) and every modal (200), so a
+   notice can never cover an action a visitor is in the middle of.
+
+   WHAT IT DOES NOT DO. It is not a dialog: no scrim, no focus trap, nothing
+   behind it is made inert. It is a notice, and the page stays fully usable
+   while it is up.
+
+   MOTION. transform + opacity only, the house easing, and — BLUEPRINT motion law
+   (b) — no backdrop-filter anywhere on it: the blur would be recomputed over the
+   whole viewport on every frame of the slide. */
+
+.storage-notice {
+  position: fixed;
+  z-index: 110;
+  inset-inline: 12px;
+  margin-inline: auto;
+  max-width: 460px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+  padding: 14px 14px 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  animation: storage-notice-in .38s var(--ease) both;
+}
+.storage-notice[data-phase='out'] {
+  animation: storage-notice-out .24s var(--ease) both;
+  pointer-events: none;
+}
+
+.storage-notice-text {
+  margin: 0 0 12px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.storage-notice-actions { display: flex; gap: 10px; }
+
+/* Equal footing: both are real 44px controls of the same shape, one filled and
+   one outlined — neither is a faint text link next to a loud button. */
+.storage-notice-btn {
+  flex: 1 1 0;
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+/* var(--bg) on var(--neon) is 6.5:1 — the same pair the skip link uses and
+   scripts/check-contrast.mjs already pins. */
+.storage-notice-ok {
+  background: var(--neon);
+  color: var(--bg);
+  border: 0;
+  font-weight: 800;
+}
+.storage-notice-more {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line-interactive);
+}
+
+@keyframes storage-notice-in  { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes storage-notice-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(10px); } }
+@keyframes storage-notice-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes storage-notice-fade-out { to { opacity: 0; } }
+
+/* Reduced motion — SUBSTITUTE, don't remove (BLUEPRINT §4.13): a fade, no travel. */
+@media (prefers-reduced-motion: reduce) {
+  .storage-notice { animation-name: storage-notice-fade-in; }
+  .storage-notice[data-phase='out'] { animation-name: storage-notice-fade-out; }
+}
+
+/* The accessibility widget's "pause animations": the visitor asked for no motion. */
+html.a11y-motion-off .storage-notice,
+html.a11y-motion-off .storage-notice[data-phase='out'] { animation: none; }
+
+/* A short landscape phone has little height to spare: tighten, still clear of the buttons. */
+@media (max-height: 480px) {
+  .storage-notice { padding: 10px 12px; }
+  .storage-notice-text { margin-bottom: 8px; font-size: 0.8rem; }
+}
+
+@media print { .storage-notice { display: none !important; } }

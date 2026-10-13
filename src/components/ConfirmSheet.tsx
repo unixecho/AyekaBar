@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, type CSSProperties } from 'react'
 import ModalPortal from '@/components/ModalPortal'
 
 // iOS-style destructive confirmation, replacing window.confirm().
@@ -22,6 +22,10 @@ export interface ConfirmRequest {
    *  the menu (you can bring it back)" tells a non-technical owner they're
    *  about to destroy something, and they stop tapping it. */
   tone?: 'danger' | 'calm'
+  /** Label of the cancel button. Defaults to Hebrew, because every existing
+   *  caller is an owner/staff screen; a PUBLIC, trilingual page (/cookies) has to
+   *  say it in the visitor's language. */
+  cancelLabel?: string
 }
 
 const CANCEL = 'ביטול'
@@ -32,7 +36,19 @@ export default function ConfirmSheet({
   request: ConfirmRequest | null
   onClose: () => void
 }) {
-  const confirmRef = useRef<HTMLButtonElement>(null)
+  const confirmRef = useRef<HTMLButtonElement | null>(null)
+  // Focus the confirm button the moment it EXISTS, not from the effect below.
+  // Found 2026-10-04 on /cookies: the effect runs when `request` becomes non-null,
+  // but ModalPortal only mounts its children one render LATER (it waits for an
+  // effect of its own to know it is on the client) — so at that moment the ref is
+  // still empty, and unless the parent happens to re-render again the sheet opened
+  // with keyboard focus still on the page button behind it. A callback ref fires
+  // exactly when the button is attached; useCallback keeps its identity stable so
+  // it does NOT fire again (and steal focus back from Cancel) on every re-render.
+  const attachConfirm = useCallback((el: HTMLButtonElement | null) => {
+    confirmRef.current = el
+    if (el) el.focus({ preventScroll: true })
+  }, [])
   // A11y (WCAG 2.4.3): found 2026-09-04 — this sheet focused its confirm
   // button on open but never gave focus BACK anywhere on close. Since
   // `if (!request) return null` unmounts the whole subtree synchronously,
@@ -97,7 +113,7 @@ export default function ConfirmSheet({
             </div>
 
             <button
-              ref={confirmRef} type="button" className="press"
+              ref={attachConfirm} type="button" className="press"
               onClick={() => { request.onConfirm(); onClose() }}
               style={{
                 width: '100%', padding: '15px 0', border: 'none',
@@ -111,7 +127,7 @@ export default function ConfirmSheet({
           </div>
 
           <button type="button" onClick={onClose} className="press" style={cancelStyle}>
-            {CANCEL}
+            {request.cancelLabel ?? CANCEL}
           </button>
         </div>
       </div>

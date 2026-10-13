@@ -1,5 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800;900&display=swap');
-
+/* The typeface (Rubik) is self-hosted through next/font in app/layout.tsx, which
+   exposes it as --font-rubik. It used to be an @import of Google Fonts on this
+   line; that made every visitor's browser contact Google. Do not put it back —
+   scripts/check-privacy.mjs fails on a remote font import. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -66,7 +68,9 @@ html, body {
   margin: 0;
   padding: 0;
   color: var(--text);
-  font-family: 'Rubik', sans-serif;
+  /* --font-rubik is the self-hosted file (next/font, set on <html>); the plain
+     'Rubik' after it only matters if the variable is ever absent. */
+  font-family: var(--font-rubik), 'Rubik', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 /* Reserve the scrollbar's width on every page, whether or not that page is

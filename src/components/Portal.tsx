@@ -9,6 +9,8 @@ import type { PortalReviewsBlock } from '@/lib/reviews/types'
 import LanguageSwitch, { useLanguage, type Lang } from '@/components/LanguageSwitch'
 import ReviewWall from '@/components/ReviewWall'
 import FeedbackButton from '@/components/FeedbackButton'
+import StorageNotice from '@/components/privacy/StorageNotice'
+import { COOKIES_LINK_LABEL, COOKIES_PATH } from '@/lib/privacy/notice'
 
 const LINKS = {
   menu: '/menu',
@@ -244,9 +246,21 @@ export default function Portal({
             explicit role is what actually makes it a landmark here. */}
         <footer role="contentinfo" style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-faint)' }}>
           <p style={{ margin: '0 0 6px' }}>{t.footer}</p>
-          <Link href="/accessibility" className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{t.accessibility}</Link>
+          {/* Two links, wrapping on a narrow screen. The second — what the site
+              keeps on the visitor's device — sits beside the accessibility
+              statement because both are "how this site treats you" pages, and
+              /menu's footer carries the same pair in the same order (WCAG 2.2
+              3.2.6 Consistent Help, the reasoning behind that file's own note). */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: 16, rowGap: 12 }}>
+            <Link href="/accessibility" className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{t.accessibility}</Link>
+            <Link href={COOKIES_PATH} className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{COOKIES_LINK_LABEL[lang]}</Link>
+          </div>
         </footer>
       </div>
+
+      {/* The one-time "what this site keeps on your device" notice. Portalled to
+          <body>, non-modal, waits for the intro — see StorageNotice's header. */}
+      <StorageNotice lang={lang} />
     </main>
   )
 }

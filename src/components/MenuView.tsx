@@ -17,6 +17,8 @@ import CartSheet from '@/components/cart/CartSheet'
 import DinerStrip from '@/components/cart/DinerStrip'
 import AddToCartControl from '@/components/cart/AddToCartControl'
 import FeedbackButton from '@/components/FeedbackButton'
+import StorageNotice from '@/components/privacy/StorageNotice'
+import { COOKIES_LINK_LABEL, COOKIES_PATH } from '@/lib/privacy/notice'
 
 const POLL_MS = 30_000
 
@@ -292,9 +294,14 @@ export default function MenuView({
             2026-09-01; /menu had neither, only the back arrow to "/". Same
             two links, same relative order, same footer position — a
             "consistent help mechanism" means literally that. */}
-        <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center', gap: 16 }}>
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: 16, rowGap: 12 }}>
           <Link href="/accessibility" className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline', fontSize: '0.8rem' }}>
             {MENU_UI.accessibility[lang]}
+          </Link>
+          {/* What the site keeps on the visitor's device — the same link, in the
+              same place, as the portal's footer (the one shared label). */}
+          <Link href={COOKIES_PATH} className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline', fontSize: '0.8rem' }}>
+            {COOKIES_LINK_LABEL[lang]}
           </Link>
           <FeedbackButton lang={lang} enabled={feedbackEnabled} variant="link" />
         </div>
@@ -310,6 +317,11 @@ export default function MenuView({
           <CartTutorial lang={lang} />
         </>
       )}
+
+      {/* The one-time "what this site keeps on your device" notice. Non-modal and
+          portalled; it sits above the floating buttons and under every sheet —
+          see StorageNotice and privacy.css. */}
+      <StorageNotice lang={lang} />
     </div>
   )
 
