@@ -614,8 +614,14 @@ section('otp — the six digits the waiter reads out')
   // migration 048. If one of these changes, that file has to change with it.
   check('code length is 6, matching the SQL regex', Otp.TABLE_CODE_LENGTH === 6)
   check('TTL is 600s, matching issue_table_code', Otp.TABLE_CODE_TTL_SECONDS === 600)
-  check('attempt cap is 5, matching redeem_table_code', Otp.TABLE_CODE_MAX_ATTEMPTS === 5)
+  // 058 retired the five-attempt burn (a recoverable code cannot burn on correct reuse)
+  // and replaced it with a device cap — the numbers below are pinned against the SQL
+  // text itself in scripts/check-remote-ordering.mjs.
+  check('the retired attempt-burn constant is really gone (nothing may still rely on it)', Otp.TABLE_CODE_MAX_ATTEMPTS === undefined)
+  check('device cap is 6, matching redeem_table_code (058)', Otp.TABLE_VISIT_MAX_DEVICES === 6)
+  check('pending cap is 3 and the gap 20s, matching create_cart_submission (058)', Otp.VISIT_MAX_PENDING === 3 && Otp.SUBMISSION_MIN_GAP_SECONDS === 20)
   check('session TTL is 10800s, matching redeem_table_code', Otp.TABLE_SESSION_TTL_SECONDS === 10800)
+  check('the session cookie has the declared name', Otp.TABLE_SESSION_COOKIE === 'ayeka_table_session')
   check('the default channel needs no third party', Otp.TABLE_CODE_CHANNEL_DEFAULT === 'handoff')
 }
 

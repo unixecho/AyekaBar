@@ -92,6 +92,9 @@ export const OP_ONLY_PREFIXES = [
   // receipts page it sits beside. (Filing one is a different, wider circle:
   // see lib/zreport/rules.ts, reached from the STAFF dashboard.)
   '/owner/z-reports',
+  // The payslip library (2026-10-14): everyone's salary documents. OP only, like the archive above — NOT widened to
+  // the general manager. An employee reads their OWN at /staff/payslips (a staff prefix, gated by row ownership).
+  '/owner/payslips',
 ]
 
 /** Sections only the developer opens. Also OP-gated by middleware (a dev row

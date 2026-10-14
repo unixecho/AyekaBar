@@ -164,16 +164,28 @@ const ownerView = (row) => ids(T.sectionsFor(row, T.OWNER_CATEGORIES))
 const devView = (row) => ids(T.sectionsFor(row, T.DEV_CATEGORIES))
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort())
 
-check('a waiter\'s staff dashboard = my shifts, POS, loyalty — and nothing else',
-  same(staffView(waiter), ['my-shifts', 'pos', 'loyalty']), JSON.stringify(staffView(waiter)))
-check('a bartender\'s = the same three', same(staffView(bartender), ['my-shifts', 'pos', 'loyalty']))
-check('a shift manager also gets the floor map', same(staffView(shiftMgr), ['my-shifts', 'pos', 'loyalty', 'floor']), JSON.stringify(staffView(shiftMgr)))
+check('a waiter\'s staff dashboard = my shifts, POS, loyalty, payslips — and nothing else',
+  same(staffView(waiter), ['my-shifts', 'pos', 'loyalty', 'payslips']), JSON.stringify(staffView(waiter)))
+check('a bartender\'s = the same four', same(staffView(bartender), ['my-shifts', 'pos', 'loyalty', 'payslips']))
+check('a shift manager also gets the floor map', same(staffView(shiftMgr), ['my-shifts', 'pos', 'loyalty', 'payslips', 'floor']), JSON.stringify(staffView(shiftMgr)))
 check('the general manager also gets schedule management, the floor and the menu editor',
-  same(staffView(gm), ['my-shifts', 'pos', 'loyalty', 'schedule', 'floor', 'editor']), JSON.stringify(staffView(gm)))
+  same(staffView(gm), ['my-shifts', 'pos', 'loyalty', 'payslips', 'schedule', 'floor', 'editor']), JSON.stringify(staffView(gm)))
 check('an owner opening the EMPLOYEE view sees the employee tiles, not a second owner dashboard',
   !staffView(owner).includes('staff') && !staffView(owner).includes('audit') && staffView(owner).includes('pos'))
 check('the loyalty tile is registered (the page locks it while the club is off)', T.TILES.some((t) => t.id === 'loyalty' && t.href === '/staff/loyalty'))
 check('nobody gets a null-row dashboard', staffView(null).length === 0)
+
+// Payslips (2026-10-14): the EMPLOYEE's tile is for every staff row; the OWNER's library is OP-only — and each route
+// sits behind the matching door in middleware, so neither tile can lead to /no-access.
+check('the payslips tile is registered for every employee and leads to their own page',
+  T.TILES.some((t) => t.id === 'payslips' && t.audience === 'staff' && t.href === '/staff/payslips'))
+check('the owner\'s payslip library is an OP tile behind an OP prefix',
+  T.TILES.some((t) => t.id === 'payslips-admin' && t.audience === 'op' && t.href === '/owner/payslips') && A.OP_ONLY_PREFIXES.includes('/owner/payslips'))
+check('an owner sees both payslip tiles on the right dashboards (their own on the employee view, everyone\'s on the owner dashboard)',
+  staffView(owner).includes('payslips') && ownerView(owner).includes('payslips-admin'))
+check('a waiter never sees the owner\'s payslip library', !staffView(waiter).includes('payslips-admin') && !ownerView(waiter).includes('payslips-admin'))
+check('middleware protects both payslip prefixes',
+  /STAFF_PREFIXES\s*=\s*\[[^\]]*'\/staff\/payslips'/.test(read('middleware.ts')))
 
 const OLD = ['/owner/editor', '/owner/schedule', '/owner/floor', '/owner/staff', '/owner/loyalty', '/owner/links',
   '/owner/languages', '/owner/intro', '/owner/reports', '/owner/accessibility', '/owner/feedback', '/owner/audit']

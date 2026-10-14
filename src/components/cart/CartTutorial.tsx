@@ -5,6 +5,7 @@ import ModalPortal from '@/components/ModalPortal'
 import { haptic } from '@/lib/haptics'
 import { RTL, type Lang } from '@/lib/menu/types'
 import { CART_UI } from '@/lib/cart/i18n'
+import { PHASE_2_BUILT } from '@/lib/cart/phases'
 import { useCart } from './CartProvider'
 
 // The one-time walkthrough, shown the first time something lands in the cart.
@@ -36,7 +37,9 @@ import { useCart } from './CartProvider'
 // sibling that animates. Same split `shifts/SheetShell.tsx` uses.
 
 export default function CartTutorial({ lang }: { lang: Lang }) {
-  const { tutorialOpen, dismissTutorial } = useCart()
+  const { tutorialOpen, dismissTutorial, actions } = useCart()
+  // The same two locks as the footer button: "not sent anywhere" is only true while sending is off.
+  const canSend = actions.ordering && PHASE_2_BUILT
   const cardRef = useRef<HTMLDivElement>(null)
   const ctaRef = useRef<HTMLButtonElement>(null)
   // Focus in, focus back out, and a real trap while it is up. This is a modal
@@ -135,7 +138,7 @@ export default function CartTutorial({ lang }: { lang: Lang }) {
             </li>
           </ul>
 
-          <p className="cart-tut-privacy">{CART_UI.tutorialPrivacy[lang]}</p>
+          <p className="cart-tut-privacy">{canSend ? CART_UI.tutorialPrivacyUntilSent[lang] : CART_UI.tutorialPrivacy[lang]}</p>
 
           <button
             ref={ctaRef}

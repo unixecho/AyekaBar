@@ -507,3 +507,17 @@ html:has(.cart-fab-wrap[data-summoned='true']) {
     outline-offset: 4px;
   }
 }
+
+/* ── The order sheet's footer keeps clear of the accessibility button (2026-10-13) ─────────────────────────────
+   The accessibility widget's button is fixed to a bottom corner of EVERY page, and the visitor can move it to the
+   other bottom corner. On a phone the sheet spans the whole width, so whichever action sat in that corner had its
+   first letters covered — "disconnect" at 375px, "close" at 280px (both measured; a hit-test at the centre still
+   passed, which is why the numbers alone did not show it). Re-ordering only moves the problem to the other
+   corner, so nothing is placed there at all: the button is 48px tall plus a 16px margin, plus the safe area.
+
+   Only while the sheet spans the screen. From 720px up it is a centred card (max 620px) and the button sits
+   OUTSIDE it, so a reserved band there would only squeeze the list for nothing — in landscape (844x390) it left
+   the body ~70px to scroll in. */
+@media (max-width: 719px) {
+  .cart-foot--corner { padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+}

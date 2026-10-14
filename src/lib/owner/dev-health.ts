@@ -9,7 +9,10 @@
 // table). Probing for the OBJECT a migration creates is the check that is true.
 
 import { createServiceClient } from '@/lib/supabase/server'
-import { WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT } from '@/lib/settings/keys'
+import {
+  TABLE_ORDERING_ENABLED, TABLE_ORDERING_ENABLED_DEFAULT,
+  WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT,
+} from '@/lib/settings/keys'
 import { isMissingTable } from '@/lib/zreport/server'
 
 export type HealthState = 'ok' | 'warn' | 'bad' | 'info'
@@ -60,10 +63,60 @@ export async function readDevHealth(): Promise<HealthRow[]> {
         : { state: 'bad', detail: error.message }
     }),
 
+    // Onboarding join links + the payslip library (2026-10-14). Probing for the OBJECT each migration creates.
+    safe('m059', 'מיגרציה 059 — קישורי הצטרפות לצוות', async () => {
+      const { error } = await service.from('staff_join_links').select('id').limit(1)
+      if (!error) return { state: 'ok', detail: 'הטבלה קיימת' }
+      return isMissingTable(error)
+        ? { state: 'warn', detail: 'עדיין לא הופעלה — אי אפשר ליצור קישורי הצטרפות' }
+        : { state: 'bad', detail: error.message }
+    }),
+
+    safe('m060', 'מיגרציה 060 — ספריית תלושי שכר', async () => {
+      const { error } = await service.from('staff_payslips').select('id').limit(1)
+      if (!error) return { state: 'ok', detail: 'הטבלה קיימת' }
+      return isMissingTable(error)
+        ? { state: 'warn', detail: 'עדיין לא הופעלה — אי אפשר להעלות או לצפות בתלושים' }
+        : { state: 'bad', detail: error.message }
+    }),
+
     safe('call-switch', 'מתג "קריאה למלצר" בתפריט', async () => {
       const { data } = await service.from('app_settings').select('value').eq('key', WAITER_CALL_ENABLED).maybeSingle()
       const on = (data?.value as boolean | undefined) ?? WAITER_CALL_ENABLED_DEFAULT
       return { state: 'info', detail: on ? 'דלוק — הלקוחות יכולים לקרוא למלצר' : 'כבוי (ברירת המחדל)' }
+    }),
+
+    // Remote ordering (2026-10-13). Probing for the OBJECT the migration creates, as above.
+    safe('m058', 'מיגרציה 058 — הזמנה מרחוק', async () => {
+      // Service-role-only and harmless: it just lists who is on shift. A missing function is the signal.
+      const { error } = await service.rpc('waiter_call_recipient_staff_ids')
+      if (!error) return { state: 'ok', detail: 'הפונקציות קיימות' }
+      return MISSING_FN(error)
+        ? { state: 'warn', detail: 'עדיין לא הופעלה — אי אפשר לחבר לקוח לשולחן, והקופה לא תציג הזמנות' }
+        : { state: 'bad', detail: error.message }
+    }),
+
+    safe('order-switch', 'מתג "שליחת הזמנה למלצר" בתפריט', async () => {
+      const { data } = await service.from('app_settings').select('value').eq('key', TABLE_ORDERING_ENABLED).maybeSingle()
+      const on = (data?.value as boolean | undefined) ?? TABLE_ORDERING_ENABLED_DEFAULT
+      return { state: 'info', detail: on ? 'דלוק — לקוח עם קוד מהמלצר יכול לשלוח הזמנה' : 'כבוי (ברירת המחדל)' }
+    }),
+
+    safe('push', 'התראות דחיפה (VAPID)', async () => {
+      // Presence only — never the values. Without all three, order alerts simply do not buzz; the POS's own
+      // polling still shows every request.
+      const keys = ['NEXT_PUBLIC_VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT']
+      const missing = keys.filter((k) => !process.env[k])
+      if (missing.length) return { state: 'warn', detail: `חסרים משתני סביבה: ${missing.join(', ')}` }
+      // `app` exists only once 058 is applied; before that every subscription is the portal's.
+      const { data, error } = await service.from('staff_push_subscriptions').select('app')
+      if (error) {
+        const { count } = await service.from('staff_push_subscriptions').select('id', { count: 'exact', head: true })
+        return { state: 'ok', detail: `המפתחות קיימים · ${count ?? 0} מכשירים רשומים (לפני 058: הכול באתר)` }
+      }
+      const oms = (data ?? []).filter((r) => r.app === 'oms').length
+      const portal = (data ?? []).length - oms
+      return { state: 'ok', detail: `המפתחות קיימים · ${portal} מכשירים באתר · ${oms} בקופה` }
     }),
 
     safe('pos', 'משמרת במערכת הקופה', async () => {

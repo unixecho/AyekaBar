@@ -64,7 +64,12 @@ check('the card is on the staff home and the owner dashboard', /<StaffPushCard/.
 check('request-driven writes push what they just notified', /afterResponse\(\(\) => flushStaffPush\(\)\)/.test(read('src/app/api/shifts/dispatch/route.ts')))
 const push = read('src/lib/push/staff.ts')
 check('rows are claimed BEFORE sending (at-most-once, no double sends from overlapping runs)', push.indexOf('.update({ push_sent_at: now })') > -1 && push.indexOf('.update({ push_sent_at: now })') < push.indexOf('sendToOne(service, device, payload)'))
-check('a gone subscription (404/410) is deleted', /404 \|\| statusCode === 410/.test(push))
+// 2026-10-13: the delivery routine moved to lib/push/deliver.ts so the customer-order alerts
+// (lib/push/orders.ts) prune dead subscriptions the same way — assert it where it lives, and that
+// BOTH senders go through it rather than carrying a private copy.
+const deliver = read('src/lib/push/deliver.ts')
+check('a gone subscription (404/410) is deleted', /404 \|\| statusCode === 410/.test(deliver) && /from\('staff_push_subscriptions'\)\.delete\(\)/.test(deliver))
+check('the schedule alerts deliver through the shared routine', /from '\.\/deliver'/.test(push) && !/webpush\.sendNotification/.test(push))
 const mig = read('supabase/migrations/054_staff_push_notifications.sql')
 check('the developer actions are refused server-side for everyone else', /isPushDeveloper\(me\)\) throw Forbidden/.test(api) && /action: z\.literal\('dev_send'\)/.test(api))
 check('the developer panel is rendered only on the owner dashboard', (ownerDash.match(/<DevPushPanel/g) ?? []).length === 1)

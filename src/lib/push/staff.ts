@@ -9,12 +9,10 @@
 // at-most-once: a crash loses one alert, it never repeats one, and two overlapping runs
 // (a request-triggered flush and the scheduled one) cannot both send the same row.
 
-import webpush from 'web-push'
 import { createServiceClient } from '@/lib/supabase/server'
+import { sendToOne, type Service, type SubscriptionRow } from './deliver'
 import { ensureVapidConfigured } from './send'
 import { pushPathFor } from './staff-rules'
-
-type Service = ReturnType<typeof createServiceClient>
 
 /** An inbox row older than this is old news by the time it would be pushed (the phone was off, the
  *  scheduler was down). It is stamped as handled without a buzz. */
@@ -24,7 +22,6 @@ const BATCH = 200
 const MAX_INDIVIDUAL = 3
 const BODY_LIMIT = 180
 
-type SubscriptionRow = { id: string; staff_id: string; endpoint: string; p256dh: string; auth: string }
 type InboxRow = { id: string; staff_id: string; kind: string; title: string; body: string | null; link: Record<string, unknown> | null }
 type Payload = { title: string; body: string; url: string; tag: string }
 
@@ -33,25 +30,8 @@ const clip = (text: string | null) => {
   return clean.length > BODY_LIMIT ? `${clean.slice(0, BODY_LIMIT - 1)}…` : clean
 }
 
-type SendOutcome = { ok: boolean; statusCode: number | null; detail: string }
-
-async function sendToOne(service: Service, row: SubscriptionRow, payload: Payload): Promise<SendOutcome> {
-  try {
-    await webpush.sendNotification({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } }, JSON.stringify(payload), {
-      urgency: 'high',
-      TTL: 60 * 60 * 3, // a shift alert is useless hours later
-    })
-    return { ok: true, statusCode: null, detail: '' }
-  } catch (err) {
-    const failure = err as { statusCode?: number; body?: string; message?: string } | null
-    const statusCode = failure?.statusCode ?? null
-    const detail = failure?.body || failure?.message || String(err)
-    // 404/410: this phone's subscription is permanently gone (app removed, permission revoked).
-    if (statusCode === 404 || statusCode === 410) await service.from('staff_push_subscriptions').delete().eq('id', row.id)
-    else console.error('Staff push failed:', statusCode, detail)
-    return { ok: false, statusCode, detail }
-  }
-}
+// (sendToOne — one delivery, and the pruning of a dead subscription — lives in ./deliver, shared with
+// the customer-order alerts in ./orders.)
 
 async function loadSubscriptions(service: Service, staffIds: string[]): Promise<Map<string, SubscriptionRow[]>> {
   const bySubscriber = new Map<string, SubscriptionRow[]>()

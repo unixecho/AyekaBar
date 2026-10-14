@@ -46,13 +46,31 @@ const COPY = {
   },
 } as const
 
+// The staff onboarding wizard's version (2026-10-14, /join/<token>). Same two-step reveal, same layout; only the
+// third explainer row differs — "your points are secure" is a customer promise, and what a new employee needs
+// to hear is that THIS Google account becomes their key to the shift system. (The POS port of this component
+// made the same one-row change; see CLAUDE.md "AuthHandoff".)
+const STAFF_ROWS = {
+  he: [
+    COPY.he.rows[0],
+    COPY.he.rows[1],
+    ['🗓️', 'זה המפתח שלך למשמרות', 'עם החשבון הזה תראו את הסידור ותקבלו עדכונים. בחרו את החשבון שבו אתם משתמשים בדרך כלל.'],
+  ],
+  en: [
+    COPY.en.rows[0],
+    COPY.en.rows[1],
+    ['🗓️', 'This is your key to your shifts', 'You’ll see the schedule and get updates with this account. Pick the one you normally use.'],
+  ],
+} as const
+
 export function AuthHandoff({
-  open, busy, error, lang = 'he', onContinue, onClose,
+  open, busy, error, lang = 'he', variant = 'customer', onContinue, onClose,
 }: {
   open: boolean; busy: boolean; error: string | null;
-  lang?: 'he' | 'en'; onContinue: () => void; onClose: () => void;
+  lang?: 'he' | 'en'; variant?: 'customer' | 'staff'; onContinue: () => void; onClose: () => void;
 }) {
-  const t = COPY[lang]
+  const base = COPY[lang]
+  const t = variant === 'staff' ? { ...base, rows: STAFF_ROWS[lang] } : base
   const [shown, setShown] = useState(open)
   const [closing, setClosing] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)

@@ -168,6 +168,12 @@ export const CART_UI = {
     en: 'The list stays on your device and is not sent anywhere.',
     ar: 'تبقى القائمة على جهازك ولا تُرسل إلى أي مكان.',
   },
+  /** Shown INSTEAD of tutorialPrivacy once sending to the waiter is live (2026-10-13). */
+  tutorialPrivacyUntilSent: {
+    he: 'הרשימה נשמרת במכשיר שלכם, ונשלחת למלצר רק אם תבחרו לשלוח אותה.',
+    en: 'The list stays on your device, and goes to a waiter only if you choose to send it.',
+    ar: 'تبقى القائمة على جهازك، ولا تصل إلى النادل إلا إذا اخترتم إرسالها.',
+  },
 
   // ── Paging the read-out ──────────────────────────────────────
   // "the waiter will take pictures of the order from the customer's phone
@@ -214,12 +220,25 @@ export const CART_UI = {
     en: 'Sending your order from here is coming soon. For now — call a waiter and show them the list.',
     ar: 'إرسال الطلب من هنا قريباً. في الوقت الحالي — استدعوا النادل واعرضوا عليه القائمة.',
   },
+  // The mirror case (2026-10-13): ordering from the table is live, the waiter call is not.
+  soonHintCall: {
+    he: 'בקרוב אפשר יהיה לקרוא למלצר ישירות מכאן.',
+    en: 'Calling a waiter from here is coming soon.',
+    ar: 'استدعاء النادل من هنا قريباً.',
+  },
 
   // ── Transparency ───────────────────────────────────────────────────
   localOnly: {
     he: 'הרשימה נשמרת רק במכשיר שלכם ולא נשלחת לשום מקום.',
     en: 'This list is saved on your device only and is not sent anywhere.',
     ar: 'تُحفظ هذه القائمة على جهازك فقط ولا تُرسل إلى أي مكان.',
+  },
+  // Shown INSTEAD of localOnly once ordering from the table is live: "not sent anywhere" would no longer
+  // be true of a list that has a send button, and the page must never claim something the code does not do.
+  localOnlyUntilSent: {
+    he: 'הרשימה נשמרת במכשיר שלכם. היא מגיעה למלצר רק כשאתם לוחצים על "שליחה למלצר".',
+    en: 'This list is saved on your device. It only reaches a waiter when you tap "Send to waiter".',
+    ar: 'تُحفظ هذه القائمة على جهازك. لا تصل إلى النادل إلا عند الضغط على "إرسال للنادل".',
   },
 } as const satisfies Record<string, Tri>
 

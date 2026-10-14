@@ -6,6 +6,8 @@ import { accessLabel } from '@/lib/staff/access'
 import RolePicker from '@/components/RolePicker'
 import ConfirmSheet, { type ConfirmRequest } from '@/components/ConfirmSheet'
 import Switch from '@/components/Switch'
+import JoinLinkSheet, { type JoinLinkShown } from '@/components/staff/JoinLinkSheet'
+import { expiryLabel, joinLinkState, type JoinLinkRow, type JoinLinkState } from '@/lib/staff/join'
 
 interface Member {
   id: string
@@ -33,7 +35,7 @@ interface Member {
 
 const T = {
   title: 'ניהול צוות',
-  subtitle: 'הוסף/י אנשי צוות לפי אימייל — גם לפני שנכנסו לראשונה. בכניסה עם Google הם יזוהו אוטומטית ויקבלו גישה לחלון הצוות. מי שלא צריך/ה גישה למערכת אפשר להוסיף בלי אימייל, לשיבוץ בסידור העבודה בלבד.',
+  subtitle: 'הוסף/י אנשי צוות לפי אימייל — גם לפני שנכנסו לראשונה. בכניסה עם Google הם יזוהו אוטומטית ויקבלו גישה לחלון הצוות. עוד אין לכם את האימייל? הוסיפו בלי חשבון ושלחו קישור הצטרפות — האדם מתחבר בעצמו עם Google, ואז רואה את הסידור.',
 
   // ── Roster sections (2026-08-29, +removed 2026-08-30) ─────────────
   management: 'הנהלה',
@@ -48,12 +50,25 @@ const T = {
   modeAccount: 'עם חשבון',
   modeAccountHint: 'כניסה עם Google, גישה לחלון הצוות ולסידור.',
   modeOffline: 'בלי חשבון',
-  modeOfflineHint: 'מופיע/ה בסידור העבודה בלבד. אין כניסה למערכת ואין צורך באימייל.',
+  modeOfflineHint: 'מופיע/ה בסידור העבודה. אין צורך באימייל — אחר כך שולחים קישור הצטרפות כדי שיוכל/תוכל להתחבר ולראות את המשמרות.',
   firstNamePh: 'שם פרטי',
   lastNamePh: 'שם משפחה (לא חובה)',
-  addedOffline: 'נוסף/ה לצוות לצורכי סידור עבודה. אין למנוי הזה כניסה למערכת.',
+  addedOffline: 'נוסף/ה לצוות. כדי שיוכל/תוכל לראות את הסידור — צרו לו/לה קישור הצטרפות מהכרטיס למטה.',
   offlineChip: 'לסידור בלבד',
-  offlineNote: 'אין חשבון מקושר — אי אפשר להיכנס למערכת ולא להופיע בעמוד הצוות באתר. אפשר לשבץ בסידור העבודה, ובכל שלב לקשר חשבון Gmail כדי שיוכל/תוכל להיכנס. המשמרות וההיסטוריה נשארות על אותו אדם.',
+  offlineNote: 'אין חשבון מקושר — אי אפשר להיכנס למערכת ולא לראות את הסידור. אפשר לשבץ בסידור העבודה, ובכל שלב לשלוח קישור הצטרפות או לקשר חשבון Gmail ידנית. המשמרות וההיסטוריה נשארות על אותו אדם.',
+
+  // ── Join links (2026-10-14, migration 059) ────────────────────────
+  joinBtn: '🔗 קישור הצטרפות',
+  joinBtnNew: '🔗 קישור חדש',
+  joinHint: 'שולחים קישור, והעובד/ת מתחבר/ת עם חשבון Google — בלי שתצטרכו לדעת את הכתובת מראש. עד שמתחברים אין גישה לסידור.',
+  joinLive: 'קישור פעיל עד',
+  joinExpired: 'הקישור פג — צרו חדש',
+  joinCancel: 'ביטול הקישור',
+  joinCancelled: 'הקישור בוטל.',
+  joinFailed: 'יצירת הקישור נכשלה',
+  confirmJoinNew: 'ליצור קישור חדש?',
+  confirmJoinNewBody: 'הקישור הקודם יפסיק לעבוד מיד.',
+  confirmJoinNewLabel: 'יצירת קישור חדש',
   realNameLabel: 'שם',
   realNameHint: 'השם שיופיע בסידור העבודה.',
   levels: '🔑 הרשאות מלאות = גישה לכל אזור הניהול. תפקיד "בעלים" מקבל זאת אוטומטית. "מנהל/ת כללי/ת" יכול/ה לערוך את התפריט גם בלי הרשאות מלאות. כל השאר — חלון הצוות בלבד (קוד QR).',
@@ -118,6 +133,11 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
   const [busyId, setBusyId] = useState<string | null>(null)
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
 
+  // staff.id -> the newest join link (migration 059). Absent = never sent one. The URL itself is never here: only
+  // its hash is stored, so it exists in `shownLink` for as long as the sheet is open and nowhere else.
+  const [joinLinks, setJoinLinks] = useState<Record<string, JoinLinkRow>>({})
+  const [shownLink, setShownLink] = useState<JoinLinkShown | null>(null)
+
   // staff.id -> schedulable. A separate fetch because this is the shift
   // scheduler's own state (schedule_members, not a public.staff column —
   // see PLAN_SHIFTS.md Part II decision D8), read through its own read-only
@@ -134,6 +154,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'load failed')
       setMembers(json.staff)
+      setJoinLinks((json.joinLinks ?? {}) as Record<string, JoinLinkRow>)
     } catch {
       setLoadError('טעינת הצוות נכשלה.')
       setMembers([])
@@ -242,6 +263,54 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
   }
 
   const restoreMember = (id: string) => patchMember(id, { active: true })
+
+  const nameOf = (m: Member) => [m.first_name, m.last_name].filter(Boolean).join(' ') || m.email?.split('@')[0] || 'משתמש'
+
+  /** Generate a link and show it. Replaces any live one, so a live link asks first. */
+  async function issueJoinLink(m: Member) {
+    setBusyId(m.id); setNotice(null)
+    try {
+      const res = await fetch('/api/owner/staff/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: m.id }),
+      })
+      const json = await res.json().catch(() => ({})) as { ok?: boolean; url?: string; expiresAt?: string; message?: string }
+      if (!res.ok || !json.ok || !json.url || !json.expiresAt) throw new Error(json.message ?? T.joinFailed)
+      setJoinLinks((cur) => ({ ...cur, [m.id]: { expires_at: json.expiresAt!, used_at: null, revoked_at: null } }))
+      setShownLink({ name: nameOf(m), firstName: m.first_name, url: json.url, expiresAt: json.expiresAt })
+    } catch (err) {
+      setNotice({ kind: 'err', text: err instanceof Error ? err.message : T.joinFailed })
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  function askJoinLink(m: Member) {
+    if (joinLinkState(joinLinks[m.id]) !== 'live') { void issueJoinLink(m); return }
+    setConfirmReq({
+      title: T.confirmJoinNew, body: T.confirmJoinNewBody, confirmLabel: T.confirmJoinNewLabel, tone: 'calm',
+      onConfirm: () => { void issueJoinLink(m) },
+    })
+  }
+
+  async function cancelJoinLink(m: Member) {
+    setBusyId(m.id)
+    try {
+      const res = await fetch('/api/owner/staff/join', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: m.id }),
+      })
+      if (!res.ok) throw new Error()
+      setJoinLinks((cur) => { const next = { ...cur }; delete next[m.id]; return next })
+      setNotice({ kind: 'ok', text: T.joinCancelled })
+    } catch {
+      setNotice({ kind: 'err', text: T.joinFailed })
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   function askRemove(m: Member) {
     // Only a real invite gets the "revoke" wording. An offline row was never
@@ -470,6 +539,10 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                         onDisplayName={(displayName) => patchMember(m.id, { displayName })}
                         onRealName={(first, last) => patchMember(m.id, { firstName: first, lastName: last })}
                         onAddEmail={(email) => patchMember(m.id, { email })}
+                        joinState={joinLinkState(joinLinks[m.id])}
+                        joinExpires={joinLinks[m.id]?.expires_at ?? null}
+                        onJoin={() => askJoinLink(m)}
+                        onCancelJoin={() => { void cancelJoinLink(m) }}
                         onToggleSchedulable={() => toggleSchedulable(m.id, !(schedulable[m.id] ?? false))}
                         onRemove={() => askRemove(m)}
                       />
@@ -516,12 +589,14 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
       </div>
 
       <ConfirmSheet request={confirmReq} onClose={() => setConfirmReq(null)} />
+      <JoinLinkSheet link={shownLink} onClose={() => setShownLink(null)} />
     </div>
   )
 }
 
 function MemberRow({
-  m, delay, isSelf, busy, schedulable, onBadge, onToggleOwner, onDisplayName, onRealName, onAddEmail, onToggleSchedulable, onRemove,
+  m, delay, isSelf, busy, schedulable, onBadge, onToggleOwner, onDisplayName, onRealName, onAddEmail,
+  joinState, joinExpires, onJoin, onCancelJoin, onToggleSchedulable, onRemove,
 }: {
   m: Member; delay: number; isSelf: boolean; busy: boolean; schedulable: boolean
   onBadge: (badge: string) => void
@@ -530,6 +605,11 @@ function MemberRow({
   onRealName: (first: string, last: string) => void
   /** Offline rows only — see AddEmailField's own comment. */
   onAddEmail: (email: string) => void
+  /** Join link (migration 059) — offered to anyone who has not signed in yet. */
+  joinState: JoinLinkState
+  joinExpires: string | null
+  onJoin: () => void
+  onCancelJoin: () => void
   onToggleSchedulable: () => void
   onRemove: () => void
 }) {
@@ -674,6 +754,31 @@ function MemberRow({
           this is add-only, never a repoint (see the API's own comment). */}
       {offline && (
         <AddEmailField disabled={busy} onCommit={onAddEmail} />
+      )}
+
+      {/* The join link (2026-10-14, migration 059) — "owners need a link to give freshly created employee
+          accounts." For anyone who has not signed in yet: send a link and they connect their own Google account,
+          so the owner never needs to know the address. Until they do there is no login, hence no schedule. */}
+      {!m.auth_user_id && m.role !== 'owner' && m.badge !== 'owner' && (
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: 0, lineHeight: 1.55 }}>{T.joinHint}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" onClick={onJoin} disabled={busy} className="press"
+              style={{ ...ghostBtn, color: 'var(--neon-soft)', borderColor: 'var(--neon-soft)' }}>
+              {joinState === 'live' || joinState === 'expired' ? T.joinBtnNew : T.joinBtn}
+            </button>
+            {joinState === 'live' && joinExpires && (
+              <>
+                <span style={{ fontSize: '0.74rem', color: '#a3e635' }}>✓ {T.joinLive} {expiryLabel(joinExpires)}</span>
+                <button type="button" onClick={onCancelJoin} disabled={busy} className="press"
+                  style={{ ...ghostBtn, marginInlineStart: 'auto' }}>{T.joinCancel}</button>
+              </>
+            )}
+            {joinState === 'expired' && (
+              <span style={{ fontSize: '0.74rem', color: '#fbbf24' }}>{T.joinExpired}</span>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Display name — public only, so it sits with the site controls. Not

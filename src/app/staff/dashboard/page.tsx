@@ -8,11 +8,13 @@ import { readMyShifts } from '@/lib/staff/my-shifts'
 import { zonedNow } from '@/lib/shifts/presence'
 import { Z_REPORT_TILE, STAFF_CATEGORIES, STAFF_EXCLUDE, sectionsFor } from '@/lib/dashboard/tiles'
 import { zAccessFor } from '@/lib/zreport/server'
+import { payslipsReady } from '@/lib/payslips/server'
 import OwnerHeader from '@/components/OwnerHeader'
 import SignOutButton from '@/components/SignOutButton'
 import DashboardSections, { type LockedTiles } from '@/components/dashboard/DashboardSections'
 import ShiftQuickView from '@/components/dashboard/ShiftQuickView'
 import StaffPushCard from '@/components/staff/StaffPushCard'
+import PendingRemoteOrders from '@/components/staff/PendingRemoteOrders'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'אזור הצוות · אייכה בר' }
@@ -62,11 +64,12 @@ export default async function StaffDashboardPage() {
   if (!me) redirect('/no-access')
 
   const service = createServiceClient()
-  const [loyaltyLive, myShifts, posOpen, zAccess] = await Promise.all([
+  const [loyaltyLive, myShifts, posOpen, zAccess, payslipsLive] = await Promise.all([
     getLoyaltyEnabled(),
     readMyShifts(me.id),
     posShiftOpen(),
     zAccessFor(service, { staffId: me.id, role: me.role, badge: me.badge }),
+    payslipsReady(service),
   ])
 
   const meta = badgeMeta(me.badge, me.role)
@@ -78,7 +81,13 @@ export default async function StaffDashboardPage() {
     const work = sections.find((s) => s.category.id === 'mywork')
     if (work) work.tiles = [...work.tiles, Z_REPORT_TILE]
   }
-  const locked: LockedTiles = loyaltyLive ? {} : { loyalty: 'בקרוב' }
+  // Two tiles are shown but closed until what they need exists: the loyalty club until the owner switches it on, and
+  // the payslip library until migration 060 is applied (the page itself also degrades, but a tile that opens an empty
+  // "not set up" page is worse than one that says "soon").
+  const locked: LockedTiles = {
+    ...(loyaltyLive ? {} : { loyalty: 'בקרוב' }),
+    ...(payslipsLive ? {} : { payslips: 'בקרוב' }),
+  }
 
   return (
     <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
@@ -118,6 +127,11 @@ export default async function StaffDashboardPage() {
           posOpen={posOpen}
           initialNow={zonedNow(myShifts.timezone)}
         />
+
+        {/* Customer orders waiting for a waiter (remote ordering, 2026-10-13). Renders nothing unless something is
+            actually waiting — and for anyone who is not told about orders — so it costs the page nothing today.
+            It sits right under the shift view because it is the only thing on this screen that is somebody waiting. */}
+        <PendingRemoteOrders />
 
         <DashboardSections sections={sections} locked={locked} baseDelay={150} />
 

@@ -47,7 +47,8 @@ export type StorageKind = 'localStorage' | 'sessionStorage' | 'cookie'
  *  the visitor made, or a note that something has already been shown. The other
  *  two exist so that adding one is a deliberate act the harness can see. */
 export type StorageCategory = 'necessary' | 'functional' | 'analytics' | 'marketing'
-export type StorageAudience = 'everyone' | 'signed-in' | 'staff'
+/** `table`: only a visitor who typed a code a waiter gave them (remote ordering, 2026-10-13). */
+export type StorageAudience = 'everyone' | 'signed-in' | 'table' | 'staff'
 
 export interface StorageItem {
   id: string
@@ -86,9 +87,9 @@ export const STORAGE_REGISTRY: readonly StorageItem[] = [
       'The items you added to your order list, the names of the people you split it between, and notes on items.',
       'الأصناف التي أضفتموها إلى قائمة الطلب وأسماء من قسّمتموها بينهم والملاحظات على الأصناف.'),
     why: t(
-      'כדי שהרשימה לא תיעלם אם תרעננו את הדף או תחזרו לתפריט. היא נשארת במכשיר שלכם ולא נשלחת לשום מקום.',
-      'So the list is not lost if you refresh the page or come back to the menu. It stays on your device and is not sent anywhere.',
-      'لكي لا تضيع القائمة إذا أعدتم تحميل الصفحة أو عدتم إلى القائمة. تبقى على جهازكم ولا تُرسل إلى أي مكان.'),
+      'כדי שהרשימה לא תיעלם אם תרעננו את הדף או תחזרו לתפריט. היא נשארת במכשיר שלכם, ונשלחת למלצר רק אם תלחצו על "שליחה למלצר".',
+      'So the list is not lost if you refresh the page or come back to the menu. It stays on your device, and goes to a waiter only if you tap "Send to waiter".',
+      'لكي لا تضيع القائمة إذا أعدتم تحميل الصفحة أو عدتم إلى القائمة. تبقى على جهازكم، ولا تصل إلى النادل إلا إذا ضغطتم على "إرسال للنادل".'),
     when: t(
       'כשאתם מוסיפים משהו לרשימה או משנים אותה.',
       'When you add to the list or change it.',
@@ -159,6 +160,29 @@ export const STORAGE_REGISTRY: readonly StorageItem[] = [
       'נמחק כשההתחברות מסתיימת. אם לא סיימתם אותה, הוא נשאר עד שתמחקו אותו, ולכל היותר 400 יום.',
       'Deleted when sign-in completes. If you never finish signing in, it stays until you delete it, and at most 400 days.',
       'يُحذف عند اكتمال تسجيل الدخول. وإذا لم تكملوه يبقى حتى تحذفوه، وبحد أقصى 400 يوم.'),
+  },
+  {
+    // Remote ordering (2026-10-13, migration 058). The ONE cookie a customer can receive without an account —
+    // and only after typing a code a member of staff gave them. HttpOnly, so no script on the page can read it.
+    id: 'table-session', kind: 'cookie', name: 'ayeka_table_session',
+    category: 'necessary', audience: 'table', sentToServer: true, ttlHours: 3,
+    attributes: 'Path=/ · SameSite=Lax · HttpOnly · Secure · expires with the visit, at most 3 hours',
+    what: t(
+      'מספר אקראי שמוכיח שהטלפון הזה קיבל מהמלצר קוד לשולחן. אין בו שם, טלפון או כל פרט אישי.',
+      'A random number that proves this phone was given a code for a table by a waiter. It holds no name, phone number or personal detail.',
+      'رقم عشوائي يثبت أن هذا الهاتف حصل من النادل على رمز لطاولة. لا يحتوي على اسم أو رقم هاتف أو أي تفصيل شخصي.'),
+    why: t(
+      'כדי שאפשר יהיה לשלוח את הרשימה למלצר, ולחזור אליה אם הדף נסגר או שהטלפון התחלף. הדף עצמו לא יכול לקרוא אותו.',
+      'So the list can be sent to a waiter, and picked up again if the page closes or the phone changes. The page itself cannot read it.',
+      'لكي يمكن إرسال القائمة إلى النادل واستئنافها إذا أُغلقت الصفحة أو تغيّر الهاتف. لا تستطيع الصفحة نفسها قراءته.'),
+    when: t(
+      'רק אחרי שהקלדתם קוד שמלצר נתן לכם. מי שלא מקליד קוד לא מקבל אותו.',
+      'Only after you type a code a waiter gave you. If you never type one, you never get it.',
+      'فقط بعد أن تكتبوا رمزًا أعطاكم إياه النادل. من لا يكتب رمزًا لا يحصل عليه.'),
+    keeps: t(
+      'עד סוף הביקור בשולחן — לכל היותר 3 שעות מהרגע שהקוד הוקלד, או עד שהמלצר מסיים את הביקור. אפשר לנתק קודם מחלון ההזמנה.',
+      'Until your visit at the table ends — at most 3 hours from when the code was first typed, or until the waiter ends the visit. You can disconnect sooner from the order window.',
+      'حتى تنتهي زيارتكم للطاولة — بحد أقصى 3 ساعات من أول مرة كُتب فيها الرمز، أو حتى ينهي النادل الزيارة. يمكنكم قطع الاتصال قبل ذلك من نافذة الطلب.'),
   },
 
   // ── a choice the visitor made, or a note that something was already shown ─
@@ -361,8 +385,12 @@ export const LINK_OUT_HOSTS: readonly string[] = [
 // they are kept apart from LINK_OUT_HOSTS and are never listed on /cookies. They
 // are still listed HERE so scripts/check-privacy.mjs keeps its promise that every
 // host named in src/ is accounted for. (Added 2026-10-13 with lib/dashboard/tiles.ts.)
+//
+// `wa.me` (2026-10-14): the owner's "send on WhatsApp" button in the join-link sheet on /owner/staff
+// (lib/staff/join.ts). It is a plain link the owner chooses to follow; nothing is fetched from it, and it carries the
+// join link the owner is about to send — to the owner's own WhatsApp, not to us. Behind the owner sign-in.
 export const STAFF_ONLY_LINK_OUT_HOSTS: readonly string[] = [
-  'supabase.com', 'vercel.com', 'github.com',
+  'supabase.com', 'vercel.com', 'github.com', 'wa.me',
 ]
 
 // ── the inventory's fingerprint ───────────────────────────────────────────

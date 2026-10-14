@@ -1,0 +1,6 @@
+# Kept out of the knowledge graph (`/graphify --update`).
+#
+# Vendored third-party code. public/vendor/pdfjs/ is Mozilla's pdf.js, MINIFIED (1.5 MB of one-letter identifiers):
+# parsed as code it would add thousands of meaningless nodes and bury the real structure of the app. What matters about
+# it is written in public/vendor/pdfjs/README.md and in src/components/payslips/PdfPages.tsx, which the graph does see.
+public/vendor/

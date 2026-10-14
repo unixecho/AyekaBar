@@ -39,6 +39,30 @@ pending; the sender claims rows (sets `push_sent_at`) *before* sending, so overl
 * `public/staff-manifest.json` + icons make the staff pages installable (iOS needs the home-screen install to
   receive Web Push).
 
+## Order alerts (remote ordering, migration 058) — a second kind of alert, and a second kind of device
+
+Schedule alerts above go through the in-app inbox (`schedule_notifications` is also the outbox). **Customer-order
+alerts do not** — they are sent directly, once, when a customer's request is created
+(`POST /api/table/order` → `afterResponse(notifyStaffOfSubmission)`), and are best-effort by design: the pending request
+is in the database whether or not a phone buzzed, and the POS polls it.
+
+* **Who:** `waiter_call_recipient_staff_ids()` — the same rule as customer waiter calls (an open POS shift, a front-of-house
+  title, and — once a schedule is published — assigned to a shift that covers now ±30 minutes).
+* **Which device:** a person can be subscribed in two places — the portal (`app = 'portal'`, the "main saved site") and the
+  POS (`app = 'oms'`, `staff.ayeka.bar`). **One is chosen per person** (`lib/push/orders-rules.ts` `chooseTargets`, TypeScript
+  only): a *fresh* POS subscription (`last_seen_at` within 24 h) wins and only it is sent to; else the portal; if every
+  delivery to the chosen device fails, the portal's are tried. The POS re-registers on every open and unregisters on sign-out
+  (`waiter_register_push` / `waiter_unregister_push`), so "fresh" means "signed in on the POS".
+* **Delivery** is `lib/push/deliver.ts` — shared with the schedule alerts: a 404/410 deletes the dead subscription; an order
+  alert's TTL is **15 minutes** (a request nobody sees for an hour is worse than none).
+* **Payload:** `{kind:'table-order', title, body, url, tag, vibrate, urgent}`. `vibrate` (Android; iOS ignores it) and `urgent`
+  (stay on screen; `renotify` only with a tag) are optional and validated as data in both service workers. A tap opens a
+  same-origin path only. The **sound** of a background notification belongs to the operating system; an open POS / staff page
+  plays its own ding (`ding.ts`).
+* **VAPID:** the same pair serves both origins. The POS commits the *public* half (`ayeka-staff/src/push.ts`,
+  `VITE_VAPID_PUBLIC_KEY` overrides) — if you rotate the pair, update it there too.
+* **iOS** delivers web push only to an app added to the Home Screen; the POS shows that instead of an impossible prompt.
+
 ## Not verifiable in CI
 
 Real delivery to a phone, iOS install behaviour, Supabase pg_cron/pg_net/Vault in production — verify by hand after

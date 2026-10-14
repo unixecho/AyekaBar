@@ -70,6 +70,8 @@ export const TILES: Tile[] = [
   { id: 'my-shifts', category: 'mywork', audience: 'staff', href: '/staff/schedule', icon: '🗓️', he: 'המשמרות שלי', hint: 'הסידור שפורסם' },
   { id: 'pos',       category: 'mywork', audience: 'staff', href: OMS_URL,            icon: '🧾', he: 'מערכת קופה',    hint: 'הזמנות ושולחנות', external: true },
   { id: 'loyalty',   category: 'mywork', audience: 'staff', href: '/staff/loyalty',   icon: '🎁', he: 'מועדון נאמנות', hint: 'קוד הצבירה ללקוח' },
+  // Locked ("בקרוב") by the staff dashboard until migration 060 is applied — see staff/dashboard/page.tsx.
+  { id: 'payslips',  category: 'mywork', audience: 'staff', href: '/staff/payslips',  icon: '💵', he: 'תלושי שכר',    hint: 'צפייה והורדה' },
 
   // ── תפעול שוטף ──────────────────────────────────────────────────────
   { id: 'schedule',  category: 'operations', audience: 'menu',  href: '/owner/schedule',  icon: '📅', he: 'ניהול סידור עבודה', hint: 'שיבוץ ופרסום' },
@@ -87,6 +89,7 @@ export const TILES: Tile[] = [
   { id: 'staff',     category: 'people', audience: 'op', href: '/owner/staff',    icon: '👥', he: 'ניהול צוות',     hint: 'הוספה, הרשאות, חשבונות' },
   { id: 'loyalty-admin', category: 'people', audience: 'op', href: '/owner/loyalty', icon: '💎', he: 'מועדון נאמנות', hint: 'מתג, פרסים, נקודות' },
   { id: 'feedback',  category: 'people', audience: 'op', href: '/owner/feedback', icon: '💬', he: 'משוב מלקוחות',   hint: 'עסקי וטכני' },
+  { id: 'payslips-admin', category: 'people', audience: 'op', href: '/owner/payslips', icon: '💰', he: 'תלושי שכר', hint: 'העלאה, צפייה והורדה' },
 
   // ── מערכת ונגישות ───────────────────────────────────────────────────
   { id: 'accessibility', category: 'system', audience: 'op', href: '/owner/accessibility', icon: '♿', he: 'הצהרת נגישות', hint: 'הטקסט הציבורי' },

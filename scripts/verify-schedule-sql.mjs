@@ -932,8 +932,11 @@ check('the old auth.uid()-based entry points are gone (no way around the new rul
 section('the app and the database agree on names')
 const walkSrc = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walkSrc(`${d}${e.name}/`) : /\.tsx?$/.test(e.name) ? [`${d}${e.name}`] : []))
 const called = new Set()
+// `staff_join_*` (migration 059, the onboarding links) is not part of the scheduler chain this harness applies, so it is
+// left out of the names scan below — verify-056-057-on-scheduler.mjs proves it on the real chain, and
+// check-migration-059-060.mjs on its own.
 for (const f of walkSrc(SRC_DIR)) {
-  for (const m of readFileSync(f, 'utf8').matchAll(/(?:\.rpc|callPosRpc|callSched)(?:<[^()]*>)?\(\s*(?:service,\s*)?['"]((?:sched_|staff_)[a-z_0-9]+)['"]/g)) called.add(m[1])
+  for (const m of readFileSync(f, 'utf8').matchAll(/(?:\.rpc|callPosRpc|callSched)(?:<[^()]*>)?\(\s*(?:service,\s*)?['"]((?:sched_|staff_(?!join_))[a-z_0-9]+)['"]/g)) called.add(m[1])
 }
 check('the source calls the new scheduling functions', called.size >= 25, `${called.size} found: ${[...called].join(', ')}`)
 for (const fn of [...called].sort()) {

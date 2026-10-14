@@ -29,10 +29,16 @@
 // "an hour ago" and "in two hours" wrap onto another date.
 
 import { PGlite } from '@electric-sql/pglite'
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto'
 import { readFileSync } from 'node:fs'
 
+// 2026-10-13: ALSO applies the real 048 and 058. 058 rewrote waiter_is_call_recipient()
+// into a thin wrapper around waiter_staff_is_call_recipient(uuid) so the server can ask
+// "who is on shift" for push — and THIS file is the regression proof that the rule did
+// not change: every recipient case below (both snapshot shapes, the 30-minute grace, the
+// "no schedule in use" fallback) now runs against the refactored function.
 const ROOT = new URL('../supabase/migrations/', import.meta.url)
-const db = new PGlite()
+const db = new PGlite({ extensions: { pgcrypto } })
 
 let pass = 0
 const fails = []
@@ -41,24 +47,31 @@ const check = (n, ok, d = '') => { if (ok) { pass++; console.log('  ✓', n) } e
 // ── stubs ──────────────────────────────────────────────────────────────
 await db.exec(`
   create role anon; create role authenticated; create role service_role;
-  create schema auth; create schema storage;
+  create schema auth; create schema storage; create schema extensions;
+  create extension pgcrypto with schema extensions;
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create table public.staff (id uuid primary key default gen_random_uuid(), auth_user_id uuid, role text, badge text, active boolean default true, first_name text);
+  create function public.is_staff_client() returns boolean language sql stable security definer as $$
+    select exists (select 1 from public.staff s where s.auth_user_id = auth.uid() and s.active) $$;
   create table public.waiter_tables (id uuid primary key default gen_random_uuid(), number integer unique not null, active boolean default true);
+  create table public.waiter_orders (id uuid primary key default gen_random_uuid());
+  create table public.customers (id uuid primary key default gen_random_uuid());
+  create table public.menu_audit (id uuid primary key default gen_random_uuid(), action text);
+  create table public.app_settings (key text primary key, value jsonb not null, is_public boolean default false);
   create table public.waiter_shift_sessions (id uuid primary key default gen_random_uuid(), status text not null default 'active');
   create table public.schedule_weeks (id uuid primary key default gen_random_uuid(), week_start date, status text, published_snapshot jsonb);
-  create table public.waiter_table_calls (
+  create table public.staff_push_subscriptions (
     id uuid primary key default gen_random_uuid(),
-    table_id uuid not null references public.waiter_tables(id),
-    table_number integer, session_id uuid,
-    kind text not null default 'waiter' check (kind in ('waiter','bill','assistance')),
-    called_at timestamptz not null default now(),
-    acknowledged_by uuid references public.staff(id), acknowledged_at timestamptz);
+    staff_id uuid not null references public.staff(id) on delete cascade,
+    endpoint text not null unique, p256dh text not null, auth text not null, user_agent text,
+    created_at timestamptz not null default now(), last_seen_at timestamptz not null default now());
 `)
+// (waiter_table_calls used to be stubbed here; the real 048 creates it now.)
 
 // ── apply the real migration files ─────────────────────────────────────
-for (const f of ['056_z_reports.sql', '057_waiter_calls_and_schedule_sync.sql']) {
+// Production order: 048 (+049) were applied long before, 056/057 next, 058 on top.
+for (const f of ['048_customer_table_ordering_groundwork.sql', '056_z_reports.sql', '057_waiter_calls_and_schedule_sync.sql', '058_remote_ordering.sql']) {
   try { await db.exec(readFileSync(new URL(f, ROOT), 'utf8')); check(`${f} applies cleanly`, true) }
   catch (e) { check(`${f} applies cleanly`, false, e.message) }
 }

@@ -10,7 +10,9 @@ import { canManageFloor, FLOOR_PREFIXES } from '@/lib/waiter/access'
 // form a shift/general manager files after 23:00). Each page also re-checks
 // server-side and the Z-report API enforces its own gate — this is only the
 // first door.
-const STAFF_PREFIXES = ['/staff/dashboard', '/staff/loyalty', '/staff/z-report']
+// /staff/payslips (2026-10-14) is an employee's own salary documents: any staff row may open the page, which then
+// narrows everything to THEIR row; the routes behind it re-check on every request.
+const STAFF_PREFIXES = ['/staff/dashboard', '/staff/loyalty', '/staff/z-report', '/staff/payslips']
 
 const PROTECTED_ROUTES = [
   '/customer/dashboard',

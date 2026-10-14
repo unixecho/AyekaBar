@@ -12,6 +12,8 @@ import { MAX_DINERS, TABLE_COLOUR, type Cart, type CartLine } from '@/lib/cart/t
 import { useCart } from './CartProvider'
 import SheetShell from './SheetShell'
 import CallWaiterSheet from './CallWaiterSheet'
+import TableOrderSheet from './TableOrderSheet'
+import { PHASE_2_BUILT, PHASE_3_BUILT } from '@/lib/cart/phases'
 
 // The cart itself: what's in it, who it's for, what it comes to.
 //
@@ -39,6 +41,8 @@ export default function CartSheet({ lang }: { lang: Lang }) {
   const [readoutAll, setReadoutAll] = useState(false)
   // "קריאה למלצר" opens its own sheet on top of this one (2026-10-13).
   const [callOpen, setCallOpen] = useState(false)
+  // "שליחה למלצר" — the code sheet / send sheet (2026-10-13), the same nesting.
+  const [orderOpen, setOrderOpen] = useState(false)
 
   const dir = RTL[lang] ? 'rtl' : 'ltr'
   const groups = useMemo(() => groupByDiner(cart), [cart])
@@ -135,11 +139,12 @@ export default function CartSheet({ lang }: { lang: Lang }) {
     })
   }
 
-  const nested = prompt !== null || confirm !== null || callOpen
+  const nested = prompt !== null || confirm !== null || callOpen || orderOpen
   // Both locks, as for every action here: the owner/dev switch AND the build
   // constant. The switch ships OFF, so the button stays visibly inert until
   // the developer turns it on to test.
   const callLive = actions.call && PHASE_3_BUILT
+  const orderLive = actions.ordering && PHASE_2_BUILT
 
   const footer = (
     <div className="cart-foot">
@@ -178,9 +183,13 @@ export default function CartSheet({ lang }: { lang: Lang }) {
               actually ordered. They still have to be VISIBLE — that is the
               request — but they do not have to be the loudest thing here. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <button type="button" className="cart-soon" disabled={!(actions.ordering && PHASE_2_BUILT)}>
+            <button
+              type="button" className={orderLive ? 'cart-secondary press' : 'cart-soon'}
+              disabled={!orderLive}
+              onClick={() => { haptic('select'); setOrderOpen(true) }}
+            >
               {CART_UI.sendToWaiter[lang]}
-              <span className="cart-soon-badge">{CART_UI.soon[lang]}</span>
+              {!orderLive && <span className="cart-soon-badge">{CART_UI.soon[lang]}</span>}
             </button>
             <button
               type="button" className={callLive ? 'cart-secondary press' : 'cart-soon'}
@@ -192,7 +201,13 @@ export default function CartSheet({ lang }: { lang: Lang }) {
             </button>
           </div>
 
-          <p className="cart-foot-note" style={{ margin: '2px 0 0' }}>{callLive ? CART_UI.soonHintOrder[lang] : CART_UI.soonHint[lang]}</p>
+          {/* Only said while something here is still "soon" — and says the right thing for
+              whichever of the two is. Nothing at all once both work. */}
+          {!(orderLive && callLive) && (
+            <p className="cart-foot-note" style={{ margin: '2px 0 0' }}>
+              {orderLive ? CART_UI.soonHintCall[lang] : callLive ? CART_UI.soonHintOrder[lang] : CART_UI.soonHint[lang]}
+            </p>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -345,8 +360,10 @@ export default function CartSheet({ lang }: { lang: Lang }) {
                 </button>
               )}
 
+              {/* "Not sent anywhere" stops being true the moment the list has a send button, and the
+                  page must never claim what the code does not do — so the sentence changes with it. */}
               <p className="cart-foot-note" style={{ margin: '4px 0 0', textAlign: 'center' }}>
-                {CART_UI.localOnly[lang]}
+                {orderLive ? CART_UI.localOnlyUntilSent[lang] : CART_UI.localOnly[lang]}
               </p>
             </>
           )}
@@ -360,17 +377,17 @@ export default function CartSheet({ lang }: { lang: Lang }) {
         open={callOpen} onClose={() => setCallOpen(false)} lang={lang}
         cartItems={cart.lines.reduce((n, l) => n + l.qty, 0)} cartAgorot={agorot}
       />
+      {/* Mounted only while ordering is live: when the switch is off nothing here exists to be reached. */}
+      {orderLive && (
+        <TableOrderSheet
+          open={orderOpen} onClose={() => setOrderOpen(false)} lang={lang} cart={cart}
+          // Closing the round the customer just sent is what the cart's own "הראיתי למלצר" does by hand.
+          onSent={() => { dispatch({ type: 'markPresented' }) }}
+        />
+      )}
     </>
   )
 }
-
-/** The second lock on the two future actions — see the buttons above. Flipped
- *  to true in the same change that ships the endpoint each one calls, never
- *  before, so that turning the owner switch on early can only be harmless.
- *  Typed `boolean` rather than inferred as the literal `false` so the checks
- *  above read as real conditions to both the compiler and the next reader. */
-const PHASE_2_BUILT: boolean = false
-const PHASE_3_BUILT: boolean = true // 2026-10-13: POST /api/table/call + migration 057 ship with this flip
 
 function LineRow({
   line, lang, cart, dispatch, picking, onPick, onPicked, onEditNote,

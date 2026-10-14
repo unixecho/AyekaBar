@@ -111,7 +111,7 @@ section('registry — every entry is complete, in all three languages')
   check('kind / category / audience are from the vocabulary', items.every((i) =>
     ['localStorage', 'sessionStorage', 'cookie'].includes(i.kind) &&
     ['necessary', 'functional', 'analytics', 'marketing'].includes(i.category) &&
-    ['everyone', 'signed-in', 'staff'].includes(i.audience)))
+    ['everyone', 'signed-in', 'table', 'staff'].includes(i.audience)))
   for (const field of ['what', 'why', 'when', 'keeps']) {
     check(`every entry has ${field} in he / en / ar`, items.every((i) =>
       LANGS.every((l) => typeof i[field]?.[l] === 'string' && i[field][l].trim().length > 0)))
@@ -125,8 +125,16 @@ section('registry — every entry is complete, in all three languages')
     items.every((i) => i.kind === 'cookie'
       ? i.sentToServer === true && typeof i.attributes === 'string' && i.attributes.length > 0
       : i.sentToServer === false))
-  check('the only cookies are the sign-in ones, and only for people who sign in',
-    items.filter((i) => i.kind === 'cookie').every((i) => i.audience === 'signed-in' && /^sb-\*-auth-token/.test(i.name)))
+  // 2026-10-13: ONE more cookie exists — the remote-ordering session — and it is held to a rule as tight as
+  // the sign-in ones: only for a visitor who typed a waiter's code (audience 'table'), declared HttpOnly so no
+  // script can read it, and nothing else may join them without this line being edited on purpose.
+  const cookies = items.filter((i) => i.kind === 'cookie')
+  check('the only cookies are the sign-in ones (people who sign in) and the table session (people who typed a waiter\'s code)',
+    cookies.every((i) =>
+      (i.audience === 'signed-in' && /^sb-\*-auth-token/.test(i.name)) ||
+      (i.audience === 'table' && i.id === 'table-session' && i.name === 'ayeka_table_session')))
+  check('the table-session cookie is HttpOnly, Secure and SameSite=Lax, and says it expires with the visit',
+    (() => { const c = cookies.find((i) => i.id === 'table-session'); return !!c && /HttpOnly/.test(c.attributes) && /Secure/.test(c.attributes) && /SameSite=Lax/.test(c.attributes) && /expires with the visit/.test(c.attributes) })())
   check('the notice\'s own key is the one declared (ACK_KEY)',
     items.some((i) => i.id === 'privacy-ack' && i.name === N.ACK_KEY))
 }
@@ -263,6 +271,9 @@ section('code ↔ registry — cookies are written only where Supabase\'s own ar
     'src/middleware.ts': 'passes the Supabase client\'s own cookies through',
     'src/lib/supabase/server.ts': 'passes the Supabase client\'s own cookies through',
     'src/app/api/auth/signout/route.ts': 'deletes only',
+    // Remote ordering (2026-10-13): the ONE cookie a customer can receive without an account. Held to its own
+    // assertions just below — set only after a valid code, HttpOnly, every other write an expiry.
+    'src/app/api/table/session/route.ts': 'sets the table-session cookie after a valid code; otherwise only expires it',
   }
   const stray = []
   for (const [f, c] of code) {
@@ -272,6 +283,25 @@ section('code ↔ registry — cookies are written only where Supabase\'s own ar
   check('no file writes a cookie unless it is one of the allowed few', stray.length === 0,
     stray.join(', ') + ' — a new cookie must be declared in STORAGE_REGISTRY and allowed here')
   check('the sign-out route only DELETES (maxAge: 0)', /cookies\.set\([^)]*maxAge:\s*0/.test(code.get('src/app/api/auth/signout/route.ts') ?? ''))
+
+  // The table session cookie (lib/cart/otp.ts TABLE_SESSION_COOKIE). One writer, and a tight one.
+  const sess = code.get('src/app/api/table/session/route.ts') ?? ''
+  const sets = [...sess.matchAll(/cookies\.set\(([^;]*?)\)\s*$/gm)].map((m) => m[1])
+  const grant = sess.indexOf('cookies.set(TABLE_SESSION_COOKIE, row.session_token')
+  check('the table-session route writes exactly three cookies: one grant, two expiries',
+    sets.length === 3 && sets.filter((s) => /row\.session_token/.test(s)).length === 1 && sets.filter((s) => /maxAge:\s*0/.test(s)).length === 2,
+    JSON.stringify(sets))
+  check('…the grant comes only AFTER the database accepted a code (never before redeem_table_code answered)',
+    grant > -1 && grant > sess.indexOf("rpc('redeem_table_code'") && grant > sess.indexOf('if (!row.ok)'))
+  check('…and every cookie it writes is the declared one, HttpOnly, Lax, path /',
+    sets.every((s) => /^TABLE_SESSION_COOKIE,/.test(s.trim())) && /httpOnly:\s*true/.test(sess) && /sameSite:\s*'lax'/.test(sess) && /path:\s*'\/'/.test(sess))
+  check('no other route sets one — the order route only READS the session', !/cookies\.set\(/.test(code.get('src/app/api/table/order/route.ts') ?? ''))
+  // Next mirrors every cookies.set() into `x-middleware-set-cookie`, a header page JS CAN read (Set-Cookie is
+  // forbidden to it) — found by running the route and confirmed on production 2026-10-13. For an HttpOnly session
+  // token that would defeat the point of HttpOnly, so every response that sets the cookie must drop the mirror.
+  const returns = [...sess.matchAll(/return sealed\(response\)/g)].length
+  check('…and every response that sets the cookie DROPS the x-middleware-set-cookie mirror (it would hand the token to page JS)',
+    /headers\.delete\('x-middleware-set-cookie'\)/.test(sess) && returns === 3 && !/return response\b/.test(sess.slice(sess.indexOf('export async function POST'))))
   const hk = read('src/lib/privacy/housekeeping.ts')
   const writes = hk.match(/jar\.write\(/g) ?? []
   check('the cleanup\'s cookie writes are all expiries (Max-Age=0 built once, every write uses it)',
@@ -298,6 +328,17 @@ section('code ↔ registry — the facts the page states come from the code')
   check('the cart\'s expiry in code is what the registry says (ttlHours)', ttlMs === cart.ttlHours * 3600 * 1000, `code ${ttlMs}ms vs ${cart.ttlHours}h`)
   check('and the sentence says it in every language',
     /(^|\D)8(\D|$)/.test(cart.keeps.he) && /(^|\D)8(\D|$)/.test(cart.keeps.en) && /(^|\D)8(\D|$)/.test(cart.keeps.ar))
+
+  // The table session's three hours: the registry's number, the code's, and the SQL's must be one number.
+  const otp = code.get('src/lib/cart/otp.ts') ?? ''
+  const sesTtl = otp.match(/TABLE_SESSION_TTL_SECONDS\s*=\s*([0-9 *]+)/)
+  const sesSeconds = sesTtl ? Function(`return ${sesTtl[1]}`)() : NaN
+  const tableCookie = R.STORAGE_REGISTRY.find((i) => i.id === 'table-session')
+  check('the table session\'s expiry in code is what the registry says (ttlHours)', sesSeconds === tableCookie.ttlHours * 3600, `code ${sesSeconds}s vs ${tableCookie.ttlHours}h`)
+  check('…the cookie name in code is the declared one', new RegExp(`TABLE_SESSION_COOKIE\\s*=\\s*'${tableCookie.name}'`).test(otp))
+  check('…and the sentence says "3" in every language', LANGS.every((l) => /(^|\D)3(\D|$)/.test(tableCookie.keeps[l])))
+  const mig058 = read('supabase/migrations/058_remote_ordering.sql')
+  check('…and migration 058 grants the same three hours (make_interval(secs => ' + sesSeconds + '))', new RegExp(`make_interval\\(secs => ${sesSeconds}\\)`).test(mig058))
 
   const nav = code.get('src/lib/nav/viewTransition.ts') ?? ''
   const cap = nav.match(/slice\(\s*-(\d+)\s*\)/)

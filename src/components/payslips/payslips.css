@@ -1,0 +1,133 @@
+/* The payslip library (owner + employee) and its viewer. Hebrew only — a staff surface — so the layout is written
+   with logical properties and reads right-to-left by inheritance. Colours are the app's tokens; nothing here is new. */
+
+/* ── the list ─────────────────────────────────────────────────────────── */
+.pl-wrap { display: flex; flex-direction: column; gap: 16px; text-align: start; }
+.pl-h2 { margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--text); }
+.pl-lead { margin: 4px 0 0; font-size: 0.84rem; color: var(--text-dim); line-height: 1.6; }
+.pl-card {
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.pl-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pl-chip {
+  min-height: 38px; padding: 6px 13px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent;
+  color: var(--text-dim); font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+}
+.pl-chip[aria-pressed='true'], .pl-chip[data-on='true'] { border-color: var(--neon-soft); color: var(--neon-soft); background: rgba(255,138,92,0.11); }
+.pl-group-h { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.pl-group-h h3 { margin: 0; font-size: 0.9rem; font-weight: 800; color: var(--text); }
+.pl-count {
+  border-radius: 999px; padding: 1px 8px; font-size: 0.7rem; font-weight: 700; color: var(--text-faint);
+  border: 1px solid var(--line-strong); font-variant-numeric: tabular-nums;
+}
+.pl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pl-row {
+  display: flex; align-items: center; gap: 8px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 14px;
+  padding: 4px 4px 4px 10px; min-width: 0;
+}
+.pl-row[data-selected='true'] { border-color: var(--neon-soft); background: rgba(255,138,92,0.07); }
+.pl-open {
+  flex: 1; min-width: 0; min-height: 56px; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  background: none; border: 0; padding: 6px 4px; font: inherit; color: inherit; text-align: start; cursor: pointer;
+}
+.pl-month { font-size: 0.97rem; font-weight: 800; color: var(--text); }
+.pl-meta { font-size: 0.74rem; color: var(--text-faint); overflow-wrap: anywhere; }
+.pl-badge {
+  flex: 0 0 auto; border-radius: 999px; padding: 2px 9px; font-size: 0.68rem; font-weight: 800;
+  color: #a3e635; border: 1px solid rgba(163,230,53,0.4); background: rgba(163,230,53,0.08);
+}
+.pl-badge[data-quiet='true'] { color: var(--text-faint); border-color: var(--line-strong); background: transparent; font-weight: 700; }
+.pl-iconbtn {
+  flex: 0 0 auto; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text-dim); font-size: 1.05rem;
+  text-decoration: none; cursor: pointer; font-family: inherit;
+}
+.pl-iconbtn:hover { color: var(--text); border-color: var(--line-strong); }
+.pl-check {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line-strong); background: transparent;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--bg); font-size: 0.9rem; font-weight: 900;
+}
+.pl-row[data-selected='true'] .pl-check { background: var(--neon-soft); border-color: var(--neon-soft); }
+
+/* The selection bar sits at the bottom of the screen while a selection exists. */
+.pl-bar {
+  position: sticky; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 20;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 16px;
+  background: var(--bg-elev-2); border: 1px solid var(--line-strong); box-shadow: 0 10px 36px rgba(0,0,0,0.45);
+}
+.pl-bar strong { font-size: 0.9rem; color: var(--text); margin-inline-end: auto; }
+
+.payslip-shimmer {
+  background: linear-gradient(100deg, var(--bg-elev) 30%, var(--bg-elev-2) 50%, var(--bg-elev) 70%);
+  background-size: 200% 100%; animation: payslip-shimmer 1.4s linear infinite;
+}
+@keyframes payslip-shimmer { from { background-position: 100% 0 } to { background-position: -100% 0 } }
+
+/* ── the upload staging list ──────────────────────────────────────────── */
+.pu-drop {
+  border: 2px dashed var(--line-strong); border-radius: 16px; padding: 18px 12px; text-align: center; color: var(--text-dim);
+  font-size: 0.86rem; line-height: 1.6;
+}
+.pu-drop[data-over='true'] { border-color: var(--neon-soft); background: rgba(255,138,92,0.06); }
+.pu-row { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.pu-row[data-state='done'] { border-color: rgba(163,230,53,0.45); }
+.pu-row[data-state='error'] { border-color: rgba(255,107,107,0.5); }
+.pu-name { font-size: 0.84rem; color: var(--text); overflow-wrap: anywhere; }
+.pu-pick {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 8px 12px; border-radius: 11px;
+  border: 1px solid var(--line-strong); background: var(--bg-elev); color: var(--text); font: inherit; font-size: 0.88rem;
+  font-weight: 700; cursor: pointer; text-align: start; min-width: 0;
+}
+.pu-pick[data-empty='true'] { color: var(--text-faint); border-style: dashed; }
+.pu-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+
+/* ── the viewer ───────────────────────────────────────────────────────── */
+.pv-root {
+  position: fixed; inset: 0; z-index: 190; display: flex; flex-direction: column; background: rgba(8, 8, 12, 0.97);
+  color: var(--text); animation: fade-in .2s var(--ease);
+}
+.pv-bar {
+  flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px; border-bottom: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.pv-title { flex: 1 1 140px; min-width: 0; text-align: start; }
+.pv-title strong { display: block; font-size: 1rem; font-weight: 800; }
+.pv-title span { display: block; font-size: 0.74rem; color: var(--text-faint); overflow-wrap: anywhere; }
+.pv-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
+.pv-btn {
+  min-width: 44px; height: 44px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: 12px; border: 1px solid var(--line-strong); background: transparent; color: var(--text); font: inherit;
+  font-size: 0.86rem; font-weight: 700; cursor: pointer; text-decoration: none;
+}
+.pv-btn:disabled { opacity: 0.35; cursor: default; }
+.pv-btn[data-danger='true'] { color: #ff6b6b; border-color: rgba(255,107,107,0.35); }
+.pv-body {
+  /* `scrollbar-gutter: stable`: the page is drawn at THIS box's width, so a scrollbar appearing mid-render must not
+     change it (that would re-draw the page and could flip the scrollbar again). */
+  scrollbar-gutter: stable;
+  flex: 1 1 auto; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: 14px 12px calc(env(safe-area-inset-bottom, 0px) + 18px);
+}
+.pv-inner { max-width: 880px; margin: 0 auto; }
+.pv-img { display: block; max-width: 100%; height: auto; margin: 0 auto; border-radius: 6px; background: #fff; }
+.pv-fail { max-width: 380px; margin: 10vh auto 0; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+
+@media (max-width: 480px) {
+  /* Every phone gets the same compact, icon-only toolbar (each button keeps its aria-label) — one row on 360–430px
+     instead of two on some and one on others. */
+  .pv-btn .pv-lbl { display: none; }
+}
+@media (max-width: 380px) {
+  .pv-btn { padding: 0 9px; min-width: 40px; height: 40px; }
+}
+@media (max-height: 460px) {
+  /* Landscape phone: keep the bar to one slim row so the document gets the height. */
+  .pv-bar { padding-top: calc(env(safe-area-inset-top, 0px) + 4px); padding-bottom: 4px; flex-wrap: nowrap; }
+  .pv-title span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pv-root { animation: none; }
+  .payslip-shimmer { animation: none; }
+}

@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { requireOwner } from '@/lib/owner/guard'
 import { splitName } from '@/lib/staff/name'
 import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { latestJoinLinks, revokeJoin } from '@/lib/staff/join-server'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 type Service = SupabaseClient
@@ -68,7 +69,13 @@ export async function GET() {
     .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: 'טעינת הצוות נכשלה' }, { status: 500 })
-  return NextResponse.json({ staff: data ?? [] })
+
+  // The newest join link of everyone who has not signed in yet (migration 059) — the roster's "link sent /
+  // expired" chip. A separate, failure-tolerant read: before 059 is applied the table is not there and this is
+  // simply empty, which the roster renders as "no link yet".
+  const unlinked = (data ?? []).filter((m) => !m.auth_user_id && m.active).map((m) => m.id as string)
+  const links = await latestJoinLinks(auth.service, unlinked)
+  return NextResponse.json({ staff: data ?? [], joinLinks: Object.fromEntries(links) })
 }
 
 // ---- POST: put a person on the roster ----
@@ -438,5 +445,8 @@ export async function DELETE(request: NextRequest) {
     .update({ active: false, auth_user_id: null })
     .eq('id', id)
   if (error) return NextResponse.json({ error: 'ההסרה נכשלה' }, { status: 500 })
+  // A person who has been removed must not be joinable through a link sent before they were. (059's claim also
+  // refuses an inactive row; this just keeps the roster's chip honest.) Best-effort and quiet before 059.
+  await revokeJoin(auth.service, id)
   return NextResponse.json({ ok: true, futureShifts })
 }
