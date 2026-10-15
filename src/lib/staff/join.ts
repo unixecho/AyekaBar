@@ -123,23 +123,26 @@ export const messageFor = (key: JoinStatus | ClaimReason): JoinMessage => JOIN_M
 
 // ── the wizard's screens ───────────────────────────────────────────────────
 
-export type WizardStep = 'dead' | 'welcome' | 'connect' | 'confirm' | 'tour'
+export type WizardStep = 'dead' | 'welcome' | 'connect' | 'confirm' | 'profile' | 'tour'
 
-/** Which screen to show. `introSeen` is the one piece of local state: the welcome screen is shown first and the
- *  visitor taps through it. Everything else is a fact the server knows (status, signed in, already claimed).
- *  Once the account is linked the last screen is the dashboard TOUR (lib/staff/tour.ts), which ends at the login
- *  panel — not a button into the dashboard (owner, 2026-10-15). */
-export function wizardStep(s: { status: JoinStatus; signedIn: boolean; claimed: boolean; introSeen: boolean }): WizardStep {
-  if (s.claimed) return 'tour'
+/** Which screen to show. `introSeen` and `profileDone` are the pieces of local state: the welcome screen is shown first
+ *  and the visitor taps through it; the details step is finished or skipped once. Everything else is a fact the server
+ *  knows (status, signed in, already claimed).
+ *
+ *  After the account is linked the person walks two more screens (owner, 2026-10-15): their DETAILS (name, phone, colour,
+ *  emoji), then the dashboard TOUR (lib/staff/tour.ts), which ends on the dashboard, signed in. */
+export function wizardStep(s: { status: JoinStatus; signedIn: boolean; claimed: boolean; introSeen: boolean; profileDone?: boolean }): WizardStep {
+  if (s.claimed) return s.profileDone ? 'tour' : 'profile'
   if (s.status !== 'ok') return 'dead'
   if (s.signedIn) return 'confirm'
   return s.introSeen ? 'connect' : 'welcome'
 }
 
-/** The progress dots: 3 steps — meet, connect Google, tour. */
+/** The progress dots: 4 steps — meet, connect Google, my details, tour. */
 export const WIZARD_STEPS = [
   { key: 'welcome', label: 'ברוכים הבאים' },
   { key: 'connect', label: 'חיבור Google' },
+  { key: 'profile', label: 'הפרטים שלי' },
   { key: 'tour', label: 'סיור באזור הצוות' },
 ] as const
 
@@ -147,7 +150,8 @@ export function progressIndex(step: WizardStep): number {
   switch (step) {
     case 'welcome': return 0
     case 'connect': case 'confirm': return 1
-    case 'tour': return 2
+    case 'profile': return 2
+    case 'tour': return 3
     default: return 0
   }
 }

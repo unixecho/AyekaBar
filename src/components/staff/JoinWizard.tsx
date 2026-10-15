@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { AuthHandoff, GoogleG } from '@/components/AuthHandoff'
+import StaffProfileStep from '@/components/staff/StaffProfileStep'
 import StaffTour from '@/components/staff/StaffTour'
 import { haptic } from '@/lib/haptics'
 import {
@@ -13,7 +14,7 @@ import {
 
 // The onboarding wizard (2026-10-14) — a new employee's first minute.
 //
-//   welcome → connect Google → confirm the account → done
+//   welcome → connect Google → confirm the account → my details → the dashboard tour (→ the dashboard, signed in)
 //
 // "They must link their account with Gmail in order to access the shift system": this is the screen that does the
 // linking. It is a wizard rather than a single button because the one mistake that matters is linking the WRONG
@@ -44,6 +45,7 @@ export default function JoinWizard(p: JoinWizardProps) {
   const supabase = createClient()
   const [introSeen, setIntroSeen] = useState(false)
   const [claimed, setClaimed] = useState(false)
+  const [profileDone, setProfileDone] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,7 +53,7 @@ export default function JoinWizard(p: JoinWizardProps) {
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   const signedIn = !!p.signedInEmail
-  const step = wizardStep({ status: p.status, signedIn, claimed, introSeen })
+  const step = wizardStep({ status: p.status, signedIn, claimed, introSeen, profileDone })
 
   useEffect(() => { document.title = 'הצטרפות לצוות · אייכה בר' }, [])
   // Each screen is announced: focus moves to its heading so a screen-reader user lands on the new content.
@@ -167,13 +169,21 @@ export default function JoinWizard(p: JoinWizardProps) {
           <section className="rise" style={sectionStyle} aria-labelledby="join-h">
             {p.alreadyStaff || refusal === 'already_staff' ? (
               <>
-                <h1 id="join-h" ref={headingRef} tabIndex={-1} style={h1Style}>{messageFor('already_staff').title}</h1>
-                <p style={leadStyle}>{messageFor('already_staff').body}</p>
+                {/* This phone is already signed in as a member of the team (often the owner's own account). The link
+                    belongs to ANOTHER person, so the way forward is a different Google account — not the team area, which
+                    is what read as "it took them straight to the home page" (owner, 2026-10-15). */}
+                <h1 id="join-h" ref={headingRef} tabIndex={-1} style={h1Style}>הטלפון הזה כבר מחובר</h1>
+                <p style={leadStyle}>
+                  הקישור הזה מיועד ל<strong style={{ color: 'var(--text)' }}>{who}</strong>, והחשבון שמחובר כאן כבר רשום בצוות.
+                  כדי לחבר את החשבון של {who}, התחברו עם חשבון Google אחר.
+                </p>
                 <AccountBox email={p.signedInEmail} />
-                <Link href="/staff/dashboard" className="press" style={{ ...primaryBtn, textDecoration: 'none' }}>לאזור הצוות</Link>
-                <button type="button" className="press" style={ghostBtn} onClick={switchAccount} disabled={busy}>
-                  {busy ? 'מחליף…' : 'החלפת חשבון והמשך'}
+                <button type="button" className="press" style={primaryBtn} onClick={switchAccount} disabled={busy}>
+                  {busy ? 'מחליף…' : 'התחברות עם חשבון אחר'}
                 </button>
+                <Link href="/staff/dashboard" className="press" style={{ ...ghostBtn, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  לאזור הצוות
+                </Link>
               </>
             ) : refusal ? (
               <>
@@ -209,6 +219,7 @@ export default function JoinWizard(p: JoinWizardProps) {
         {/* ── 4 · tour ───────────────────────────────────────────────────── */}
         {/* The account is linked. Instead of a button into the dashboard, a short tour of what the dashboard holds
             (owner, 2026-10-15); its last button goes to the login panel. */}
+        {step === 'profile' && <StaffProfileStep onDone={() => setProfileDone(true)} />}
         {step === 'tour' && <StaffTour who={who} />}
       </div>
 

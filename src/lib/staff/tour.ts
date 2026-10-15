@@ -2,7 +2,8 @@
 //
 // Owner: "after employee onboarding completes and the account is synced, instead of going to the Home page show the
 // employee a quick intro on the dashboard and what they can do in it — explain the schedule, payslips, the OMS, the
-// loyalty club — and when they complete the demo send them to the login panel."
+// loyalty club". First asked to end at the login panel; corrected the same day: "begin the demo and at the end leave
+// them at the dashboard logged in."
 //
 // So the wizard's last screen (JoinWizard) is this tour rather than a button into the dashboard. Each slide that is
 // about a dashboard tile carries that tile's id, and the component draws a miniature of the real dashboard with that
@@ -86,13 +87,14 @@ export const TOUR_SLIDES: readonly TourSlide[] = [
     lead: 'כדי לא לפספס שינוי בסידור או הזמנה שמחכה.',
     points: [
       'אפשר להפעיל התראות עכשיו, או בכל זמן מתחתית אזור הצוות.',
-      'בסיום תועברו לדף הכניסה — מתחברים שם ונכנסים לאזור הצוות.',
+      'בסיום תגיעו ישר לאזור הצוות, כשאתם כבר מחוברים.',
     ],
   },
 ]
 
-/** Where the tour ends: the login panel (owner's instruction). */
-export const TOUR_END_HREF = '/login'
+/** Where the tour ends: the dashboard, signed in (owner, 2026-10-15 — first said "the login panel", then corrected:
+ *  "at the end leave them at the dashboard logged in"). The person is already signed in from the join step. */
+export const TOUR_END_HREF = '/staff/dashboard'
 
 /** Clamp an index into the slide range — the component never trusts its own arithmetic. */
 export const clampSlide = (i: number): number => Math.max(0, Math.min(TOUR_SLIDES.length - 1, Math.trunc(Number.isFinite(i) ? i : 0)))

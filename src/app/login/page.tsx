@@ -22,7 +22,7 @@ const T = {
   hint: 'המערכת תיקח אותך לאזור המתאים לך אוטומטית לפי ההרשאה שלך.',
   googleError: 'שגיאה בהתחברות ל-Google.',
   returnError: 'ההתחברות בוטלה או שפג תוקפה. נסה/י שוב.',
-  back: '← חזרה',
+  main: 'לעמוד הראשי',
 }
 
 export default function LoginPage() {
@@ -83,8 +83,10 @@ export default function LoginPage() {
           {T.hint}
         </p>
 
-        <Link href="/" className="rise" style={{ color: 'var(--text-faint)', fontSize: '0.82rem', textAlign: 'center', textDecoration: 'none', animationDelay: '300ms' }}>
-          {T.back}
+        {/* A real button, not a faint text link: after signing out this is where people land, and the way back to the
+            portal has to be obvious (owner, 2026-10-15). */}
+        <Link href="/" className="press rise" style={{ ...mainBtnStyle, animationDelay: '300ms' }}>
+          {T.main}
         </Link>
       </div>
 
@@ -112,6 +114,12 @@ const cardStyle: React.CSSProperties = {
 const brandStyle: React.CSSProperties = {
   fontSize: '1.8rem', fontWeight: 800, color: 'var(--text)',
   textShadow: '0 0 18px rgba(255,94,58,0.5)', margin: 0,
+}
+const mainBtnStyle: React.CSSProperties = {
+  width: '100%', minHeight: 46, padding: '11px 0', borderRadius: 12, boxSizing: 'border-box',
+  border: '1px solid var(--line-strong)', background: 'transparent', color: 'var(--text)',
+  fontSize: '0.95rem', fontWeight: 700, textDecoration: 'none', textAlign: 'center',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
 const googleBtnStyle: React.CSSProperties = {
   width: '100%', padding: '13px 0', borderRadius: 12, border: 'none',

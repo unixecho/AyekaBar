@@ -26,6 +26,11 @@ interface Member {
   display_order: number | null
   /** Public-facing name override (e.g. Hebrew spelling). */
   display_name: string | null
+  /** The person's colour and emoji (staff.colour / staff.initial) — random at creation, theirs to change in the
+   *  onboarding wizard. `phone` arrives with migration 062 and is simply absent before it. */
+  colour?: string | null
+  initial?: string | null
+  phone?: string | null
   /** false = removed. The row (and their order/audit history) stays intact
    *  — same pattern the floor plan already uses for a deleted table
    *  (migration 028) — and access is revoked (see 041_staff_soft_delete.sql).
@@ -695,11 +700,11 @@ function MemberRow({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div aria-hidden style={{
           width: 42, height: 42, borderRadius: 999, flex: '0 0 auto',
-          background: pending ? 'rgba(255,255,255,0.04)' : `${meta.color}22`,
-          border: `1px ${pending ? 'dashed' : 'solid'} ${pending ? 'var(--line-strong)' : `${meta.color}55`}`,
+          background: pending ? 'rgba(255,255,255,0.04)' : m.colour && m.initial ? `${m.colour}33` : `${meta.color}22`,
+          border: `1px ${pending ? 'dashed' : 'solid'} ${pending ? 'var(--line-strong)' : m.colour && m.initial ? m.colour : `${meta.color}55`}`,
           color: pending ? 'var(--text-faint)' : meta.color,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.95rem',
-        }}>{pending ? '✉' : inits}</div>
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: m.initial && !pending ? '1.2rem' : '0.95rem',
+        }}>{pending ? '✉' : m.initial || inits}</div>
 
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -720,6 +725,11 @@ function MemberRow({
               a failed load rather than as a deliberate absence. */}
           {!offline && (
             <div dir="ltr" style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
+          )}
+          {m.phone && (
+            <div dir="ltr" style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'start' }}>
+              <a href={`tel:${m.phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>📞 {m.phone}</a>
+            </div>
           )}
           {!!m.auth_user_id && (
             <div dir="ltr" style={{ fontSize: '0.62rem', color: 'var(--text-faint)', textAlign: 'start', fontFamily: 'monospace', marginTop: 2 }}>{m.auth_user_id}</div>

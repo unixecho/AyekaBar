@@ -74,7 +74,7 @@ const SCHEDULER = files.filter((f) => /^05[2-5]_/.test(f))
 // REAL waiter_tables_guard trigger (022), writes the REAL waiter_order_events (its vocabulary CHECK and its actor-stamping
 // trigger) and replaces functions whose real default grants only this harness can show.
 const MINE = ['056_z_reports.sql', '057_waiter_calls_and_schedule_sync.sql', '058_remote_ordering.sql',
-  '059_staff_join_links.sql', '060_staff_payslips.sql', '061_table_ownership_and_alerts.sql']
+  '059_staff_join_links.sql', '060_staff_payslips.sql', '061_table_ownership_and_alerts.sql', '062_staff_phone.sql']
 
 section('migrations apply in order')
 for (const f of LEGACY) {
@@ -429,6 +429,19 @@ section('the scheduler\'s own invariants still hold with 056/057/058/059/060 ins
   check('059: all four staff_join_* functions exist and none is executable by anon or authenticated', m059.length === 4 && m059.every((r) => !r.a && !r.b), JSON.stringify(m059))
   check('z_reports: no table privilege for anon / authenticated',
     !(await one(`select has_table_privilege('anon','public.z_reports','select') p`)).p && !(await one(`select has_table_privilege('authenticated','public.z_reports','insert') p`)).p)
+}
+
+section('062 — a phone on the REAL staff table (2026-10-15)')
+{
+  const col = await one(`select data_type, is_nullable from information_schema.columns where table_schema='public' and table_name='staff' and column_name='phone'`)
+  check('062: staff.phone exists, text, nullable', col?.data_type === 'text' && col?.is_nullable === 'YES')
+  const tryPhone = async (v) => { try { await db.query(`update public.staff set phone = $1 where id = $2`, [v, ann.id]); return true } catch { return false } }
+  check('062: the CHECK accepts Israeli local, + international and null', (await tryPhone('0501234567')) && (await tryPhone('031234567')) && (await tryPhone('+14155550123')) && (await tryPhone(null)))
+  check('062: …and refuses everything else (letters, too short, spaces, markup, SQL)', !(await tryPhone('abc')) && !(await tryPhone('050')) && !(await tryPhone('050 123 4567')) && !(await tryPhone('<b>0501234567</b>')) && !(await tryPhone("0501234567'; --")))
+  const colourOk = async (c, i) => { try { await db.query(`update public.staff set colour = $1, initial = $2 where id = $3`, [c, i, ann.id]); return true } catch { return false } }
+  check('021 (real): a palette colour + a single emoji satisfy staff.colour / staff.initial\'s CHECKs', (await colourOk('#f87171', '🍺')) && (await colourOk('#a78bfa', '🌵')))
+  const pub = await q(`select column_name from information_schema.columns where table_schema='public' and table_name in ('public_staff','staff_access_levels') and column_name = 'phone'`)
+  check('062: the phone is in NO view — the public team page and the diagnostic view stay without it', pub.length === 0)
 }
 
 console.log(`\n${pass} passed, ${failures.length} failed`)

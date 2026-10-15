@@ -21,7 +21,9 @@ export default function SignOutButton() {
     try {
       const res = await fetch('/api/auth/signout', { method: 'POST' })
       if (res.ok) {
-        router.push('/')
+        // Back to the sign-in page (owner, 2026-10-15) — which itself carries a button to the main page. It used to
+        // drop the person on the portal, with no hint they were signed out.
+        router.push('/login')
         return
       }
       setError('ההתנתקות נכשלה. נסה/י שוב.')

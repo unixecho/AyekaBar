@@ -7,13 +7,13 @@ import { haptic } from '@/lib/haptics'
 import { TOUR_END_HREF, TOUR_SLIDES, TOUR_TILES, clampSlide, isLastSlide } from '@/lib/staff/tour'
 
 // The employee's first-run tour (2026-10-15) — the wizard's last screen. Owner: "instead of going to the Home page show
-// the employee a quick intro on the dashboard and what they can do in it … when they complete the demo send them to the
-// login panel."
+// the employee a quick intro on the dashboard and what they can do in it … at the end leave them at the dashboard logged
+// in."
 //
 // A miniature of the real dashboard sits on top and lights the tile each slide is about (the tiles are the registry's —
 // scripts/check-join.mjs compares them), the words are in lib/staff/tour.ts. It stores nothing: closing the tab simply
 // means the person opens the dashboard without having seen it, which is harmless. Every slide moves focus to its
-// heading, "דילוג" leaves at any time, and the last slide's button goes to the login panel.
+// heading, "דילוג" leaves at any time, and the last slide's button goes to the dashboard (the person is signed in).
 
 export default function StaffTour({ who }: { who: string }) {
   const [index, setIndex] = useState(0)
@@ -56,7 +56,7 @@ export default function StaffTour({ who }: { who: string }) {
       <div style={{ display: 'flex', gap: 10 }}>
         {i > 0 && <button type="button" className="press" style={{ ...ghostBtn, flex: '0 0 auto', width: 'auto', padding: '10px 18px' }} onClick={() => go(i - 1)}>הקודם</button>}
         {last
-          ? <Link href={TOUR_END_HREF} className="press" style={{ ...primaryBtn, flex: 1, textDecoration: 'none' }}>סיום — לדף הכניסה</Link>
+          ? <Link href={TOUR_END_HREF} className="press" style={{ ...primaryBtn, flex: 1, textDecoration: 'none' }}>סיום — לאזור הצוות</Link>
           : <button type="button" className="press" style={{ ...primaryBtn, flex: 1 }} onClick={() => go(i + 1)}>{i === 0 ? 'מתחילים' : 'הבא'}</button>}
       </div>
       {!last && <Link href={TOUR_END_HREF} className="press" style={skipStyle}>דילוג על הסיור</Link>}

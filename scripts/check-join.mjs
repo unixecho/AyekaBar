@@ -125,11 +125,13 @@ section('the wizard’s screens')
   check('a good link, nobody signed in → welcome', S({}) === 'welcome')
   check('…after the welcome → connect', S({ introSeen: true }) === 'connect')
   check('signed in (back from Google) → confirm, whatever the intro state', S({ signedIn: true }) === 'confirm' && S({ signedIn: true, introSeen: true }) === 'confirm')
-  check('claimed → the tour, even if the link has just been spent (status would now read "used")', S({ claimed: true, status: 'used', signedIn: true }) === 'tour')
+  check('claimed → the DETAILS step first, even if the link has just been spent (status would now read "used")', S({ claimed: true, status: 'used', signedIn: true }) === 'profile')
+  check('…and once the details are saved or skipped → the tour', S({ claimed: true, status: 'used', signedIn: true, profileDone: true }) === 'tour')
+  check('the details step can never be reached before the account is linked', S({ profileDone: true }) === 'welcome' && S({ signedIn: true, profileDone: true }) === 'confirm' && S({ status: 'expired', profileDone: true }) === 'dead')
   for (const status of ['unknown', 'expired', 'used', 'revoked', 'inactive', 'linked']) {
     check(`a ${status} link → a dead end, signed in or not`, S({ status }) === 'dead' && S({ status, signedIn: true }) === 'dead')
   }
-  check('the progress dots: 3 steps, confirm shares step 2', J.WIZARD_STEPS.length === 3 && J.progressIndex('welcome') === 0 && J.progressIndex('connect') === 1 && J.progressIndex('confirm') === 1 && J.progressIndex('tour') === 2)
+  check('the progress dots: 4 steps — meet, Google, my details, tour; confirm shares step 2', J.WIZARD_STEPS.length === 4 && J.progressIndex('welcome') === 0 && J.progressIndex('connect') === 1 && J.progressIndex('confirm') === 1 && J.progressIndex('profile') === 2 && J.progressIndex('tour') === 3)
 }
 
 section('the dashboard tour (2026-10-15)')
@@ -145,11 +147,15 @@ section('the dashboard tour (2026-10-15)')
   check('the miniature’s tiles are the REAL dashboard tiles — same id, icon and label as the registry',
     T.TOUR_TILES.every((t) => new RegExp(`id: '${t.id}',[^\\n]*icon: '${t.icon}', he: '${t.he}'`).test(tiles)))
   check('every slide that lights a tile names one the miniature has', T.TOUR_SLIDES.every((s) => s.tile === null || T.TOUR_TILES.some((t) => t.id === s.tile)))
-  check('the tour ends at the login panel', T.TOUR_END_HREF === '/login')
+  check('the tour ends on the dashboard, signed in (owner, 2026-10-15: "leave them at the dashboard logged in")', T.TOUR_END_HREF === '/staff/dashboard')
   check('clampSlide never leaves the range (NaN, negatives, overshoot)', [NaN, -5, 0, 2.7, 99, Infinity].every((i) => { const c = T.clampSlide(i); return Number.isInteger(c) && c >= 0 && c < T.TOUR_SLIDES.length }))
   check('only the last slide is "last"', T.TOUR_SLIDES.every((_, i) => T.isLastSlide(i) === (i === T.TOUR_SLIDES.length - 1)))
   const tour = read('src/components/staff/StaffTour.tsx')
   const wizSrc = read('src/components/staff/JoinWizard.tsx')
+  check('the wizard walks the claimed person through the details step, then the tour',
+    /<StaffProfileStep\b/.test(wizSrc) && /setProfileDone\(true\)/.test(wizSrc))
+  check('an already-signed-in team member opening someone else\'s link is offered a DIFFERENT account first, not the team area',
+    (() => { const at = wizSrc.indexOf('הטלפון הזה כבר מחובר'); const blk = wizSrc.slice(at, at + 2500); return at > -1 && /התחברות עם חשבון אחר/.test(blk) && blk.indexOf('onClick={switchAccount}') > -1 && blk.indexOf('onClick={switchAccount}') < blk.indexOf('href="/staff/dashboard"') })())
   check('the wizard hands the claimed person to the tour — and no longer ends on a button into the dashboard',
     /<StaffTour\b/.test(wizSrc) && !/href="\/staff\/dashboard"[^>]*>לאזור הצוות<\/Link>\s*<Link href="\/staff\/schedule"/.test(wizSrc))
   check('the tour’s last action goes to TOUR_END_HREF, and the tour can be left at any slide', /TOUR_END_HREF/.test(tour) && /דילוג/.test(tour))

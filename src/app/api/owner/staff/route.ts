@@ -5,11 +5,12 @@ import { splitName } from '@/lib/staff/name'
 import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { latestJoinLinks, revokeJoin } from '@/lib/staff/join-server'
 import { isTombstone } from '@/lib/staff/hard-delete'
+import { pickIdentity } from '@/lib/staff/profile'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 type Service = SupabaseClient
 
-const COLS = 'id, auth_user_id, role, badge, first_name, last_name, email, created_at, invited_at, claimed_at, show_on_site, display_order, display_name, active'
+const COLS = 'id, auth_user_id, role, badge, first_name, last_name, email, created_at, invited_at, claimed_at, show_on_site, display_order, display_name, active, colour, initial'
 
 /** `ilike` is our case-insensitive equality check, but `%` and `_` are legal in
  *  the local part of an address and would act as LIKE wildcards. */
@@ -42,6 +43,21 @@ async function findAuthUserByEmail(service: Service, email: string): Promise<Use
   return null
 }
 
+/** A random colour + emoji for a person the owner is creating (owner, 2026-10-15) — the least-used ones among the people
+ *  already on the roster, so two people on one shift rarely look alike. They can change both in the onboarding wizard. */
+async function newIdentity(service: Service) {
+  const { data } = await service.from('staff').select('colour, initial').eq('active', true)
+  return pickIdentity(data ?? [])
+}
+
+/** The roster's phone numbers, as a map. A SEPARATE, failure-tolerant read: the column arrives with migration 062, and
+ *  until it exists this is simply empty (the roster shows no phone), never an error. */
+async function phonesById(service: Service): Promise<Map<string, string>> {
+  const { data, error } = await service.from('staff').select('id, phone')
+  if (error) return new Map()
+  return new Map((data ?? []).filter((r) => typeof r.phone === 'string' && r.phone).map((r) => [r.id as string, r.phone as string]))
+}
+
 /** The row the owner is acting on, looked up by its own id. */
 async function loadRow(service: Service, id: string) {
   const { data } = await service
@@ -72,7 +88,8 @@ export async function GET() {
   if (error) return NextResponse.json({ error: 'טעינת הצוות נכשלה' }, { status: 500 })
   // Anonymous tombstones (what the developer's permanent delete leaves behind when orders still point at a person)
   // are not people any more — nobody to restore, so the roster does not list them. See lib/staff/hard-delete.ts.
-  const data = (all ?? []).filter((m) => !isTombstone(m))
+  const phones = await phonesById(auth.service)
+  const data = (all ?? []).filter((m) => !isTombstone(m)).map((m) => ({ ...m, phone: phones.get(m.id as string) ?? null }))
 
   // The newest join link of everyone who has not signed in yet (migration 059) — the roster's "link sent /
   // expired" chip. A separate, failure-tolerant read: before 059 is applied the table is not there and this is
@@ -145,6 +162,7 @@ export async function POST(request: NextRequest) {
         auth_user_id: null, role: 'staff', badge,
         first_name: first, last_name: last,
         email: null, claimed_at: null,
+        ...(await newIdentity(auth.service)),
       })
       .select(COLS)
       .single()
@@ -198,6 +216,7 @@ export async function POST(request: NextRequest) {
       last_name: names.last,
       email: user?.email ?? email,
       claimed_at: user ? new Date().toISOString() : null,
+      ...(await newIdentity(auth.service)),
     })
     .select(COLS)
     .single()
