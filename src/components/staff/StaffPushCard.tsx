@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell, BellOff, BellRing, CalendarClock, CheckCircle2, Repeat2, Share, Smartphone, X } from 'lucide-react'
+import { Bell, BellOff, BellRing, CalendarClock, CheckCircle2, ConciergeBell, Repeat2, Share, Smartphone, X } from 'lucide-react'
 import { haptic } from '@/lib/haptics'
 import {
   isIosDevice,
@@ -41,6 +41,7 @@ const write = (key: string, value: string | null) => {
 const BENEFITS = [
   { icon: CalendarClock, text: 'שינוי במשמרת, פרסום סידור ותזכורת לפני שהמשמרת מתחילה' },
   { icon: Repeat2, text: 'עובדים שמוסרים משמרת, ובקשות החלפה שמחכות לך' },
+  { icon: ConciergeBell, text: 'לקוח בשולחן שלך שהתחבר, שלח הזמנה או קורא למלצר — גם כשהטלפון נעול' },
 ]
 
 export default function StaffPushCard({ variant = 'home' }: { variant?: 'home' | 'wizard' }) {

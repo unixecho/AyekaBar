@@ -3,8 +3,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { haptic } from '@/lib/haptics'
 import { RTL, type Lang } from '@/lib/menu/types'
+import { parseSessionView, type SessionView } from '@/lib/cart/remote'
 import {
-  CALL_KINDS, CALL_TABLE_MAX, CALL_TABLE_MIN, CALL_UI, callErrorText,
+  CALL_KINDS, CALL_TABLE_MAX, CALL_TABLE_MIN, CALL_UI, callErrorText, callSentWaiterText, callTableText, callWaiterText,
   type CallKind,
 } from '@/lib/waiter/calls'
 import SheetShell from './SheetShell'
@@ -15,6 +16,11 @@ import SheetShell from './SheetShell'
 // (CartSheet.tsx keeps the button visibly inert until then). Opens ON TOP of
 // the cart, so it takes the keyboard from it via `suspended` on the cart's
 // own SheetShell — the same contract PromptSheet/ConfirmSheet use.
+//
+// A phone CONNECTED to its table (a waiter gave the customer a code - TableOrderSheet) is not asked which table
+// it is at, and is shown who its waiter is: the sheet reads GET /api/table/session when it opens, and the call goes
+// out with no table at all - the server takes it from the session (migration 061). A phone that is not connected
+// types the number printed on the table, as before.
 //
 // Nothing is persisted: the table number lives in this component's state for
 // as long as the sheet is open. A new localStorage key is a privacy
@@ -38,6 +44,9 @@ export default function CallWaiterSheet({
   const [table, setTable] = useState('')
   const [phase, setPhase] = useState<Phase>('form')
   const [error, setError] = useState<string | null>(null)
+  // null = still asking; { connected:false } = type the number; connected = the session knows the table and waiter.
+  const [session, setSession] = useState<SessionView | null>(null)
+  const [answer, setAnswer] = useState<{ tableNumber: number | null; waiterName: string | null } | null>(null)
   const tableId = useId()
   const errId = useId()
   const sending = useRef(false)
@@ -46,15 +55,29 @@ export default function CallWaiterSheet({
   // new call. The table number is kept between opens ONLY within one visit to
   // the page (component state, gone on reload).
   useEffect(() => {
-    if (open) { setPhase('form'); setError(null); setKind('waiter') }
+    if (!open) return
+    setPhase('form'); setError(null); setKind('waiter'); setAnswer(null); setSession(null)
+    let live = true
+    void (async () => {
+      try {
+        const res = await fetch('/api/table/session', { cache: 'no-store' })
+        const view = res.ok ? parseSessionView(await res.json().catch(() => null)) : ({ connected: false } as SessionView)
+        if (live) setSession(view)
+      } catch {
+        // A blip: fall back to asking for the number - the call itself still works.
+        if (live) setSession({ connected: false })
+      }
+    })()
+    return () => { live = false }
   }, [open])
 
+  const connected = session?.connected === true ? session : null
   const tableNumber = Number(table)
-  const tableOk = /^\d{1,3}$/.test(table.trim()) && tableNumber >= CALL_TABLE_MIN && tableNumber <= CALL_TABLE_MAX
+  const tableOk = connected !== null || (/^\d{1,3}$/.test(table.trim()) && tableNumber >= CALL_TABLE_MIN && tableNumber <= CALL_TABLE_MAX)
 
   async function send() {
-    if (sending.current || !tableOk) {
-      if (!tableOk) setError(callErrorText('bad_table', lang))
+    if (sending.current || session === null || !tableOk) {
+      if (session !== null && !tableOk) setError(callErrorText('bad_table', lang))
       return
     }
     sending.current = true
@@ -64,18 +87,28 @@ export default function CallWaiterSheet({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tableNumber, kind,
+          // A connected phone names no table: the server uses the session's. (If the session has ended meanwhile
+          // the server answers "no_session" and the number field appears.)
+          ...(connected ? {} : { tableNumber }),
+          kind,
           cartItems: Math.min(cartItems, 500),
           cartTotalAgorot: Math.max(0, Math.min(Math.round(cartAgorot), 100_000_000)),
         }),
       })
-      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+      const json = (await res.json().catch(() => ({}))) as
+        { ok?: boolean; error?: string; tableNumber?: number | null; waiterName?: string | null }
       if (!res.ok || !json.ok) {
         setError(callErrorText(json.error, lang))
+        // The connection is gone: stop pretending the phone is connected, so the number field appears.
+        if (json.error === 'no_session' || json.error === 'ended' || json.error === 'expired') setSession({ connected: false })
         setPhase('form')
         return
       }
       haptic('select')
+      setAnswer({
+        tableNumber: typeof json.tableNumber === 'number' ? json.tableNumber : null,
+        waiterName: typeof json.waiterName === 'string' && json.waiterName ? json.waiterName : null,
+      })
       setPhase('sent')
     } catch {
       setError(callErrorText('server', lang))
@@ -93,8 +126,8 @@ export default function CallWaiterSheet({
         <>
           <button
             type="button" className="cart-primary press" onClick={send}
-            disabled={phase === 'sending' || !tableOk}
-            style={{ opacity: phase === 'sending' || !tableOk ? 0.55 : 1 }}
+            disabled={phase === 'sending' || !tableOk || session === null}
+            style={{ opacity: phase === 'sending' || !tableOk || session === null ? 0.55 : 1 }}
           >
             {phase === 'sending' ? CALL_UI.sending[lang] : CALL_UI.send[lang]}
           </button>
@@ -110,64 +143,81 @@ export default function CallWaiterSheet({
         <h2 className="cart-sheet-title">{CALL_UI.title[lang]}</h2>
       </div>
 
-      {phase === 'sent' ? (
-        // role="status" so a screen reader announces the confirmation; the
-        // sheet's own focus does not move (the primary button is below).
-        <div role="status" style={{ padding: '12px 2px 8px' }}>
-          <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
-            <span aria-hidden>✓ </span>{CALL_UI.sentTitle[lang]}
-          </p>
-          <p style={{ margin: '8px 0 0', fontSize: '0.92rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-            {CALL_UI.sentBody[lang]}
-          </p>
-        </div>
-      ) : (
-        <div style={{ padding: '4px 2px 8px' }}>
-          <p style={{ margin: '0 0 6px', fontSize: '0.86rem', color: 'var(--text-dim)', lineHeight: 1.55 }}>
-            {CALL_UI.intro[lang]}
-          </p>
-
-          <div className="cart-choice-label" id={`${tableId}-kind`}>{CALL_UI.kindLabel[lang]}</div>
-          <div className="cart-choice-row" role="radiogroup" aria-labelledby={`${tableId}-kind`}>
-            {CALL_KINDS.map((k) => (
-              <button
-                key={k} type="button" role="radio" aria-checked={kind === k}
-                className="cart-choice" data-on={kind === k}
-                onClick={() => { haptic('select'); setKind(k) }}
-              >
-                {CALL_UI.kinds[k][lang]}
-              </button>
-            ))}
+      {/* .sheet-scroll lets the BODY scroll while the footer stays pinned (landscape phones: the connected view carries two
+          more lines than the typed one and pushed "close" under the edge — measured at 844x390, 2026-10-15). */}
+      <div className="sheet-scroll">
+        {phase === 'sent' ? (
+          // role="status" so a screen reader announces the confirmation; the
+          // sheet's own focus does not move (the primary button is below).
+          <div role="status" style={{ padding: '12px 2px 8px' }}>
+            <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
+              <span aria-hidden>✓ </span>{CALL_UI.sentTitle[lang]}
+            </p>
+            <p style={{ margin: '8px 0 0', fontSize: '0.92rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>
+              {answer?.waiterName ? callSentWaiterText(answer.waiterName, lang) : CALL_UI.sentBody[lang]}
+            </p>
           </div>
-
-          <label className="cart-choice-label" htmlFor={tableId} style={{ display: 'block' }}>
-            {CALL_UI.tableLabel[lang]}
-          </label>
-          <input
-            id={tableId} className="cart-note-input" inputMode="numeric" pattern="[0-9]*"
-            autoComplete="off" maxLength={3} value={table}
-            aria-invalid={!!error} aria-describedby={error ? errId : undefined}
-            onChange={(e) => { setTable(e.target.value.replace(/[^\d]/g, '')); setError(null) }}
-            onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
-            // The number is a LATIN numeral in every language (it is what is
-            // printed on the table), so the field is always LTR.
-            dir="ltr" style={{ textAlign: 'center', fontSize: '1.4rem', fontWeight: 800, letterSpacing: 2 }}
-          />
-          <p style={{ margin: '6px 0 0', fontSize: '0.74rem', color: 'var(--text-faint)' }}>{CALL_UI.tableHint[lang]}</p>
-
-          {cartItems > 0 && (
-            <p style={{ margin: '12px 0 0', fontSize: '0.8rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              <span aria-hidden>🛒 </span>{CALL_UI.cartNote[lang]}
+        ) : (
+          <div style={{ padding: '4px 2px 8px' }}>
+            <p style={{ margin: '0 0 6px', fontSize: '0.86rem', color: 'var(--text-dim)', lineHeight: 1.55 }}>
+              {connected ? CALL_UI.introConnected[lang] : CALL_UI.intro[lang]}
             </p>
-          )}
 
-          {error && (
-            <p id={errId} role="alert" style={{ margin: '12px 0 0', fontSize: '0.86rem', fontWeight: 600, color: '#ff6b6b', lineHeight: 1.5 }}>
-              {error}
-            </p>
-          )}
-        </div>
-      )}
+            {/* Connected: the phone already knows its table and its waiter - say so instead of asking. */}
+            {connected && (
+              <p role="status" style={{ margin: '4px 0 10px', fontSize: '0.98rem', fontWeight: 800, color: 'var(--text)', lineHeight: 1.6 }}>
+                <span aria-hidden style={{ color: '#3ddc97' }}>● </span>{callTableText(connected.tableNumber, lang)}
+                {connected.waiterName && <><br /><span aria-hidden>🙋 </span>{callWaiterText(connected.waiterName, lang)}</>}
+              </p>
+            )}
+
+            <div className="cart-choice-label" id={`${tableId}-kind`}>{CALL_UI.kindLabel[lang]}</div>
+            <div className="cart-choice-row" role="radiogroup" aria-labelledby={`${tableId}-kind`}>
+              {CALL_KINDS.map((k) => (
+                <button
+                  key={k} type="button" role="radio" aria-checked={kind === k}
+                  className="cart-choice" data-on={kind === k}
+                  onClick={() => { haptic('select'); setKind(k) }}
+                >
+                  {CALL_UI.kinds[k][lang]}
+                </button>
+              ))}
+            </div>
+
+            {session === null && <p role="status" style={{ margin: '10px 0', color: 'var(--text-dim)' }}>…</p>}
+            {session !== null && !connected && (
+              <>
+                <label className="cart-choice-label" htmlFor={tableId} style={{ display: 'block' }}>
+                  {CALL_UI.tableLabel[lang]}
+                </label>
+                <input
+                  id={tableId} className="cart-note-input" inputMode="numeric" pattern="[0-9]*"
+                  autoComplete="off" maxLength={3} value={table}
+                  aria-invalid={!!error} aria-describedby={error ? errId : undefined}
+                  onChange={(e) => { setTable(e.target.value.replace(/[^\d]/g, '')); setError(null) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
+                  // The number is a LATIN numeral in every language (it is what is
+                  // printed on the table), so the field is always LTR.
+                  dir="ltr" style={{ textAlign: 'center', fontSize: '1.4rem', fontWeight: 800, letterSpacing: 2 }}
+                />
+                <p style={{ margin: '6px 0 0', fontSize: '0.74rem', color: 'var(--text-faint)' }}>{CALL_UI.tableHint[lang]}</p>
+              </>
+            )}
+
+            {cartItems > 0 && (
+              <p style={{ margin: '12px 0 0', fontSize: '0.8rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                <span aria-hidden>🛒 </span>{CALL_UI.cartNote[lang]}
+              </p>
+            )}
+
+            {error && (
+              <p id={errId} role="alert" style={{ margin: '12px 0 0', fontSize: '0.86rem', fontWeight: 600, color: '#ff6b6b', lineHeight: 1.5 }}>
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </SheetShell>
   )
 }

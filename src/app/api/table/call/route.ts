@@ -2,13 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { checkRateLimit, clientIp } from '@/lib/rate-limit'
 import { getCartActionFlags } from '@/lib/settings/server'
+import { notifyStaffOfCall } from '@/lib/push/orders'
+import { afterResponse } from '@/lib/server/after'
+import { readSessionToken } from '@/lib/server/table-session'
 import {
   CALL_RATE_MAX, CALL_RATE_WINDOW_SECONDS,
   CALL_GLOBAL_RATE_MAX, CALL_GLOBAL_RATE_WINDOW_SECONDS,
-  CALL_REASON_STATUS, validateCallInput, type CallRpcReason,
+  CALL_REASON_STATUS, validateCallInput, validateSessionCallInput, type CallKind, type CallRpcReason,
 } from '@/lib/waiter/calls'
 
-// A customer asking for a waiter from the menu (2026-10-13).
+// A customer asking for a waiter from the menu (2026-10-13; connected phones 2026-10-15).
+//
+// ── TWO WAYS IN (2026-10-15) ────────────────────────────────────────────
+//   • A phone CONNECTED to its table (the httpOnly cookie a waiter's code earned) is not asked which table: the
+//     table — and the waiter who looks after it — come from the SESSION (create_table_call_for_session, migration
+//     061); nothing in the body can name one. The answer says who is coming.
+//   • A phone that is NOT connected types the number printed on the table (057's original path, unchanged).
+//   A cookie the database no longer accepts (the visit ended) falls through to the typed path when the body carries a
+//   number, and otherwise says so — it is never a way to call a table the phone is not at.
+// Either way the TABLE'S WAITER is pushed first and, if nobody takes the call within 90 seconds, the rest of the
+// shift is too (lib/push/orders.ts).
 //
 // ── WHAT THIS ROUTE IS ──────────────────────────────────────────────────
 // The SECOND public write path in the app (the first is /api/feedback), and it
@@ -32,7 +45,15 @@ import {
 // code through lib/waiter/calls.ts. (The generic rateLimitResponse() helper
 // returns a fixed Hebrew sentence, right for its other callers, wrong here.)
 
+// The push runs after the response and may sleep through the escalation window (see /api/table/order).
+export const maxDuration = 150
+
 const MAX_BODY_BYTES = 1024
+
+type CallRow = {
+  ok?: boolean; reason?: string | null; call_id?: string; table_id?: string | null; table_number?: number | null; holder_id?: string | null
+}
+const firstRow = (data: unknown): CallRow | null => (Array.isArray(data) ? data[0] : data) as CallRow | null | undefined ?? null
 
 const refuse = (code: string, status: number) => NextResponse.json({ error: code }, { status })
 
@@ -68,37 +89,91 @@ export async function POST(request: NextRequest) {
       return refuse('rate_limited', 429)
     }
 
-    // ---- 5. Validation ----------------------------------------------------
+    // ---- 5. The body, and which way in ------------------------------------
     const body = await request.json().catch(() => null)
-    const parsed = validateCallInput(body)
-    if (!parsed.ok) return refuse(parsed.error, 400)
+    const service = createServiceClient()
+    const token = readSessionToken(request)
 
-    // ---- 6. The write -----------------------------------------------------
-    const { data, error } = await createServiceClient().rpc('create_table_call', {
-      p_table_number: parsed.value.tableNumber,
-      p_kind: parsed.value.kind,
-      p_cart_items: parsed.value.cartItems,
-      p_cart_total: parsed.value.cartTotalAgorot,
-    })
-    if (error) {
-      // 42883 = the function does not exist: migration 057 has not been applied.
-      // Same calm answer as any other server failure — the customer is told to
-      // wave a waiter over, and the log says why.
-      console.error('create_table_call failed:', error.code, error.message)
-      return refuse('server', 500)
+    let row: CallRow | null = null
+    let kind: CallKind = 'waiter'
+    let cartItems = 0
+    let waiterName: string | null = null
+
+    // ---- 6a. A CONNECTED phone: the table is the session's -----------------
+    if (token) {
+      const parsed = validateSessionCallInput(body)
+      if (!parsed.ok) return refuse(parsed.error, 400)
+      const { data, error } = await service.rpc('create_table_call_for_session', {
+        p_token: token,
+        p_kind: parsed.value.kind,
+        p_cart_items: parsed.value.cartItems,
+        p_cart_total: parsed.value.cartTotalAgorot,
+      })
+      // 42883 (Postgres) / PGRST202 (PostgREST: "not in the schema cache") = migration 061 is not applied yet: the typed
+      // path below still works exactly as before.
+      if (error && error.code !== '42883' && error.code !== 'PGRST202') {
+        console.error('create_table_call_for_session failed:', error.code, error.message)
+        return refuse('server', 500)
+      }
+      const answered = error ? null : firstRow(data)
+      if (answered?.ok) {
+        row = answered
+        kind = parsed.value.kind
+        cartItems = parsed.value.cartItems
+        const { data: name } = await service.rpc('table_session_waiter', { p_token: token })
+        waiterName = typeof name === 'string' && name.trim() ? name.trim() : null
+      } else if (answered && !['no_session', 'expired', 'ended'].includes(answered.reason ?? '')) {
+        // A real refusal (no shift, a bad kind): say so.
+        const reason = (answered.reason ?? 'server') as CallRpcReason
+        return refuse(reason, CALL_REASON_STATUS[reason] ?? 500)
+      }
+      // else: the session is gone (or 061 is not there) → try the typed number below.
     }
 
-    const row = (Array.isArray(data) ? data[0] : data) as
-      { ok?: boolean; reason?: string | null } | null | undefined
-    if (!row) return refuse('server', 500)
-    if (!row.ok) {
-      const reason = (row.reason ?? 'server') as CallRpcReason
-      return refuse(reason, CALL_REASON_STATUS[reason] ?? 500)
+    // ---- 6b. A phone that is NOT connected types the table's number ---------
+    if (!row) {
+      const parsed = validateCallInput(body)
+      if (!parsed.ok) {
+        // A connected-looking phone whose session ended and typed nothing: tell it plainly, not "bad table".
+        return refuse(token ? 'no_session' : parsed.error, token ? 401 : 400)
+      }
+      const { data, error } = await service.rpc('create_table_call', {
+        p_table_number: parsed.value.tableNumber,
+        p_kind: parsed.value.kind,
+        p_cart_items: parsed.value.cartItems,
+        p_cart_total: parsed.value.cartTotalAgorot,
+      })
+      if (error) {
+        // 42883 = the function does not exist: migration 057 has not been applied.
+        // Same calm answer as any other server failure — the customer is told to
+        // wave a waiter over, and the log says why.
+        console.error('create_table_call failed:', error.code, error.message)
+        return refuse('server', 500)
+      }
+      const answered = firstRow(data)
+      if (!answered) return refuse('server', 500)
+      if (!answered.ok) {
+        const reason = (answered.reason ?? 'server') as CallRpcReason
+        return refuse(reason, CALL_REASON_STATUS[reason] ?? 500)
+      }
+      row = { ...answered, table_number: answered.table_number ?? parsed.value.tableNumber }
+      kind = parsed.value.kind
+      cartItems = parsed.value.cartItems
     }
 
-    // Nothing is echoed back — not the id. `duplicate` is the one fact the
-    // client can use (it can say "already on its way").
-    return NextResponse.json({ ok: true, duplicate: row.reason === 'duplicate' })
+    const duplicate = row.reason === 'duplicate'
+    // A repeat tap is the SAME call (it is already on its way): nobody is paged twice.
+    if (!duplicate && typeof row.call_id === 'string') {
+      const alert = {
+        callId: row.call_id, kind, cartItems,
+        tableNumber: row.table_number ?? null, tableId: row.table_id ?? null,
+      }
+      afterResponse(() => notifyStaffOfCall(alert))
+    }
+
+    // Nothing else is echoed back — not the id. `duplicate` lets the client say "already on its way"; the table number
+    // and the waiter's FIRST name are what a connected customer is shown ("your waiter: Dana").
+    return NextResponse.json({ ok: true, duplicate, tableNumber: row.table_number ?? null, waiterName })
   } catch (err) {
     console.error('table call route error:', err)
     return refuse('server', 500)

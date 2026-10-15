@@ -69,8 +69,12 @@ const SCHEDULER = files.filter((f) => /^05[2-5]_/.test(f))
 //
 // 059 (staff join links) and 060 (the payslip library), 2026-10-14, join them for the same reason: 059 writes the REAL
 // staff table (its unique indexes, its role check, the columns 006/041 added) and 060 hangs a foreign key off it.
+//
+// 061 (table ownership + the feed hearing about customers), 2026-10-15, joins them because it claims a table through the
+// REAL waiter_tables_guard trigger (022), writes the REAL waiter_order_events (its vocabulary CHECK and its actor-stamping
+// trigger) and replaces functions whose real default grants only this harness can show.
 const MINE = ['056_z_reports.sql', '057_waiter_calls_and_schedule_sync.sql', '058_remote_ordering.sql',
-  '059_staff_join_links.sql', '060_staff_payslips.sql']
+  '059_staff_join_links.sql', '060_staff_payslips.sql', '061_table_ownership_and_alerts.sql']
 
 section('migrations apply in order')
 for (const f of LEGACY) {
@@ -240,6 +244,67 @@ section('058 — remote ordering end to end, on the REAL chain (real staff, real
     return (await one(`select app from public.staff_push_subscriptions where endpoint = 'https://push.example/real-web'`)).app === 'portal' })())
   check('the subscriptions table still has RLS on and no browser grants (054\'s promise holds)', (await one(`select relrowsecurity r from pg_class where relname = 'staff_push_subscriptions'`)).r === true
     && !(await one(`select has_table_privilege('anon','public.staff_push_subscriptions','select') p`)).p && !(await one(`select has_table_privilege('authenticated','public.staff_push_subscriptions','select') p`)).p)
+}
+
+section('061 — table ownership, on the REAL chain: the 2026-10-15 production bug, reproduced and fixed')
+{
+  await db.exec(`reset role`)
+  await asUser(owner.authId)
+  const tbl = (await one(`insert into public.waiter_tables (number) values (72) returning id`)).id
+  // A schedule IS in use and only Ben is on it — exactly the production situation: the person who links the table is NOT on it.
+  await db.exec(`reset role`)
+  const wk = (await one(`select id from public.schedule_weeks where id = $1`, [legacyWeek])).id
+  const pub = (await one(`select public.sched_publish_week($1, $2) r`, [owner.id, wk])).r
+  check('(setup) a schedule is published and only Ben is on it', pub?.ok === true, JSON.stringify(pub))
+
+  await asUser(dev.authId)
+  const c = await one(`select * from public.issue_table_code($1)`, [tbl])
+  check('Dev (the owner\'s account — NOT on tonight\'s roster) links table 72', /^\d{6}$/.test(c.code), JSON.stringify(c))
+  check('…and CLAIMS it, through the real waiter_tables_guard trigger (022)',
+    (await one(`select held_by_staff_id h from public.waiter_tables where id = $1`, [tbl])).h === dev.id)
+  const ev = await one(`select event, actor, actor_staff_id, payload from public.waiter_order_events where table_id = $1 and event = 'table_chained'`, [tbl])
+  check('the REAL feed table accepted a table_chained event (061 widened the real CHECK) and the real stamp trigger named the actor',
+    !!ev && ev.actor_staff_id === dev.id && /Dev/.test(ev.actor ?? '') && ev.payload.table === 72, JSON.stringify(ev))
+
+  await asUser(null)
+  const s = await one(`select * from public.redeem_table_code($1)`, [c.code])
+  const sub = await one(`select * from public.create_cart_submission($1, $2::jsonb, 2, 8200)`, [s.session_token, JSON.stringify({ version: 1, items: [{ item_uid: 'x' }] })])
+  check('(setup) a customer connects and sends an order', s.ok === true && sub.ok === true, JSON.stringify({ s: s.ok, sub }))
+  await db.exec(`reset role`)
+  check('the real feed heard about the customer connecting and ordering',
+    (await q(`select event from public.waiter_order_events where table_id = $1 and event in ('customer_connected','customer_order')`, [tbl])).length === 2)
+
+  const sees = async (p) => { await asUser(p.authId); return (await q(`select table_number from public.waiter_pending_submissions()`)).some((r) => r.table_number === 72) }
+  check('THE FIX: the person who linked the table sees its order though a schedule is in use and they are not on it', (await sees(dev)) === true)
+  check('the shift manager on the roster (management) sees it', (await sees(ben)) === true)
+  check('the owner sees it (management oversight)', (await sees(owner)) === true)
+  check('an off-roster waiter (Ann) does NOT, and a bartender does NOT', (await sees(ann)) === false && (await sees(cy)) === false)
+  await db.exec(`reset role`)
+  await db.exec(`update public.customer_cart_submissions set created_at = created_at - interval '95 seconds'`)
+  check('after 90 seconds unhandled: still not an off-roster waiter (escalation is for people on the roster)', (await sees(ann)) === false)
+
+  await asUser(dev.authId)
+  check('Dev imports it → ok', (await one(`select public.waiter_review_submission($1, 'imported') r`, [sub.submission_id])).r === 'ok')
+  await asUser(ann.authId)
+  check('Ann is refused if she tries to take a call on that table', await (async () => {
+    await db.exec(`reset role`)
+    const call = await one(`select * from public.create_table_call_for_session($1, 'waiter', 0, 0)`, [s.session_token])
+    await asUser(ann.authId)
+    return call.ok === true && call.holder_id === dev.id && (await one(`select public.waiter_ack_call($1) r`, [call.call_id])).r === 'forbidden' })())
+
+  // the real default privileges — the stub harness has none, so it cannot say this
+  await db.exec(`reset role`)
+  const m061 = ['waiter_table_holder', 'waiter_staff_can_handle_table', '_staff_first_name', '_insert_table_call', 'table_session_waiter',
+    'create_table_call', 'create_table_call_for_session', '_feed_customer_connected', '_feed_customer_order', '_feed_customer_call']
+  const open061 = await q(`select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                           where n.nspname = 'public' and p.proname = any($1)
+                             and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`, [m061])
+  check('NONE of 061\'s service/internal functions is executable by anon or signed-in users, on the real default privileges', open061.length === 0, JSON.stringify(open061))
+  const posFns = ['issue_table_code', 'waiter_pending_submissions', 'waiter_open_calls', 'waiter_review_submission', 'waiter_ack_call', 'waiter_table_visit']
+  const posOk = await q(`select p.proname, has_function_privilege('anon', p.oid, 'execute') a, has_function_privilege('authenticated', p.oid, 'execute') b
+                         from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = any($1)`, [posFns])
+  check('the six POS-facing functions are executable by signed-in users and NOT by anon', posOk.length === 6 && posOk.every((r) => r.b && !r.a), JSON.stringify(posOk))
+  await db.query(`select public.sched_unpublish_week($1, $2)`, [owner.id, wk])
 }
 
 section('059 — a join link, on the REAL staff table (006/041 columns, indexes and access functions)')

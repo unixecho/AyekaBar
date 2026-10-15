@@ -7,7 +7,7 @@ import { openLines } from '@/lib/cart/store'
 import { toSubmission } from '@/lib/cart/submission'
 import { TABLE_CODE_LENGTH, isValidTableCodeShape, normalizeTableCode } from '@/lib/cart/otp'
 import {
-  REMOTE_UI, connectedText, itemsText, remoteErrorText, sanitizeSent,
+  REMOTE_UI, connectedText, itemsText, parseSessionView, remoteErrorText, waiterText,
   type SessionView, type SubmissionState,
 } from '@/lib/cart/remote'
 import { fmtAgorot } from '@/lib/cart/variants'
@@ -33,14 +33,9 @@ import SheetShell from './SheetShell'
 // and a re-order is a new request. It is a REQUEST: a waiter reviews it and imports it; the sheet says so.
 
 type Phase = 'idle' | 'connecting' | 'sending'
-const POLL_MS = 15_000
-
-function parseView(json: unknown): SessionView {
-  if (typeof json !== 'object' || json === null) return { connected: false }
-  const j = json as Record<string, unknown>
-  if (j.connected !== true || typeof j.tableNumber !== 'number' || typeof j.expiresAt !== 'string') return { connected: false }
-  return { connected: true, tableNumber: j.tableNumber, expiresAt: j.expiresAt, shiftOpen: j.shiftOpen !== false, sent: sanitizeSent(j.sent) }
-}
+// Short, because a waiter taps "add to table" in the POS and the customer should see it move from "waiting" to "taken"
+// within seconds — and the same read tells them who their waiter is.
+const POLL_MS = 5_000
 
 const STATE_COLOUR: Record<SubmissionState, string> = {
   pending: 'var(--text-dim)', imported: '#3ddc97', rejected: '#ff6b6b', expired: 'var(--text-faint)',
@@ -72,7 +67,7 @@ export default function TableOrderSheet({
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/table/session', { cache: 'no-store' })
-      setView(res.ok ? parseView(await res.json().catch(() => null)) : { connected: false })
+      setView(res.ok ? parseSessionView(await res.json().catch(() => null)) : { connected: false })
     } catch {
       // A blip keeps what is on screen; the next poll corrects it.
       setView((cur) => cur ?? { connected: false })
@@ -233,6 +228,10 @@ export default function TableOrderSheet({
           <>
             <p role="status" style={{ margin: '0 0 6px', fontSize: '1.02rem', fontWeight: 800, color: 'var(--text)' }}>
               <span aria-hidden style={{ color: '#3ddc97' }}>● </span>{connectedText(connected.tableNumber, lang)}
+            </p>
+            {/* Who is looking after the table (migration 061: linking a table claims it for that waiter). */}
+            <p style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: 700, color: connected.waiterName ? 'var(--text)' : 'var(--text-dim)' }}>
+              <span aria-hidden>🙋 </span>{connected.waiterName ? waiterText(connected.waiterName, lang) : REMOTE_UI.noWaiterYet[lang]}
             </p>
 
             {justSent ? (

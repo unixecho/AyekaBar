@@ -101,6 +101,8 @@ export type SessionView =
       /** False when the bar has no shift open: sending is refused until it does. */
       shiftOpen: boolean
       sent: SentRequest[]
+      /** First name of the waiter looking after the table (migration 061), or null. */
+      waiterName: string | null
     }
 
 const STATES: readonly SubmissionState[] = ['pending', 'imported', 'rejected', 'expired']
@@ -122,6 +124,19 @@ export function sanitizeSent(raw: unknown): SentRequest[] {
   return out
 }
 
+/** What the page makes of GET /api/table/session's JSON: anything that is not exactly a connected view is "not
+ *  connected" (the client does not get to assume the route's answer is well-formed). */
+export function parseSessionView(json: unknown): SessionView {
+  if (typeof json !== 'object' || json === null) return { connected: false }
+  const j = json as Record<string, unknown>
+  if (j.connected !== true || typeof j.tableNumber !== 'number' || typeof j.expiresAt !== 'string') return { connected: false }
+  const waiter = typeof j.waiterName === 'string' && j.waiterName.trim() ? j.waiterName.trim().slice(0, 40) : null
+  return {
+    connected: true, tableNumber: j.tableNumber, expiresAt: j.expiresAt, shiftOpen: j.shiftOpen !== false,
+    sent: sanitizeSent(j.sent), waiterName: waiter,
+  }
+}
+
 // ── Words (customer-facing: all three languages) ─────────────────────────
 // Native review of en/ar is still owed (same caveat as the intro's copy).
 
@@ -137,6 +152,8 @@ export const REMOTE_UI = {
   connecting:   { he: 'מתחברים…', en: 'Connecting…', ar: 'جارٍ الاتصال…' },
   // connected
   connectedAs:  { he: 'מחוברים לשולחן {n}', en: 'Connected to table {n}', ar: 'متصلون بالطاولة {n}' },
+  yourWaiter:   { he: 'המלצר שלכם: {name}', en: 'Your waiter: {name}', ar: 'نادلكم: {name}' },
+  noWaiterYet:  { he: 'מלצר יצטרף אליכם בקרוב', en: 'A waiter will join you shortly', ar: 'سينضم إليكم نادل قريبًا' },
   recoverHint:  { he: 'התנתק הטלפון? מקלידים את אותו קוד שוב — ההזמנות ששלחתם נשמרות.', en: 'Phone died or switched? Type the same code again — what you sent is kept.', ar: 'انقطع الهاتف أو تغيّر؟ اكتبوا الرمز نفسه مجددًا — ما أرسلتموه محفوظ.' },
   disconnect:   { he: 'ניתוק מהשולחן', en: 'Disconnect', ar: 'قطع الاتصال' },
   // sending
@@ -181,6 +198,7 @@ export function remoteErrorText(code: string | undefined, lang: Lang): string {
  *  order stays right in every language. */
 export const connectedText = (n: number, lang: Lang) => REMOTE_UI.connectedAs[lang].replace('{n}', String(n))
 export const itemsText = (n: number, lang: Lang) => REMOTE_UI.items[lang].replace('{n}', String(n))
+export const waiterText = (name: string, lang: Lang) => REMOTE_UI.yourWaiter[lang].replace('{name}', name)
 
 /** Re-exported so the sheet needs one import for its input's length. */
 export { TABLE_CODE_LENGTH }

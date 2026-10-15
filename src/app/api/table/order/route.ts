@@ -30,6 +30,10 @@ import { orderingEnabled, readSessionToken, refuse, sameOriginJson } from '@/lib
 // Errors are CODES (lib/cart/remote.ts); the client chooses the words in the customer's language.
 
 export const dynamic = 'force-dynamic'
+// The push runs after the response and may wait out the escalation window (lib/push/orders.ts, ESCALATION_SECONDS)
+// before it checks whether anyone took the request. Seconds of SLEEP, not CPU; a platform that caps it lower only
+// loses the escalation, never the first push.
+export const maxDuration = 150
 
 const MAX_BODY_BYTES = 64 * 1024
 
@@ -74,13 +78,20 @@ export async function POST(request: NextRequest) {
     // Quantity, not lines: "4 drinks" is what a waiter's wrist should say.
     const quantity = submission.items.reduce((n, i) => n + i.qty, 0)
     if (typeof row.submission_id === 'string') {
+      const submissionId = row.submission_id
       const alert = {
-        submissionId: row.submission_id,
+        submissionId,
         tableNumber: row.table_number ?? null,
         itemCount: quantity,
         totalAgorot: submission.total_agorot,
       }
-      afterResponse(() => notifyStaffOfSubmission(alert))
+      // The table's waiter is told first (061), so the push needs the TABLE — read from the request the database
+      // just stored, never from anything the phone sent.
+      afterResponse(async () => {
+        const { data } = await createServiceClient()
+          .from('customer_cart_submissions').select('table_id').eq('id', submissionId).maybeSingle()
+        await notifyStaffOfSubmission({ ...alert, tableId: (data as { table_id?: string | null } | null)?.table_id ?? null })
+      })
     }
 
     // Nothing is echoed back — not the id. The phone learns what became of it from GET /api/table/session.

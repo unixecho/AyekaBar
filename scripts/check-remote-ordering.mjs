@@ -41,10 +41,12 @@ const rel = (js) => js.replace(/from '(\.\/[^']+)'/g, "from '$1.mjs'")
 emit('src/lib/cart/otp.ts', 'otp.mjs', rel)
 emit('src/lib/cart/remote.ts', 'remote.mjs', rel)
 emit('src/lib/push/orders-rules.ts', 'orders-rules.mjs')
+emit('src/lib/waiter/calls.ts', 'calls.mjs', rel)
 const load = (name) => import(pathToFileURL(join(outDir, name)).href)
 const Otp = await load('otp.mjs')
 const R = await load('remote.mjs')
 const P = await load('orders-rules.mjs')
+const C = await load('calls.mjs')
 
 let pass = 0
 const failures = []
@@ -281,12 +283,16 @@ section('the order route — the table comes from the SESSION, and the push neve
   check('no session cookie → refused before anything else is spent', /if \(!token\) return refuse\('no_session'\)/.test(order))
   check('the table is NEVER read from the request: the RPC is handed the token and the validated payload only',
     // (the one legitimate mention: the alert's label is whatever the DATABASE answered for the session's table)
+    // (and the push reads the table id back from the ROW the database just stored — never from the body)
     /p_token: token,\s*p_payload: submission,/.test(order) &&
     !/tableNumber|table_id|table_number|searchParams|nextUrl/.test(
-      order.replace(/tableNumber: row\.table_number \?\? null/, '').replace(/table_number\?: number \| null/, '').replace(/row\.table_number/g, '')))
+      order.replace(/tableNumber: row\.table_number \?\? null/, '').replace(/table_number\?: number \| null/, '').replace(/row\.table_number/g, '')
+        .replace(/\.select\('table_id'\)/, '').replace(/\(data as \{ table_id\?: string \| null \} \| null\)\?\.table_id/, '')))
   check('what is stored is validateSubmission\'s RETURN VALUE, never the caller\'s object', /submission = validated\.value/.test(order) && /p_payload: submission/.test(order))
   check('the line count and the total sent to the database are the RECOMPUTED ones', /p_item_count: submission\.items\.length/.test(order) && /p_total: submission\.total_agorot/.test(order))
-  check('the push runs AFTER the response, never awaited inline (a slow push service cannot slow or fail a send)', /afterResponse\(\(\) => notifyStaffOfSubmission\(alert\)\)/.test(order) && !/await notifyStaffOfSubmission/.test(order))
+  check('the push runs AFTER the response, never awaited inline (a slow push service cannot slow or fail a send)', /afterResponse\(async \(\) => \{[\s\S]*?await notifyStaffOfSubmission\(/.test(order)
+    // (the only `await` is INSIDE the after-response task; the handler itself never waits for the push)
+    && !/await notifyStaffOfSubmission/.test(order.replace(/afterResponse\(async \(\) => \{[\s\S]*?\n      \}\)/, '')))
   check('the push alert uses QUANTITY (4 drinks), not line count', /reduce\(\(n, i\) => n \+ i\.qty, 0\)/.test(order))
   check('nothing about the new row is echoed back (not even its id)', /NextResponse\.json\(\{ ok: true \}/.test(order) && !/submission_id/.test(order.slice(order.indexOf('NextResponse.json({ ok: true }'))))
   check('"empty" is decided by shape, not by matching the validator\'s Hebrew wording', /items\.length === 0\) return refuse\('empty'\)/.test(order) && !/ההזמנה ריקה/.test(order))
@@ -306,7 +312,14 @@ section('the server helpers and the push sender')
   check('who is told comes from the DATABASE rule (waiter_call_recipient_staff_ids), not a list in code', /rpc\('waiter_call_recipient_staff_ids'\)/.test(o))
   check('the choice of device is the pure rule', /chooseTargets\(subs, now\)/.test(o))
   check('the fallback is tried ONLY when the preferred devices all failed', /if \(delivered === 0 && fallback\.length > 0\)/.test(o))
-  check('it never throws (a push problem must not fail a customer\'s send)', /catch \(err\)[\s\S]*return \{ recipients: 0, sent: 0 \}/.test(o) && /ensureVapidConfigured\(\)\) return/.test(o))
+  check('it never throws (a push problem must not fail a customer\'s send)', /catch \(err\)[\s\S]*return \{ delivered: 0, escalated: false \}/.test(o) && /ensureVapidConfigured\(\)\) return/.test(o))
+  check('the TABLE\'S WAITER is asked of the database (waiter_table_holder) and told first', /rpc\('waiter_table_holder'/.test(o) && /pushToPeople\(service, \[holder\], alert\.build\)/.test(o))
+  check('…the shift is told only when nobody holds the table or the waiter\'s devices could not be reached', /if \(!holder \|\| delivered === 0\)/.test(o))
+  check('…and a heads-up only for the waiter (a customer connecting) never wakes the shift', /if \(alert\.holderOnly\) return/.test(o) && /holderOnly: true/.test(o))
+  check('ESCALATION: after ESCALATION_SECONDS, if it is STILL waiting, the rest of the shift is told ("who is free?")',
+    /await sleep\(ESCALATION_SECONDS \* 1000\)/.test(o) && /stillWaiting\(\)/.test(o) && /escalated\(alert\.build\(app\), ESCALATION_SECONDS\)/.test(o) && /everyone\.filter\(\(id\) => id !== holder\)/.test(o))
+  check('…"still waiting" is read from the database: an order is `pending`, a call is not acknowledged', /status === 'pending'/.test(o) && /acknowledged_at == null/.test(o))
+  check('…and a request nobody was told about first never escalates (that path already told everyone)', /if \(!alert\.stillWaiting\) return/.test(o))
   check('delivery goes through the SHARED routine that prunes dead subscriptions (404/410)', /from '\.\/deliver'/.test(o) && /404 \|\| statusCode === 410/.test(code('src/lib/push/deliver.ts')))
   check('…with the short order TTL, not the three-hour schedule one', /ttlSeconds: ORDER_PUSH_TTL_SECONDS/.test(o))
   check('the SCHEDULE alerts still deliver through the same routine, unchanged', /from '\.\/deliver'/.test(code('src/lib/push/staff.ts')) && /sendToOne\(service, device, payload\)/.test(code('src/lib/push/staff.ts')))
@@ -354,6 +367,128 @@ section('the twin: ding.ts in both repos is one file')
   const pat = ding.match(/pattern: number\[\] = \[([\d, ]+)\]/)?.[1].replace(/\s/g, '')
   check('buzz()\'s default pattern is the one the push notification asks the phone for (ORDER_VIBRATION)', pat === P.ORDER_VIBRATION.join(','), `${pat} vs ${P.ORDER_VIBRATION.join(',')}`)
   check('the sound stores nothing (no localStorage / cookie)', !/localStorage|sessionStorage|document\.cookie/.test(strip(ding)))
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 2026-10-15 — table ownership (migration 061), calls without a typed table, push for every customer event, floor pings.
+section('061 — the table\'s waiter, the escalation and the feed (the numbers and the words)')
+{
+  const m061 = read('supabase/migrations/061_table_ownership_and_alerts.sql')
+  check('ESCALATION_SECONDS is the SQL\'s 90 (the other waiters SEE a request at the same moment they are PUSHED it)', P.ESCALATION_SECONDS === 90 && /make_interval\(secs => 90\)/.test(m061))
+  check('the SQL names the table\'s waiter first, then management, then the roster rule (in that order)',
+    m061.indexOf('-- 1. the table\'s own waiter') < m061.indexOf('-- 2. management oversight') && m061.indexOf('-- 2. management oversight') < m061.indexOf('-- 3. everyone else'))
+  check('the SQL\'s management titles are the call rule\'s minus "waiter" (owner / general manager / shift manager / dev)',
+    /v_staff\.badge in \('owner', 'general_manager', 'manager'\)/.test(m061) && /lower\(coalesce\(v_staff\.badge, ''\)\) = 'dev'/.test(m061) && /v_staff\.role = 'owner'/.test(m061))
+  check('the two helpers that take ANY staff id are not executable by signed-in users (they would be an "is X on shift" oracle)',
+    /revoke execute on function public\.waiter_staff_can_handle_table\(uuid, uuid, timestamptz\) from public, anon, authenticated;/.test(m061) && !/grant\s+execute on function public\.waiter_staff_can_handle_table/.test(m061))
+  check('every customer-facing function of 061 is granted to nobody (service role only)',
+    ['table_session_waiter(text)', 'create_table_call(integer, text, integer, integer)', 'create_table_call_for_session(text, text, integer, integer)', 'waiter_table_holder(uuid)']
+      .every((f) => new RegExp(`revoke execute on function public\\.${f.replace(/[()]/g, '\\$&')} from public, anon, authenticated;`).test(m061)
+        && !new RegExp(`grant\\s+execute on function public\\.${f.replace(/[()]/g, '\\$&')}`).test(m061)))
+  check('the feed triggers can never lose a customer\'s order, call or connection (each swallows its own failure)', (m061.match(/exception when others then/g) ?? []).length === 3)
+  check('linking a table claims it THROUGH the existing guard trigger (the caller\'s own id only) and writes the feed event',
+    /update public\.waiter_tables t set held_by_staff_id = v_staff where t\.id = p_table_id/.test(m061) && /'table_chained'/.test(m061))
+  check('the feed vocabulary keeps 023\'s list and adds exactly the four new events',
+    ['table_chained', 'customer_connected', 'customer_order', 'customer_call'].every((e) => new RegExp(`'${e}'`).test(m061)) && /'item_reassigned'/.test(m061))
+}
+
+section('the staff alerts — wording, tags, urgency')
+{
+  const call = P.buildCallPayload({ callId: 'c1', tableNumber: 12, kind: 'bill', cartItems: 3 }, 'oms')
+  check('a call says the table and what they want, and stays on screen', call.kind === 'table-call' && /12/.test(call.title) && /חשבון/.test(call.title) && call.urgent === true && call.vibrate.length > 0)
+  check('…its body mentions the cart only when there is one', /3 פריטים/.test(call.body) && !/עגלה/.test(P.buildCallPayload({ callId: 'c1', tableNumber: 12, kind: 'waiter', cartItems: 0 }, 'oms').body))
+  check('…one tag per call, so a repeat REPLACES it in the tray', call.tag === 'table-call-c1')
+  check('every call kind has its own words, and an unknown kind falls back to "waiter" (never "undefined")',
+    ['waiter', 'bill', 'assistance'].every((k) => !/undefined/.test(P.buildCallPayload({ callId: 'x', tableNumber: 1, kind: k, cartItems: 0 }, 'portal').title))
+    && /קורא למלצר/.test(P.buildCallPayload({ callId: 'x', tableNumber: 1, kind: 'nonsense', cartItems: 0 }, 'portal').title))
+  const con = P.buildConnectedPayload({ tableNumber: 5 }, 'oms')
+  check('"customers connected" is information, not an alarm: not urgent, one notification per table', con.kind === 'table-connected' && con.urgent === false && con.tag === 'table-connected-5' && /5/.test(con.title))
+  const ord = P.buildOrderPayload({ submissionId: 's1', tableNumber: 7, itemCount: 4, totalAgorot: 8200 }, 'oms')
+  const esc = P.escalated(ord, 90)
+  check('an ESCALATED alert says how long it has waited, has its own tag (it must not replace the first) and is urgent',
+    /90 שניות/.test(esc.body) && esc.tag === 'table-order-s1-escalated' && esc.tag !== ord.tag && esc.urgent === true && /מי פנוי/.test(esc.body) && ord.body.length > 0 && esc.body.includes(ord.body))
+  check('…and past two minutes it speaks in minutes', /3 דקות/.test(P.escalated(ord, 180).body))
+  check('the POS opens its own home, the portal opens the staff dashboard (for every kind)',
+    [call, con, ord, P.buildReadyPayload({ orderId: 'o', tableLabel: '4', itemNames: ['בירה'], station: 'bar' }, 'oms'), P.buildSentPayload({ orderId: 'o', batchNo: 1, tableLabel: '4', station: 'bar', itemCount: 2 }, 'oms')].every((x) => x.url === '/')
+    && [P.buildCallPayload({ callId: 'c', tableNumber: 1, kind: 'waiter', cartItems: 0 }, 'portal'), P.buildConnectedPayload({ tableNumber: 1 }, 'portal')].every((x) => x.url === '/staff/dashboard'))
+  const ready = P.buildReadyPayload({ orderId: 'o1', tableLabel: '4', itemNames: ['א', 'ב', 'ג', 'ד', 'ה'], station: 'kitchen' }, 'oms')
+  check('a ready alert lists at most three items and counts the rest', /\+2/.test(ready.body) && ready.title.includes('4') && ready.tag === 'items-ready-o1')
+  const sent = P.buildSentPayload({ orderId: 'o1', batchNo: 2, tableLabel: '4', station: 'kitchen', itemCount: 3 }, 'oms')
+  check('a "sent to the station" alert names the station and the table, with a tag per order+batch+station', /מטבח/.test(sent.title) && /3 פריטים/.test(sent.body) && sent.tag === 'items-sent-o1-2-kitchen' && /בר/.test(P.buildSentPayload({ orderId: 'o', batchNo: 1, tableLabel: '1', station: 'bar', itemCount: 1 }, 'oms').title))
+}
+
+section('the call route — a connected phone names no table; the typed way still works')
+{
+  const routeFile = code('src/app/api/table/call/route.ts')
+  const route = routeFile.slice(routeFile.indexOf('export async function POST'))
+  const idx = (re) => { const m = route.search(re); return m < 0 ? Infinity : m }
+  check('rails in order: origin/JSON → size → the switch → rate limits → the body → the database',
+    idx(/originHost !== host/) < idx(/content-length/) && idx(/content-length/) < idx(/flags\.call/) && idx(/flags\.call/) < idx(/checkRateLimit/) && idx(/checkRateLimit/) < idx(/request\.json\(\)/) && idx(/request\.json\(\)/) < idx(/\.rpc\(/))
+  check('a connected phone uses the SESSION\'s table: the RPC is handed the token, never a table number', /rpc\('create_table_call_for_session', \{\s*p_token: token,\s*p_kind/.test(route) && !/create_table_call_for_session[\s\S]{0,200}p_table_number/.test(route))
+  check('…its input is validated by the session gate (a tableNumber in the body is ignored, not used)', /validateSessionCallInput\(body\)/.test(route))
+  check('a session the database no longer accepts falls through to the typed number — and says so when there is none', /\['no_session', 'expired', 'ended'\]/.test(route) && /token \? 'no_session' : parsed\.error/.test(route))
+  check('before migration 061 exists (42883) the typed way still works exactly as before', /error\.code !== '42883'/.test(route) && /rpc\('create_table_call'/.test(route))
+  check('the waiter\'s FIRST name comes from table_session_waiter, only for a connected phone', /rpc\('table_session_waiter', \{ p_token: token \}\)/.test(route) && /waiterName/.test(route))
+  check('a repeat tap (duplicate) pages nobody twice', /const duplicate = row\.reason === 'duplicate'/.test(route) && /if \(!duplicate && typeof row\.call_id === 'string'\)/.test(route))
+  check('the push is after the response and carries the TABLE the database named', /afterResponse\(\(\) => notifyStaffOfCall\(alert\)\)/.test(route) && /tableId: row\.table_id \?\? null/.test(route))
+  check('the response echoes no id', !/call_id/.test(route.slice(route.indexOf('NextResponse.json({ ok: true'))))
+  check('the push may sleep through the escalation window', /export const maxDuration = 150/.test(routeFile))
+
+  const vs = C.validateSessionCallInput({ kind: 'bill', cartItems: 2, cartTotalAgorot: 500, tableNumber: 99 })
+  check('the session gate takes kind and cart, and DROPS a table number a body carries (it cannot name a table)', vs.ok && vs.value.kind === 'bill' && !('tableNumber' in vs.value))
+  check('…bad kind / bad cart / non-object are refused', C.validateSessionCallInput({ kind: 'x' }).error === 'bad_kind' && C.validateSessionCallInput({ cartItems: -1 }).error === 'bad_cart' && C.validateSessionCallInput(null).error === 'bad_request' && C.validateSessionCallInput([]).error === 'bad_request')
+  check('…an empty body is a plain "waiter" call', C.validateSessionCallInput({}).ok && C.validateSessionCallInput({}).value.kind === 'waiter')
+  check('the typed gate still requires a table', C.validateCallInput({ kind: 'waiter' }).error === 'bad_table' && C.validateCallInput({ tableNumber: 12 }).ok)
+  check('the session reasons map to a status (the route can refuse with them)', C.CALL_REASON_STATUS.no_session === 401 && C.CALL_REASON_STATUS.expired === 410 && C.CALL_REASON_STATUS.ended === 410)
+
+  const sess = code('src/app/api/table/session/route.ts')
+  check('the session GET returns the waiter\'s first name (never anything else about them)', /rpc\('table_session_waiter', \{ p_token: token \}\)/.test(sess) && /waiterName:/.test(sess))
+  check('connecting pushes the table\'s waiter, after the response', /afterResponse\(\(\) => notifyStaffOfConnection\(alert\)\)/.test(sess) && /typeof row\.table_id === 'string'/.test(sess))
+  const parsed = R.parseSessionView({ connected: true, tableNumber: 4, expiresAt: 'x', shiftOpen: true, sent: [], waiterName: '  דנה ' })
+  check('the phone\'s view carries the waiter\'s name, trimmed and bounded; anything else is "not connected"', parsed.connected === true && parsed.waiterName === 'דנה'
+    && R.parseSessionView({ connected: true, tableNumber: 4 }).connected === false && R.parseSessionView(null).connected === false
+    && R.parseSessionView({ connected: true, tableNumber: 4, expiresAt: 'x', waiterName: 'x'.repeat(200) }).waiterName.length === 40
+    && R.parseSessionView({ connected: true, tableNumber: 4, expiresAt: 'x', waiterName: 5 }).waiterName === null)
+}
+
+section('the staff-event route — the POS tells the portal what happened on the floor')
+{
+  const routeFile = code('src/app/api/push/staff-event/route.ts')
+  const route = routeFile.slice(routeFile.indexOf('export async function POST'))
+  const idx = (re) => { const m = route.search(re); return m < 0 ? Infinity : m }
+  check('rails in order: origin → size → the Bearer token → an ACTIVE staff row → rate limits → validation → the work',
+    idx(/ALLOWED_ORIGINS\.has\(origin\)/) < idx(/content-length/) && idx(/content-length/) < idx(/Bearer/) && idx(/Bearer/) < idx(/auth\.getUser\(token\)/) &&
+    idx(/auth\.getUser\(token\)/) < idx(/\.from\('staff'\)/) && idx(/\.from\('staff'\)/) < idx(/checkRateLimit/) && idx(/checkRateLimit/) < idx(/safeParse/) && idx(/safeParse/) < idx(/afterResponse/))
+  check('only the POS\'s own origin is allowed (and localhost only outside production)', /'https:\/\/staff\.ayeka\.bar'/.test(routeFile) && /NODE_ENV === 'production' \? \[\]/.test(routeFile))
+  check('the token is verified by the Auth server and must belong to an ACTIVE staff member', /service\.auth\.getUser\(token\)/.test(route) && /\.active\s*!==\s*true|active\?: boolean/.test(route) && /\.eq\('auth_user_id', userId\)/.test(route))
+  check('the request carries ids ONLY: a strict schema with uuids and bounded lists, no recipient, no message', /\.strict\(\)/.test(routeFile) && /z\.string\(\)\.uuid\(\)/.test(routeFile) && /\.max\(30\)/.test(routeFile) && !/recipient|title|body:\s*z/.test(routeFile.replace(/const body = /, '')))
+  check('a per-person and a global rate limit', /staff-event:\$\{staffId\}/.test(route) && /'staff-event:global'/.test(route))
+  check('the work happens AFTER the response and the answer is only { ok: true }', /afterResponse\(\(\) =>/.test(route) && /reply\(origin, 200, \{ ok: true \}\)/.test(route))
+  check('a preflight is answered for the POS\'s origin only', /export async function OPTIONS/.test(routeFile) && /Access-Control-Allow-Origin/.test(routeFile) && /ALLOWED_ORIGINS\.has\(origin\)/.test(routeFile.slice(routeFile.indexOf('function cors'), routeFile.indexOf('const reply'))))
+
+  const se = code('src/lib/push/station-events.ts')
+  check('"ready" re-reads the items from the database: really ready, really recent, on an open order, and the named ids must be among them',
+    /\.eq\('status', 'ready'\)/.test(se) && /fresh\(i\.ready_at\)/.test(se) && /readyAll\.some\(\(i\) => named\.has\(i\.id\)\)/.test(se) && /row\.status === 'open' \|\| row\.status === 'filed'/.test(se))
+  check('…and tells the TABLE\'S waiter (the holder, else the order\'s waiter, else the shift) — never a name the POS sent', /waiter_table_holder/.test(se) && /order\.waiter_staff_id/.test(se) && /waiter_call_recipient_staff_ids/.test(se))
+  check('"sent" tells the people CHECKED IN at that station in the open shift (the latest event per person)', /waiter_station_checkins/.test(se) && /event === 'check_in'/.test(se) && /shift_session_id', shiftId/.test(se) && /i\.status === 'sent'/.test(se))
+  check('both never throw (best-effort) and do nothing without VAPID keys', (se.match(/catch \(err\)/g) ?? []).length === 2 && (se.match(/ensureVapidConfigured\(\)/g) ?? []).length === 2)
+}
+
+section('the customer\'s words — the waiter, in all three languages')
+{
+  for (const [name, entry] of Object.entries({
+    'call: connected intro': C.CALL_UI.introConnected, 'call: connected table': C.CALL_UI.connectedTable, 'call: your waiter': C.CALL_UI.yourWaiter,
+    'call: sent with the waiter': C.CALL_UI.sentBodyWaiter, 'call: session ended (no_session)': C.CALL_UI.errors.no_session, 'call: session ended (expired)': C.CALL_UI.errors.expired,
+    'call: session ended (ended)': C.CALL_UI.errors.ended, 'remote: your waiter': R.REMOTE_UI.yourWaiter, 'remote: no waiter yet': R.REMOTE_UI.noWaiterYet,
+  })) check(`${name} exists in he, en and ar, each in its own script`, LANGS.every((l) => typeof entry?.[l] === 'string' && entry[l].trim().length > 0) && HEBREW.test(entry.he) && ARABIC.test(entry.ar) && LATIN.test(entry.en) && !ARABIC.test(entry.en))
+  check('the waiter\'s name is interpolated, never concatenated (word order differs by language)', LANGS.every((l) => C.CALL_UI.yourWaiter[l].includes('{name}') && R.REMOTE_UI.yourWaiter[l].includes('{name}') && C.CALL_UI.sentBodyWaiter[l].includes('{name}') && C.CALL_UI.connectedTable[l].includes('{n}')))
+  check('the helpers fill the placeholders', R.waiterText('דנה', 'he') === 'המלצר שלכם: דנה' && C.callWaiterText('Dana', 'en') === 'Your waiter: Dana' && C.callTableText(7, 'en') === 'Table 7' && !/\{/.test(C.callSentWaiterText('דנה', 'he')))
+  const sheet = code('src/components/cart/CallWaiterSheet.tsx')
+  check('the call sheet asks the session first, and a connected phone is shown its table and waiter instead of an input', /fetch\('\/api\/table\/session'/.test(sheet) && /parseSessionView/.test(sheet) && /session !== null && !connected/.test(sheet) && /callWaiterText\(connected\.waiterName/.test(sheet))
+  check('…and sends NO table number when connected', /\.\.\.\(connected \? \{\} : \{ tableNumber \}\)/.test(sheet))
+  check('…and if the connection ended meanwhile, the number field appears (it does not retry blind)', /json\.error === 'no_session' \|\| json\.error === 'ended' \|\| json\.error === 'expired'\) setSession\(\{ connected: false \}\)/.test(sheet))
+  const order = code('src/components/cart/TableOrderSheet.tsx')
+  check('the connect sheet shows who the waiter is and refreshes every 5 seconds (it used to be 15)', /waiterText\(connected\.waiterName/.test(order) && /POLL_MS = 5_000/.test(order))
 }
 
 console.log(`\n${pass} passed, ${failures.length} failed`)

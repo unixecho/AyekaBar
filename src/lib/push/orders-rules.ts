@@ -79,8 +79,11 @@ const shekel = (agorot: number): string => {
   return Number.isInteger(v) ? String(v) : v.toFixed(2)
 }
 
-export interface OrderPayload {
-  kind: 'table-order'
+export type StaffAlertKind = 'table-order' | 'table-call' | 'table-connected' | 'items-ready' | 'items-sent'
+
+/** What every staff alert looks like on the wire (both service workers validate it as DATA). */
+export interface StaffPayload {
+  kind: StaffAlertKind
   title: string
   body: string
   /** A same-origin path. The POS opens its own home (the review queue is there); the portal opens the
@@ -90,8 +93,17 @@ export interface OrderPayload {
   tag: string
   vibrate: number[]
   /** Stays on screen until dealt with, where the platform allows it. */
-  urgent: true
+  urgent: boolean
 }
+
+export type OrderPayload = StaffPayload & { kind: 'table-order'; urgent: true }
+
+/** How long a request may wait for the table's own waiter before the rest of the shift is told as well.
+ *  ⚠️ SPELLED TWICE: migration 061's waiter_staff_can_handle_table() lets the other waiters SEE a request
+ *  after the same 90 seconds. scripts/check-remote-ordering.mjs pins the two together. */
+export const ESCALATION_SECONDS = 90
+
+const url = (app: PushApp) => (app === 'oms' ? '/' : '/staff/dashboard')
 
 export function buildOrderPayload(alert: OrderAlert, app: PushApp): OrderPayload {
   const table = alert.tableNumber ?? '?'
@@ -100,9 +112,107 @@ export function buildOrderPayload(alert: OrderAlert, app: PushApp): OrderPayload
     kind: 'table-order',
     title: `שולחן ${table} שלח הזמנה`,
     body: `${items} פריטים · ₪${shekel(alert.totalAgorot)} · ממתין לאישור`,
-    url: app === 'oms' ? '/' : '/staff/dashboard',
+    url: url(app),
     tag: `table-order-${alert.submissionId}`,
     vibrate: [...ORDER_VIBRATION],
+    urgent: true,
+  }
+}
+
+export type CallKind = 'waiter' | 'bill' | 'assistance'
+
+export interface CallAlert {
+  callId: string
+  tableNumber: number | null
+  kind: CallKind
+  /** Lines in the customer's cart when they called — counts only. */
+  cartItems: number
+}
+
+const CALL_TITLE: Record<CallKind, string> = {
+  waiter: 'קורא למלצר',
+  bill: 'מבקש את החשבון',
+  assistance: 'מבקש עזרה',
+}
+
+/** A customer asked for a waiter / the bill / help. Stays on screen: a person is waving. */
+export function buildCallPayload(alert: CallAlert, app: PushApp): StaffPayload {
+  const table = alert.tableNumber ?? '?'
+  const kind: CallKind = alert.kind in CALL_TITLE ? alert.kind : 'waiter'
+  const cart = Math.max(0, Math.round(alert.cartItems))
+  return {
+    kind: 'table-call',
+    title: `שולחן ${table} ${CALL_TITLE[kind]}`,
+    body: cart > 0 ? `יש גם הזמנה בעגלה (${cart} פריטים) · ממתין לך` : 'ממתין לך',
+    url: url(app),
+    tag: `table-call-${alert.callId}`,
+    vibrate: [...ORDER_VIBRATION],
+    urgent: true,
+  }
+}
+
+export interface ConnectedAlert {
+  tableNumber: number | null
+  /** Phones connected to the visit right now, when known. */
+  devices?: number
+}
+
+/** Customers connected to a table the waiter linked: a short heads-up, not an alarm. */
+export function buildConnectedPayload(alert: ConnectedAlert, app: PushApp): StaffPayload {
+  const table = alert.tableNumber ?? '?'
+  return {
+    kind: 'table-connected',
+    title: `הלקוחות התחברו לשולחן ${table}`,
+    body: 'הזמנות שיישלחו משם יגיעו אליך לאישור',
+    url: url(app),
+    // One notification per table: a second phone joining replaces it rather than stacking.
+    tag: `table-connected-${table}`,
+    vibrate: [140, 70, 140],
+    urgent: false,
+  }
+}
+
+/** The same alert, said again to the rest of the shift because the table's own waiter has not taken it. */
+export function escalated(payload: StaffPayload, waitedSeconds: number): StaffPayload {
+  const mins = waitedSeconds >= 120 ? `${Math.round(waitedSeconds / 60)} דקות` : `${Math.max(1, Math.round(waitedSeconds))} שניות`
+  return {
+    ...payload,
+    title: `⏱ ${payload.title}`,
+    body: `ממתין כבר ${mins} — מי פנוי? · ${payload.body}`,
+    tag: `${payload.tag}-escalated`,
+    urgent: true,
+  }
+}
+
+/** Items a bartender / cook just marked ready — for the waiter who owns the table. */
+export interface ReadyAlert { orderId: string; tableLabel: string; itemNames: string[]; station: 'bar' | 'kitchen' | null }
+
+export function buildReadyPayload(alert: ReadyAlert, app: PushApp): StaffPayload {
+  const names = alert.itemNames.slice(0, 3).join(', ')
+  const more = alert.itemNames.length > 3 ? ` +${alert.itemNames.length - 3}` : ''
+  return {
+    kind: 'items-ready',
+    title: `שולחן ${alert.tableLabel} · מוכן לאיסוף`,
+    body: `${names}${more}`.trim() || 'פריטים מוכנים',
+    url: url(app),
+    tag: `items-ready-${alert.orderId}`,
+    vibrate: [...ORDER_VIBRATION],
+    urgent: true,
+  }
+}
+
+/** A waiter sent items to a station — for the people working that station. */
+export interface SentAlert { orderId: string; batchNo: number; tableLabel: string; station: 'bar' | 'kitchen'; itemCount: number }
+
+export function buildSentPayload(alert: SentAlert, app: PushApp): StaffPayload {
+  const where = alert.station === 'bar' ? 'בר' : 'מטבח'
+  return {
+    kind: 'items-sent',
+    title: `${where} · הזמנה חדשה משולחן ${alert.tableLabel}`,
+    body: `${Math.max(1, Math.round(alert.itemCount))} פריטים`,
+    url: url(app),
+    tag: `items-sent-${alert.orderId}-${alert.batchNo}-${alert.station}`,
+    vibrate: [200, 80, 200],
     urgent: true,
   }
 }

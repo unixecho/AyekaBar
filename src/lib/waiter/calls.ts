@@ -9,7 +9,12 @@
 // (migration 057). Every front-of-house person who is on shift and inside the
 // shift's hours is then told, in the POS, until one of them taps "קיבלתי".
 //
-// ── HOW THE TABLE IS KNOWN, AND WHY THAT IS A DECISION NOT A DEFAULT ────
+// ── HOW THE TABLE IS KNOWN (updated 2026-10-15) ─────────────────────────
+// A customer CONNECTED to their table (a waiter gave them a code — lib/cart/remote.ts) is not asked at all: the
+// table, and the waiter who looks after it, come from their session. Only a customer who is not connected types a
+// number, as below. The route accepts both; `validateSessionCallInput` is the first, `validateCallInput` the second.
+//
+// ── …AND FOR THE CUSTOMER WHO TYPES IT, WHY THAT IS A DECISION NOT A DEFAULT ────
 // The customer TYPES the number printed on the table. PLAN_MENU_CART.md §9
 // rightly says a typed number "proves nothing" — and for ORDERING (Phase 2)
 // that is disqualifying, which is why that phase is gated on a waiter-issued
@@ -79,6 +84,21 @@ export interface CallInput {
 const isIntInRange = (v: unknown, lo: number, hi: number): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi
 
+/** The kind + cart half of the gate, shared by both entry points. */
+function validateKindAndCart(b: Record<string, unknown>):
+  { ok: true; kind: CallKind; items: number; total: number } | { ok: false; error: CallError } {
+  const kind = b.kind === undefined ? 'waiter' : b.kind
+  if (typeof kind !== 'string' || !(CALL_KINDS as readonly string[]).includes(kind)) return { ok: false, error: 'bad_kind' }
+
+  // The cart context is optional and advisory — counts only, never contents.
+  const items = b.cartItems === undefined ? 0 : b.cartItems
+  const total = b.cartTotalAgorot === undefined ? 0 : b.cartTotalAgorot
+  if (!isIntInRange(items, 0, CALL_CART_ITEMS_MAX) || !isIntInRange(total, 0, CALL_CART_TOTAL_MAX_AGOROT)) {
+    return { ok: false, error: 'bad_cart' }
+  }
+  return { ok: true, kind: kind as CallKind, items, total }
+}
+
 /** The whole gate in front of the public endpoint's insert. Returns the exact
  *  object that is used — never the caller's own with a few fields checked.
  *  Accepts a numeric STRING for the table (a form field), nothing else. */
@@ -90,23 +110,27 @@ export function validateCallInput(body: unknown): { ok: true; value: CallInput }
   if (typeof table === 'string' && /^\s*\d{1,4}\s*$/.test(table)) table = Number(table.trim())
   if (!isIntInRange(table, CALL_TABLE_MIN, CALL_TABLE_MAX)) return { ok: false, error: 'bad_table' }
 
-  const kind = b.kind === undefined ? 'waiter' : b.kind
-  if (typeof kind !== 'string' || !(CALL_KINDS as readonly string[]).includes(kind)) return { ok: false, error: 'bad_kind' }
+  const rest = validateKindAndCart(b)
+  if (!rest.ok) return rest
+  return { ok: true, value: { tableNumber: table, kind: rest.kind, cartItems: rest.items, cartTotalAgorot: rest.total } }
+}
 
-  // The cart context is optional and advisory — counts only, never contents.
-  const items = b.cartItems === undefined ? 0 : b.cartItems
-  const total = b.cartTotalAgorot === undefined ? 0 : b.cartTotalAgorot
-  if (!isIntInRange(items, 0, CALL_CART_ITEMS_MAX) || !isIntInRange(total, 0, CALL_CART_TOTAL_MAX_AGOROT)) {
-    return { ok: false, error: 'bad_cart' }
-  }
-
-  return { ok: true, value: { tableNumber: table, kind: kind as CallKind, cartItems: items, cartTotalAgorot: total } }
+/** The same gate for a CONNECTED phone: no table in the request at all — it is the session's. A `tableNumber` the
+ *  body happens to carry is ignored, never used (a customer cannot call a table they are not at). */
+export type SessionCallInput = Omit<CallInput, 'tableNumber'>
+export function validateSessionCallInput(body: unknown): { ok: true; value: SessionCallInput } | { ok: false; error: CallError } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, error: 'bad_request' }
+  const rest = validateKindAndCart(body as Record<string, unknown>)
+  if (!rest.ok) return rest
+  return { ok: true, value: { kind: rest.kind, cartItems: rest.items, cartTotalAgorot: rest.total } }
 }
 
 /** What create_table_call() can say back, mapped to a status. */
-export type CallRpcReason = 'bad_kind' | 'unknown_table' | 'no_shift'
+export type CallRpcReason = 'bad_kind' | 'unknown_table' | 'no_shift' | 'no_session' | 'expired' | 'ended'
 export const CALL_REASON_STATUS: Record<CallRpcReason, number> = {
   bad_kind: 400, unknown_table: 404, no_shift: 409,
+  // A session the database no longer accepts: the route then falls back to the typed number (or says so).
+  no_session: 401, expired: 410, ended: 410,
 }
 
 // ── Words (customer-facing: all three languages) ─────────────────────────
@@ -122,6 +146,10 @@ export const CALL_UI = {
     bill:       { he: 'חשבון', en: 'The bill', ar: 'الحساب' },
     assistance: { he: 'עזרה', en: 'Help', ar: 'مساعدة' },
   } as Record<CallKind, Tri>,
+  introConnected: { he: 'בחרו מה צריך — המלצר שלכם יקבל הודעה מיד.', en: 'Pick what you need — your waiter is notified right away.', ar: 'اختاروا ما تحتاجون — سيصل إشعار للنادل فوراً.' },
+  connectedTable: { he: 'שולחן {n}', en: 'Table {n}', ar: 'الطاولة {n}' },
+  yourWaiter:  { he: 'המלצר שלכם: {name}', en: 'Your waiter: {name}', ar: 'نادلكم: {name}' },
+  sentBodyWaiter: { he: 'נשלחה הודעה אל {name}. אין צורך ללחוץ שוב.', en: 'A message has gone to {name}. No need to tap again.', ar: 'تم إرسال إشعار إلى {name}. لا حاجة للضغط مجدداً.' },
   tableLabel:  { he: 'מספר השולחן', en: 'Table number', ar: 'رقم الطاولة' },
   tableHint:   { he: 'המספר מופיע על השולחן.', en: 'The number is printed on the table.', ar: 'الرقم مكتوب على الطاولة.' },
   cartNote:    { he: 'נעדכן את המלצר שיש הזמנה בעגלה.', en: 'We will let the waiter know there is an order in the cart.', ar: 'سنُعلم النادل بوجود طلب في السلة.' },
@@ -134,11 +162,19 @@ export const CALL_UI = {
     bad_table:     { he: 'מספר שולחן לא תקין.', en: 'That table number is not valid.', ar: 'رقم الطاولة غير صالح.' },
     unknown_table: { he: 'לא מצאנו שולחן עם המספר הזה.', en: 'We could not find a table with that number.', ar: 'لم نجد طاولة بهذا الرقم.' },
     no_shift:      { he: 'אין כרגע צוות במשמרת. אפשר לגשת לבר.', en: 'No staff are on shift right now. Please come to the bar.', ar: 'لا يوجد طاقم في المناوبة الآن. تفضلوا إلى البار.' },
+    no_session:    { he: 'החיבור לשולחן הסתיים. הקלידו את מספר השולחן.', en: 'Your table connection has ended. Please type the table number.', ar: 'انتهى الاتصال بالطاولة. اكتبوا رقم الطاولة.' },
+    expired:       { he: 'החיבור לשולחן הסתיים. הקלידו את מספר השולחן.', en: 'Your table connection has ended. Please type the table number.', ar: 'انتهى الاتصال بالطاولة. اكتبوا رقم الطاولة.' },
+    ended:         { he: 'החיבור לשולחן הסתיים. הקלידו את מספר השולחן.', en: 'Your table connection has ended. Please type the table number.', ar: 'انتهى الاتصال بالطاولة. اكتبوا رقم الطاولة.' },
     rate_limited:  { he: 'יותר מדי ניסיונות — נסו שוב בעוד רגע.', en: 'Too many tries — please wait a moment.', ar: 'محاولات كثيرة — انتظروا قليلاً.' },
     disabled:      { he: 'השירות הזה לא זמין כרגע.', en: 'This is not available right now.', ar: 'هذه الخدمة غير متاحة حالياً.' },
     server:        { he: 'משהו השתבש. אפשר לסמן למלצר ביד.', en: 'Something went wrong. Please wave a waiter over.', ar: 'حدث خطأ. يمكنكم الإشارة إلى النادل.' },
   } as Record<string, Tri>,
 } satisfies Record<string, unknown>
+
+/** "המלצר שלכם: דנה" — interpolated, never concatenated, so word order stays right in every language. */
+export const callWaiterText = (name: string, lang: Lang) => CALL_UI.yourWaiter[lang].replace('{name}', name)
+export const callTableText = (n: number, lang: Lang) => CALL_UI.connectedTable[lang].replace('{n}', String(n))
+export const callSentWaiterText = (name: string, lang: Lang) => CALL_UI.sentBodyWaiter[lang].replace('{name}', name)
 
 /** The message for a server error code, falling back to the generic one. */
 export function callErrorText(code: string | undefined, lang: Lang): string {

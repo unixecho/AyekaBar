@@ -9,6 +9,8 @@ import {
 import {
   remoteErrorFromReason, sanitizeSent, validateRedeemInput, type SessionView,
 } from '@/lib/cart/remote'
+import { notifyStaffOfConnection } from '@/lib/push/orders'
+import { afterResponse } from '@/lib/server/after'
 import { hashToken, orderingEnabled, readSessionToken, refuse, sameOriginJson, sameOriginOnly } from '@/lib/server/table-session'
 
 // A phone connecting to a table — and recovering that connection — with the six digits a waiter read out.
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest) {
       return refuse('server')
     }
     const row = (Array.isArray(data) ? data[0] : data) as
-      { ok?: boolean; reason?: string | null; session_token?: string; table_number?: number; expires_at?: string } | null | undefined
+      { ok?: boolean; reason?: string | null; session_token?: string; table_id?: string; table_number?: number; expires_at?: string } | null | undefined
     if (!row) return refuse('server')
 
     if (!row.ok) {
@@ -107,6 +109,14 @@ export async function POST(request: NextRequest) {
       { headers: noStore },
     )
     response.cookies.set(TABLE_SESSION_COOKIE, row.session_token, cookieOptions(expires))
+
+    // The table's waiter hears that their customers are connected (061: linking a table claimed it for them), and
+    // the activity feed already has the event (a trigger on the session row). Never awaited: a slow push service
+    // must not slow the customer's connect.
+    if (typeof row.table_id === 'string') {
+      const alert = { tableId: row.table_id, tableNumber: row.table_number, devices: 1 }
+      afterResponse(() => notifyStaffOfConnection(alert))
+    }
     return sealed(response)
   } catch (err) {
     console.error('table session POST error:', err)
@@ -143,8 +153,12 @@ export async function GET(request: NextRequest) {
         id: r.id, status: r.status, itemCount: r.item_count, totalAgorot: r.total_agorot, createdAt: r.created_at,
       })),
     )
+    // The table's waiter, by FIRST name only (061) — "your waiter: Dana". Null before 061 is applied, or when nobody
+    // is looking after the table.
+    const { data: waiter } = await service.rpc('table_session_waiter', { p_token: token })
     const view: SessionView = {
       connected: true, tableNumber: s.table_number, expiresAt: s.expires_at, shiftOpen: s.shift_open === true, sent,
+      waiterName: typeof waiter === 'string' && waiter.trim() ? waiter.trim().slice(0, 40) : null,
     }
     return NextResponse.json(view, { headers: noStore })
   } catch (err) {
