@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import type { Lang } from '@/lib/menu/types'
 import { INTRO_COPY, splitLine } from '@/lib/intro/copy'
 import {
-  INTRO_REPLAY, INTRO_SEEN_KEY, INTRO_SETTLE, INTRO_SKIP_MS, INTRO_SPARKLES, INTRO_TIMINGS,
+  INTRO_REPLAY, INTRO_SEEN_KEY, INTRO_SETTLE, INTRO_SHIELD_MS, INTRO_SKIP_MS, INTRO_SPARKLES, INTRO_TIMINGS,
   introCssVars, isIntroPath, pickVariant, planTimeline, type IntroVariant,
 } from '@/lib/intro/config'
 import './intro.css'
@@ -74,12 +74,14 @@ import './intro.css'
 // thereby also honours the owner's list of offered languages for free.
 //
 // ---- skipping ----
-// pointerdown on the overlay, any key (but not a shortcut), or a scroll. The
-// overlay keeps catching taps until it is gone: on touch, the `click` that
-// follows a tap goes to whatever is under the finger when the finger lifts, so
-// an overlay that stopped catching taps the instant it was tapped would let
-// "tap to skip" press the Menu button underneath. (Only the natural exit hands
-// taps through, and only once it is mostly transparent — `data-pass`.)
+// pointerdown on the overlay, any key (but not a shortcut), or a scroll. NOTHING
+// behind the intro is ever clickable (owner, 2026-10-15 — people skipping it were
+// pressing Instagram / Facebook underneath): the overlay keeps catching taps until
+// it is gone — on touch, the `click` that follows a tap goes to whatever is under
+// the finger when the finger lifts — it NEVER hands taps through, even while
+// fading (that used to start 280ms into the exit), and when it is removed a
+// transparent SHIELD keeps catching taps for INTRO_SHIELD_MS more, because a
+// person who taps to skip taps again a beat later.
 // Left non-focusable and `aria-hidden` on purpose: it is a decoration, the real
 // page is right there for assistive technology, and nothing here may trap a
 // keyboard.
@@ -107,8 +109,9 @@ export default function Intro() {
   const [lit, setLit] = useState(false)
   const [variant, setVariant] = useState<IntroVariant | null>(null)
   const [exit, setExit] = useState<Exit>(null)
-  const [pass, setPass] = useState(false)
   const [done, setDone] = useState(false)
+  // The invisible shield that outlives the overlay for a moment (INTRO_SHIELD_MS).
+  const [shield, setShield] = useState(false)
   const [lang, setLang] = useState<Lang | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -144,12 +147,12 @@ export default function Intro() {
       leaving = how
       stopSettle()
       setExit(how)
+      const finish = () => { setShield(true); setDone(true) }
       if (how === 'out') {
         replayPage()
-        later(() => setPass(true), timing.exit.passAtMs)
-        later(() => setDone(true), timing.exit.delayMs + timing.exit.ms + 40)
+        later(finish, timing.exit.delayMs + timing.exit.ms + 40)
       } else {
-        later(() => setDone(true), INTRO_SKIP_MS + 40)
+        later(finish, INTRO_SKIP_MS + 40)
       }
     }
 
@@ -189,7 +192,15 @@ export default function Intro() {
     }
   }, [enabled, done])
 
-  if (!enabled || done) return null
+  // The shield's own clock is a separate effect: the main one above tears down when `done` flips.
+  useEffect(() => {
+    if (!shield) return
+    const t = window.setTimeout(() => setShield(false), INTRO_SHIELD_MS)
+    return () => window.clearTimeout(t)
+  }, [shield])
+
+  if (!enabled) return null
+  if (done) return shield ? <div className="intro-shield" aria-hidden="true" data-intro-shield="" /> : null
 
   const copy = lang ? INTRO_COPY[lang] : null
   const dir = lang === 'en' ? 'ltr' : 'rtl'
@@ -205,7 +216,6 @@ export default function Intro() {
       data-variant={variant ?? undefined}
       data-out={exit === 'out' ? '' : undefined}
       data-skip={exit === 'skip' ? '' : undefined}
-      data-pass={pass ? '' : undefined}
     >
       <div className="intro-stage">
         <div className="intro-halo" />

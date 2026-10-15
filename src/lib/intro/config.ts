@@ -130,9 +130,6 @@ export interface IntroTiming {
     ms: number
     /** The coin + words travelling out (inside the fade above). */
     stageMs: number
-    /** After this long into the exit the overlay stops catching taps, so a
-     *  button that is already visible can be pressed. */
-    passAtMs: number
   }
   /** FIRST ONLY — how long the coin takes to turn from a three-quarter view to
    *  face-on. (0 in the repeat version, which never reads it.) */
@@ -151,7 +148,7 @@ const REPEAT: IntroTiming = {
   line2: { atMs: 640, stepMs: 32, wordMs: 520 },
   hint: { atMs: 1100, ms: 600 },
   holdMs: 650,
-  exit: { delayMs: 100, ms: 560, stageMs: 520, passAtMs: 280 },
+  exit: { delayMs: 100, ms: 560, stageMs: 520 },
   turnMs: 0,
   sparkMs: 0,
 }
@@ -169,7 +166,7 @@ const FIRST: IntroTiming = {
   line2: { atMs: 2000, stepMs: 52, wordMs: 660 },
   hint: { atMs: 1500, ms: 700 },
   holdMs: 1200,
-  exit: { delayMs: 120, ms: 700, stageMs: 640, passAtMs: 340 },
+  exit: { delayMs: 120, ms: 700, stageMs: 640 },
   turnMs: 1800,
   sparkMs: 1100,
 }
@@ -179,6 +176,13 @@ export const INTRO_TIMINGS: Record<IntroVariant, IntroTiming> = { first: FIRST, 
 /** A tap, key press or scroll — the way out for anyone who has seen it. Not
  *  per-version: leaving early is leaving early. */
 export const INTRO_SKIP_MS = 260
+
+/** After the overlay is gone (skipped or finished) an invisible shield keeps catching taps for this long
+ *  (owner, 2026-10-15: "when I skip the intro I accidentally click on buttons like insta, facebook"). A person who
+ *  taps to skip taps AGAIN a beat later, or double-taps, and the second tap used to land on whatever button sat under
+ *  the finger. Nothing behind the intro is ever clickable now: not while it plays, not while it fades, not for this
+ *  moment after. Short enough that nobody notices it, long enough to cover a double-tap. */
+export const INTRO_SHIELD_MS = 600
 
 /** Before showing anything the component waits for `<html lang>` and
  *  `<html class>` to stop changing: the language switcher and the

@@ -47,8 +47,9 @@ export type StorageKind = 'localStorage' | 'sessionStorage' | 'cookie'
  *  the visitor made, or a note that something has already been shown. The other
  *  two exist so that adding one is a deliberate act the harness can see. */
 export type StorageCategory = 'necessary' | 'functional' | 'analytics' | 'marketing'
-/** `table`: only a visitor who typed a code a waiter gave them (remote ordering, 2026-10-13). */
-export type StorageAudience = 'everyone' | 'signed-in' | 'table' | 'staff'
+/** `table`: only a visitor who typed a code a waiter gave them (remote ordering, 2026-10-13).
+ *  `join`: only a person who pressed "connect Google" on a staff onboarding link (2026-10-15). */
+export type StorageAudience = 'everyone' | 'signed-in' | 'table' | 'staff' | 'join'
 
 export interface StorageItem {
   id: string
@@ -75,7 +76,7 @@ export const CONSENT_MECHANISM_BUILT = false
 /** Shown on /cookies. A human bumps this when the PAGE's meaning changes; the
  *  one-time notice re-appears whenever the inventory itself changes — that is
  *  what `INVENTORY_VERSION` in notice.ts is pinned to (`inventoryVersion`, below). */
-export const PRIVACY_PAGE_UPDATED = '2026-10-04'
+export const PRIVACY_PAGE_UPDATED = '2026-10-15'
 
 export const STORAGE_REGISTRY: readonly StorageItem[] = [
   // ── needed for something the visitor is using ───────────────────────────
@@ -183,6 +184,31 @@ export const STORAGE_REGISTRY: readonly StorageItem[] = [
       'עד סוף הביקור בשולחן — לכל היותר 3 שעות מהרגע שהקוד הוקלד, או עד שהמלצר מסיים את הביקור. אפשר לנתק קודם מחלון ההזמנה.',
       'Until your visit at the table ends — at most 3 hours from when the code was first typed, or until the waiter ends the visit. You can disconnect sooner from the order window.',
       'حتى تنتهي زيارتكم للطاولة — بحد أقصى 3 ساعات من أول مرة كُتب فيها الرمز، أو حتى ينهي النادل الزيارة. يمكنكم قطع الاتصال قبل ذلك من نافذة الطلب.'),
+  },
+
+  {
+    // Staff onboarding (2026-10-15). A new employee opens the link the owner sent, presses "connect Google" and is sent
+    // to Google; this is how our sign-in page knows to bring them back to the onboarding screens and not to the site's
+    // front page. HttpOnly, sent only to the sign-in return address, gone after fifteen minutes.
+    id: 'join-intent', kind: 'cookie', name: 'ayeka_join_intent',
+    category: 'necessary', audience: 'join', sentToServer: true, ttlHours: 0.25,
+    attributes: 'Path=/auth/callback · SameSite=Lax · HttpOnly · Secure · expires after 15 minutes',
+    what: t(
+      'מזהה אקראי של קישור ההצטרפות שפתחתם. אין בו שם, טלפון או כל פרט אישי, והדף עצמו לא יכול לקרוא אותו.',
+      'The random identifier of the join link you opened. It holds no name, phone number or personal detail, and the page itself cannot read it.',
+      'المعرّف العشوائي لرابط الانضمام الذي فتحتموه. لا يحتوي على اسم أو رقم هاتف أو أي تفصيل شخصي، ولا تستطيع الصفحة نفسها قراءته.'),
+    why: t(
+      'כדי שאחרי ההתחברות עם Google תחזרו למסכי ההצטרפות לצוות, ולא לעמוד הראשי של האתר.',
+      'So that after signing in with Google you come back to the team onboarding screens, not the site\u2019s front page.',
+      'لكي تعودوا بعد تسجيل الدخول عبر Google إلى شاشات الانضمام إلى الطاقم، وليس إلى الصفحة الرئيسية للموقع.'),
+    when: t(
+      'רק כשעובד חדש לוחץ על "המשך עם Google" בקישור הצטרפות שקיבל מההנהלה. מי שלא פותח קישור כזה לא מקבל אותה.',
+      'Only when a new employee taps \u201cContinue with Google\u201d on a join link management sent them. Anyone who does not open such a link never gets it.',
+      'فقط عندما يضغط موظف جديد على «المتابعة مع Google» في رابط انضمام أرسلته الإدارة. من لا يفتح رابطًا كهذا لا يحصل عليه.'),
+    keeps: t(
+      'עד 15 דקות, או עד שחזרתם מ-Google — מה שקודם. אחר כך היא נמחקת.',
+      'Up to 15 minutes, or until you are back from Google \u2014 whichever comes first. Then it is deleted.',
+      'حتى 15 دقيقة، أو حتى تعودوا من Google — أيهما أسبق. بعدها تُحذف.'),
   },
 
   // ── a choice the visitor made, or a note that something was already shown ─

@@ -8,7 +8,7 @@ import StaffProfileStep from '@/components/staff/StaffProfileStep'
 import StaffTour from '@/components/staff/StaffTour'
 import { haptic } from '@/lib/haptics'
 import {
-  WIZARD_STEPS, joinPath, messageFor, progressIndex, wizardStep,
+  JOIN_AUTH_ERROR_MESSAGE, WIZARD_STEPS, messageFor, progressIndex, wizardStep,
   type ClaimReason, type JoinStatus,
 } from '@/lib/staff/join'
 
@@ -39,16 +39,19 @@ export interface JoinWizardProps {
   alreadyStaff: boolean
   notSetUp: boolean
   limited: boolean
+  /** Google's return trip did not complete (`?error=auth`): back to the connect screen, with a sentence. */
+  authFailed?: boolean
 }
 
 export default function JoinWizard(p: JoinWizardProps) {
   const supabase = createClient()
-  const [introSeen, setIntroSeen] = useState(false)
+  // A failed Google round trip lands on the connect screen (not the welcome again) with the reason said.
+  const [introSeen, setIntroSeen] = useState(!!p.authFailed)
   const [claimed, setClaimed] = useState(false)
   const [profileDone, setProfileDone] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(p.authFailed ? JOIN_AUTH_ERROR_MESSAGE : null)
   const [refusal, setRefusal] = useState<ClaimReason | null>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
@@ -61,11 +64,23 @@ export default function JoinWizard(p: JoinWizardProps) {
 
   async function startGoogle() {
     setBusy(true); setError(null)
+    // Tell the server which link this browser is walking, and keep Google's return URL PLAIN (the same one /login uses).
+    // The callback reads that memory (an HttpOnly cookie) and sends the person back here — the old
+    // `/auth/callback?next=/join/<token>` was not accepted by Supabase's redirect allow-list and dropped people on the
+    // portal (2026-10-15, see lib/staff/join.ts). If the request cannot be made, fall back to the old way rather than fail.
+    let redirectTo = `${window.location.origin}/auth/callback`
+    try {
+      const r = await fetch('/api/join/intent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: p.token }),
+      })
+      if (!r.ok) throw new Error('intent')
+    } catch {
+      redirectTo += `?next=${encodeURIComponent(`/join/${p.token}`)}`
+    }
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        // Back to THIS page, signed in. /auth/callback only ever follows a same-origin path.
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(joinPath(p.token))}`,
+        redirectTo,
         // Force the account chooser — the whole point of this screen is picking the right account.
         queryParams: { prompt: 'select_account' },
       },

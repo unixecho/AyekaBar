@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { checkRateLimit, clientIp } from '@/lib/rate-limit'
-import { JOIN_LIMITS, isJoinToken, parsePeek } from '@/lib/staff/join'
+import { JOIN_AUTH_ERROR, JOIN_LIMITS, isJoinToken, parsePeek } from '@/lib/staff/join'
 import { peekJoin } from '@/lib/staff/join-server'
 import { badgeMeta } from '@/lib/staff/badges'
 import JoinWizard from '@/components/staff/JoinWizard'
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 }
 export const dynamic = 'force-dynamic'
 
-export default async function JoinPage({ params }: { params: { token: string } }) {
+export default async function JoinPage({ params, searchParams }: { params: { token: string }; searchParams?: { error?: string | string[] } }) {
   const token = params.token
   const wellFormed = isJoinToken(token)
 
@@ -71,6 +71,7 @@ export default async function JoinPage({ params }: { params: { token: string } }
       alreadyStaff={alreadyStaff}
       notSetUp={notSetUp}
       limited={limited}
+      authFailed={(Array.isArray(searchParams?.error) ? searchParams?.error[0] : searchParams?.error) === JOIN_AUTH_ERROR}
     />
   )
 }

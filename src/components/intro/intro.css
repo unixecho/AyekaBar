@@ -61,8 +61,13 @@
 /* Order matters: these two come after [data-armed] and win on source order. */
 .intro[data-out]  { animation: intro-out var(--intro-exit) var(--ease) var(--intro-exit-delay) both; }
 .intro[data-skip] { animation: intro-out var(--intro-skip) ease-out both; }
-/* Once the dissolve is far enough along to see through, stop catching taps. */
-.intro[data-pass] { pointer-events: none; }
+/* The overlay NEVER hands a tap through to the page — not while it plays, not while it fades (owner, 2026-10-15). After
+   it is gone the shield below keeps catching them for a moment: a second tap or a double-tap to skip must not press the
+   Instagram button that was under the finger. Transparent, and one notch under the accessibility widget like the intro. */
+.intro-shield {
+  position: fixed; inset: 0; z-index: 2147482000;
+  background: transparent; touch-action: none; cursor: default;
+}
 
 @keyframes intro-failsafe { to { visibility: hidden; } }
 @keyframes intro-out      { to { opacity: 0; visibility: hidden; } }

@@ -24,6 +24,30 @@ export const isJoinToken = (s: unknown): s is string => typeof s === 'string' &&
 
 export const joinPath = (token: string): string => `/join/${token}`
 
+// ── the "I am joining" cookie (2026-10-15) ────────────────────────────────
+// THE BUG (owner, twice: "after adding the Gmail it still takes them to the main page — it should go back to onboarding"):
+// the wizard sent Google's return trip to `/auth/callback?next=/join/<token>`. A person who tapped "continue with Google"
+// on the link landed on the PORTAL (with its intro) instead of the wizard, and production showed no sign-in recorded at all —
+// the return never reached our callback with a usable code. The `?next=` query on `redirectTo` is the one thing the normal
+// /login does not do, and a redirect allow-list that lists `…/auth/callback` exactly does not match it. So the wizard no
+// longer puts anything in `redirectTo`: it asks the server to remember, for fifteen minutes, which join link this browser is
+// walking (an HttpOnly cookie, readable by nothing but the callback), and /auth/callback sends the person back to it. If the
+// round trip FAILS (cancelled at Google, expired code) the callback still sends them back to the wizard — with a sentence —
+// not to the portal.
+export const JOIN_INTENT_COOKIE = 'ayeka_join_intent'
+/** The cookie lives long enough for a slow Google account chooser and no longer. */
+export const JOIN_INTENT_TTL_SECONDS = 900
+/** The only path the cookie is ever sent to: Google's return trip. */
+export const JOIN_INTENT_PATH = '/auth/callback'
+/** `?error=auth` on the wizard page: the Google round trip did not complete. */
+export const JOIN_AUTH_ERROR = 'auth'
+export const JOIN_AUTH_ERROR_MESSAGE = 'ההתחברות עם Google לא הושלמה. נסו שוב — בחרו את חשבון ה-Gmail ואשרו.'
+
+/** What the cookie holds, made safe: a well-formed join token or nothing. The callback redirects to `/join/<this>`, so a
+ *  value of any other shape can never become a redirect. */
+export const joinIntentToken = (v: unknown): string | null => (isJoinToken(v) ? v : null)
+
+
 /** Rate limits (per window), used by the routes. The token has 256 bits, so these are about noise, not about
  *  guessing. */
 export const JOIN_LIMITS = {

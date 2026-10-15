@@ -134,6 +134,32 @@ section('the wizard’s screens')
   check('the progress dots: 4 steps — meet, Google, my details, tour; confirm shares step 2', J.WIZARD_STEPS.length === 4 && J.progressIndex('welcome') === 0 && J.progressIndex('connect') === 1 && J.progressIndex('confirm') === 1 && J.progressIndex('profile') === 2 && J.progressIndex('tour') === 3)
 }
 
+section('the Google round trip comes back to the wizard (2026-10-15)')
+{
+  // The bug: `redirectTo` carried `?next=/join/<token>`, which a redirect allow-list listing `/auth/callback` exactly does not
+  // match — people landed on the portal's front page and production recorded no sign-in at all.
+  const wizSrc2 = code('src/components/staff/JoinWizard.tsx')
+  const intent = code('src/app/api/join/intent/route.ts')
+  const cb = code('src/app/auth/callback/route.ts')
+  const page = code('src/app/join/[token]/page.tsx')
+  writeFileSync(join(outDir, 'join2.mjs'), transpile(read('src/lib/staff/join.ts'), 'join.ts'))
+  const J2 = await import(pathToFileURL(join(outDir, 'join2.mjs')).href)
+  const tok = randomBytes(32).toString('base64url')
+  check('the cookie holds a well-formed join token or nothing', J2.joinIntentToken(tok) === tok && [null, undefined, '', 'x', `${tok}x`, '/join/evil', '//evil.com', 'https://evil.com', 5].every((v) => J2.joinIntentToken(v) === null))
+  check('…so the only redirect the callback can build from it is /join/<token>', J2.joinPath(J2.joinIntentToken(tok)) === `/join/${tok}`)
+  check('the cookie is short-lived and scoped to the Google return path only', J2.JOIN_INTENT_TTL_SECONDS <= 900 && J2.JOIN_INTENT_PATH === '/auth/callback' && J2.JOIN_INTENT_COOKIE === 'ayeka_join_intent')
+  check('the wizard keeps the Google return URL PLAIN (what /login uses) and asks the server to remember the link first',
+    wizSrc2.includes('let redirectTo = `${window.location.origin}/auth/callback`') && wizSrc2.indexOf("fetch('/api/join/intent'") > -1 && wizSrc2.indexOf("fetch('/api/join/intent'") < wizSrc2.indexOf('signInWithOAuth'))
+  check('…and falls back to the old ?next= only if the memory could not be set — never fails outright', /catch \{\s*redirectTo \+= `\?next=/.test(wizSrc2))
+  check('the intent route is public by design but checks the token shape, same-origin and a rate limit before setting anything',
+    intent.indexOf('isJoinToken(body?.token)') > -1 && /headers\.get\('origin'\)/.test(intent) && /join-intent:ip:/.test(intent) && !/getUser\(\)/.test(intent))
+  check('the callback sends a person who came from a join link BACK to the wizard — on success (/join/<token>) and on a failed round trip (?error=auth)',
+    cb.includes("const next = safeNext(searchParams.get('next')) ?? (intent ? joinPath(intent) : null)") && cb.includes('if (intent) return answer(`${joinPath(intent)}?error=${JOIN_AUTH_ERROR}`)'))
+  check('every answer the callback gives goes through answer(), which clears the cookie', (cb.match(/return NextResponse\.redirect/g) ?? []).length === 0 && (cb.match(/return answer\(/g) ?? []).length >= 3)
+  check('the wizard page reads ?error=auth and the wizard lands on the connect screen with a sentence (not the welcome again)',
+    /authFailed=/.test(page) && wizSrc2.includes('useState(!!p.authFailed)') && wizSrc2.includes('p.authFailed ? JOIN_AUTH_ERROR_MESSAGE : null') && HEBREW.test(J2.JOIN_AUTH_ERROR_MESSAGE))
+}
+
 section('the dashboard tour (2026-10-15)')
 {
   writeFileSync(join(outDir, 'tour.mjs'), transpile(read('src/lib/staff/tour.ts'), 'tour.ts'))
@@ -224,7 +250,8 @@ section('wiring (read as text)')
 
   const wiz = code('src/components/staff/JoinWizard.tsx')
   check('wizard: the Google hand-off is the HOUSE two-step interstitial, in its staff wording', /<AuthHandoff[\s\S]*variant="staff"/.test(wiz))
-  check('wizard: Google returns to THIS page via the same-origin `next` (never an absolute URL)', /\/auth\/callback\?next=\$\{encodeURIComponent\(joinPath\(p\.token\)\)\}/.test(wiz))
+  check('wizard: Google returns through the plain /auth/callback, which brings the person back here; the old same-origin `?next=` is only the fallback (never an absolute URL)',
+    wiz.includes('${window.location.origin}/auth/callback') && /redirectTo \+= `\?next=\$\{encodeURIComponent\(`\/join\/\$\{p\.token\}`\)\}`/.test(wiz))
   check('wizard: forces the account chooser (the whole point is picking the right account)', /prompt:\s*'select_account'/.test(wiz))
   check('wizard: confirming sends the token and nothing else', /JSON\.stringify\(\{ token: p\.token \}\)/.test(wiz))
   check('wizard: the account that came back is shown BEFORE anything is linked', wiz.indexOf('AccountBox') > -1 && wiz.indexOf('זה החשבון הנכון') < wiz.indexOf('אישור וחיבור'))

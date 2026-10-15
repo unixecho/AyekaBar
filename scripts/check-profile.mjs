@@ -112,6 +112,12 @@ section('wiring (read as text)')
   check('the phone field is offered only when the server says the column exists', /loaded\.phoneReady &&/.test(step))
   check('swatches are labelled by NAME, never by colour alone', /aria-label=\{PROFILE_COLOUR_NAMES\[i\]\}/.test(step))
 
+  const mgrUi = code('src/components/StaffManager.tsx')
+  check('creating a person scrolls the roster to them and lights their row (owner, 2026-10-15), then lets go',
+    /setFlashId\(createdId\)/.test(mgrUi) && /getElementById\(`staff-row-\$\{flashId\}`\)/.test(mgrUi) && /scrollIntoView\(\{ behavior: reduce \? 'auto' : 'smooth', block: 'center' \}\)/.test(mgrUi)
+    && /id=\{`staff-row-\$\{m\.id\}`\}/.test(mgrUi) && /flash=\{flashId === m\.id\}/.test(mgrUi) && /setFlashId\(null\)/.test(mgrUi))
+  check('the highlight respects reduced motion (no smooth scroll) and is never the only signal (the notice names who was added)', /prefers-reduced-motion: reduce/.test(mgrUi))
+
   const so = code('src/components/SignOutButton.tsx')
   check('logging out goes to the sign-in page (owner, 2026-10-15), not the portal', /router\.push\('\/login'\)/.test(so) && !/router\.push\('\/'\)/.test(so))
   const login = code('src/app/login/page.tsx')

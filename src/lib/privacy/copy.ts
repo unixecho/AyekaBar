@@ -124,6 +124,7 @@ export const COOKIES_COPY = {
     'signed-in': t('רק מי שמתחבר לחשבון', 'Only people who sign in', 'فقط من يسجّل الدخول إلى حساب'),
     table: t('רק מי שמקליד קוד שמלצר נתן לו', 'Only people who type a code a waiter gave them', 'فقط من يكتب رمزًا أعطاه إياه النادل'),
     staff: t('רק צוות ובעלים', 'Staff and owner only', 'الطاقم والمالك فقط'),
+    join: t('רק מי שמצטרף לצוות דרך קישור הצטרפות', 'Only people joining the team through a join link', 'فقط من ينضم إلى الطاقم عبر رابط انضمام'),
   } as Record<StorageAudience, Text>,
   category: {
     necessary: t('נחוץ', 'Needed', 'ضروري'),

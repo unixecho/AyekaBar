@@ -175,7 +175,7 @@ section('the SHORT version is exactly what the owner approved — it must never 
     line2: { atMs: 640, stepMs: 32, wordMs: 520 },
     hint: { atMs: 1100, ms: 600 },
     holdMs: 650,
-    exit: { delayMs: 100, ms: 560, stageMs: 520, passAtMs: 280 },
+    exit: { delayMs: 100, ms: 560, stageMs: 520 },
   }
   for (const k of Object.keys(approved)) check(`repeat.${k} is unchanged`, same(R[k], approved[k]))
   check('the shared skip, settle and failsafe are unchanged',
@@ -210,7 +210,6 @@ section('timeline — both versions, every language, inside their budget')
     check(`${v}: a shorter one never makes it end before the first word has even arrived`,
       C.planTimeline(1, 1, v).textEndMs >= T.line1.atMs + T.line1.wordMs)
     check(`${v}: zero words does not break it`, Number.isFinite(C.planTimeline(0, 0, v).doneAtMs))
-    check(`${v}: the overlay stops catching taps before it is gone`, T.exit.passAtMs < T.exit.delayMs + T.exit.ms)
     check(`${v}: the content leaves inside the overlay's own fade`, T.exit.stageMs <= T.exit.delayMs + T.exit.ms)
     check(`${v}: the hint is late enough to read the brand first, early enough to be useful`,
       T.hint.atMs >= 600 && T.hint.atMs + T.hint.ms < plans[v].he.exitAtMs)
@@ -237,6 +236,19 @@ section('timeline — both versions, every language, inside their budget')
   check('the welcome\'s coin turn finishes before its headline is over', C.INTRO_TIMINGS.first.turnMs <= plans.first.he.textEndMs)
 
   check('skipping is fast — under 400ms to gone', C.INTRO_SKIP_MS < 400)
+  {
+    // Owner, 2026-10-15: "nothing in the back should be clickable … when I skip the intro I accidentally click on buttons".
+    const comp = read('src/components/intro/Intro.tsx').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    const cssNoComments = read('src/components/intro/intro.css').replace(/\/\*[\s\S]*?\*\//g, '')
+    check('the overlay NEVER hands taps through: no data-pass, no pass-through state, no passAtMs in either version',
+      !/data-pass|setPass|passAtMs/.test(comp) && !/data-pass/.test(cssNoComments) && !('passAtMs' in C.INTRO_TIMINGS.first.exit) && !('passAtMs' in C.INTRO_TIMINGS.repeat.exit))
+    check('no rule makes the intro itself ignore pointer events while it is on screen',
+      !/\.intro(\[[^\]]*\])?\s*\{[^}]*pointer-events:\s*none/.test(cssNoComments))
+    check('a transparent SHIELD outlives the overlay (skip or natural exit) for INTRO_SHIELD_MS, so a second tap cannot press what is underneath',
+      C.INTRO_SHIELD_MS >= 400 && C.INTRO_SHIELD_MS <= 1000 && /setShield\(true\)/.test(comp) && /INTRO_SHIELD_MS/.test(comp) && /intro-shield/.test(comp)
+      && /\.intro-shield\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/.test(cssNoComments) && /\.intro-shield\s*\{[^}]*background:\s*transparent/.test(cssNoComments))
+    check('the shield sits one notch under the accessibility widget, like the intro (the way into accessibility is never covered)', /\.intro-shield\s*\{[^}]*z-index:\s*2147482000/.test(cssNoComments))
+  }
   check('the failsafe is long enough for a slow phone, short enough never to trap anyone',
     C.INTRO_FAILSAFE_MS >= 3000 && C.INTRO_FAILSAFE_MS <= 6000)
   check('the language/motion settle wait is short and capped',
@@ -348,7 +360,8 @@ section('the owner\'s switch — the gate, the API, the page, the tile')
   // 2026-10-13: the tiles moved out of the dashboard page into the shared
   // registry (lib/dashboard/tiles.ts) when the owner dashboard was organised
   // into categories; the page now renders them through <DashboardSections>.
-  const dash = read('src/app/owner/dashboard/page.tsx')
+  // The body moved out of the page into components/dashboard/OwnerDashboard.tsx (2026-10-15), shared with the developer's one dashboard.
+  const dash = read('src/components/dashboard/OwnerDashboard.tsx')
   const tiles = read('src/lib/dashboard/tiles.ts')
   check('the dashboard has a tile for it',
     /id: 'intro'[^\n]*href: '\/owner\/intro'[^\n]*מסך פתיחה/.test(tiles) && /<DashboardSections[^>]*OWNER_CATEGORIES/.test(dash))
@@ -515,10 +528,8 @@ section('wiring — where it is mounted, and how it decides')
   check('a bare modifier, a shortcut chord, or a keydown that names no key never counts as a skip',
     /e\.ctrlKey \|\| e\.metaKey \|\| e\.altKey \|\| IGNORED_KEYS\.indexOf\(e\.key\) !== -1/.test(tsx) &&
     ['Shift', 'Control', 'Alt', 'Meta', 'Unidentified'].every((k) => tsx.indexOf(`'${k}'`) !== -1))
-  check('a skip does not hand the tap to the page beneath: only the NATURAL exit ever makes the overlay click-through',
-    // On touch, the click that follows a tap goes to whatever is under the finger
-    // when it lifts — so the skip path must keep catching taps until it is gone.
-    (tsx.match(/setPass\(true\)/g) || []).length === 1 && /if \(how === 'out'\) \{[^}]*setPass\(true\)/.test(tsx))
+  check('NOTHING is handed through to the page beneath: no pass-through state at all (owner, 2026-10-15) — a skip, or the natural exit, only ever ends in removal plus the shield',
+    !/setPass|data-pass/.test(tsx) && (tsx.match(/setShield\(true\)/g) || []).length === 1 && /const finish = \(\) => \{ setShield\(true\); setDone\(true\) \}/.test(tsx))
   check('it restores page scrolling when it goes — in the effect cleanup', /classList\.remove\('intro-lock'\)/.test(tsx))
   check('it honours the widget\'s pause-animations class', /a11y-motion-off/.test(tsx))
   check('it does not play in a tab nobody is looking at (a link opened in the background, a prerender)',

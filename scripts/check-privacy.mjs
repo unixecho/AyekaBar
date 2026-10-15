@@ -111,7 +111,7 @@ section('registry — every entry is complete, in all three languages')
   check('kind / category / audience are from the vocabulary', items.every((i) =>
     ['localStorage', 'sessionStorage', 'cookie'].includes(i.kind) &&
     ['necessary', 'functional', 'analytics', 'marketing'].includes(i.category) &&
-    ['everyone', 'signed-in', 'table', 'staff'].includes(i.audience)))
+    ['everyone', 'signed-in', 'table', 'staff', 'join'].includes(i.audience)))
   for (const field of ['what', 'why', 'when', 'keeps']) {
     check(`every entry has ${field} in he / en / ar`, items.every((i) =>
       LANGS.every((l) => typeof i[field]?.[l] === 'string' && i[field][l].trim().length > 0)))
@@ -129,12 +129,16 @@ section('registry — every entry is complete, in all three languages')
   // the sign-in ones: only for a visitor who typed a waiter's code (audience 'table'), declared HttpOnly so no
   // script can read it, and nothing else may join them without this line being edited on purpose.
   const cookies = items.filter((i) => i.kind === 'cookie')
-  check('the only cookies are the sign-in ones (people who sign in) and the table session (people who typed a waiter\'s code)',
+  check('the only cookies are the sign-in ones (people who sign in), the table session (people who typed a waiter\'s code) and the onboarding memory (people joining by a join link)',
     cookies.every((i) =>
       (i.audience === 'signed-in' && /^sb-\*-auth-token/.test(i.name)) ||
-      (i.audience === 'table' && i.id === 'table-session' && i.name === 'ayeka_table_session')))
+      (i.audience === 'table' && i.id === 'table-session' && i.name === 'ayeka_table_session') ||
+      // 2026-10-15: the staff onboarding's "I am joining" memory — held to its own assertions further down.
+      (i.audience === 'join' && i.id === 'join-intent' && i.name === 'ayeka_join_intent')))
   check('the table-session cookie is HttpOnly, Secure and SameSite=Lax, and says it expires with the visit',
     (() => { const c = cookies.find((i) => i.id === 'table-session'); return !!c && /HttpOnly/.test(c.attributes) && /Secure/.test(c.attributes) && /SameSite=Lax/.test(c.attributes) && /expires with the visit/.test(c.attributes) })())
+  check('the join-intent cookie is HttpOnly, Secure, SameSite=Lax, scoped to the sign-in return path, and says it expires',
+    (() => { const c = cookies.find((i) => i.id === 'join-intent'); return !!c && /HttpOnly/.test(c.attributes) && /Secure/.test(c.attributes) && /SameSite=Lax/.test(c.attributes) && /Path=\/auth\/callback/.test(c.attributes) && /15 minutes/.test(c.attributes) && c.ttlHours === 0.25 })())
   check('the notice\'s own key is the one declared (ACK_KEY)',
     items.some((i) => i.id === 'privacy-ack' && i.name === N.ACK_KEY))
 }
@@ -274,6 +278,10 @@ section('code ↔ registry — cookies are written only where Supabase\'s own ar
     // Remote ordering (2026-10-13): the ONE cookie a customer can receive without an account. Held to its own
     // assertions just below — set only after a valid code, HttpOnly, every other write an expiry.
     'src/app/api/table/session/route.ts': 'sets the table-session cookie after a valid code; otherwise only expires it',
+    // Staff onboarding (2026-10-15): the "I am joining" memory. One writer sets it (after checking the token's shape),
+    // one reader clears it; held to its own assertions just below.
+    'src/app/api/join/intent/route.ts': 'sets the join-intent cookie for a well-formed join token, HttpOnly',
+    'src/app/auth/callback/route.ts': 'only EXPIRES the join-intent cookie (Max-Age 0) on the way out',
   }
   const stray = []
   for (const [f, c] of code) {
@@ -302,6 +310,19 @@ section('code ↔ registry — cookies are written only where Supabase\'s own ar
   const returns = [...sess.matchAll(/return sealed\(response\)/g)].length
   check('…and every response that sets the cookie DROPS the x-middleware-set-cookie mirror (it would hand the token to page JS)',
     /headers\.delete\('x-middleware-set-cookie'\)/.test(sess) && returns === 3 && !/return response\b/.test(sess.slice(sess.indexOf('export async function POST'))))
+  // The join-intent cookie (lib/staff/join.ts JOIN_INTENT_COOKIE): one setter, one clearer, both tight.
+  const intentRoute = code.get('src/app/api/join/intent/route.ts') ?? ''
+  const cb = code.get('src/app/auth/callback/route.ts') ?? ''
+  check('the intent route writes exactly one cookie, the declared one, HttpOnly + Lax + scoped to /auth/callback, with a 15-minute life',
+    (intentRoute.match(/cookies\.set\(/g) ?? []).length === 1 && /cookies\.set\(JOIN_INTENT_COOKIE, body!\.token as string/.test(intentRoute)
+    && /httpOnly:\s*true/.test(intentRoute) && /sameSite:\s*'lax'/.test(intentRoute) && /path:\s*JOIN_INTENT_PATH/.test(intentRoute) && /maxAge:\s*JOIN_INTENT_TTL_SECONDS/.test(intentRoute))
+  check('…it checks the token\'s SHAPE before setting anything, and drops the x-middleware-set-cookie mirror (the value is the link\'s secret)',
+    intentRoute.indexOf('isJoinToken(body?.token)') > -1 && intentRoute.indexOf('isJoinToken(body?.token)') < intentRoute.indexOf('cookies.set(')
+    && /headers\.delete\('x-middleware-set-cookie'\)/.test(intentRoute) && /return sealed\(response\)/.test(intentRoute))
+  check('the callback only ever EXPIRES it (maxAge 0), and only when the browser actually sent one',
+    (cb.match(/cookies\.set\(/g) ?? []).length === 1 && /cookies\.set\(JOIN_INTENT_COOKIE, '', \{[^}]*maxAge:\s*0/.test(cb) && /hadIntentCookie/.test(cb))
+  check('the callback turns the cookie into a redirect only through joinIntentToken() + joinPath() — a value of any other shape can never become a redirect',
+    /joinIntentToken\(request\.cookies\.get\(JOIN_INTENT_COOKIE\)\?\.value\)/.test(cb) && /joinPath\(intent\)/.test(cb))
   const hk = read('src/lib/privacy/housekeeping.ts')
   const writes = hk.match(/jar\.write\(/g) ?? []
   check('the cleanup\'s cookie writes are all expiries (Max-Age=0 built once, every write uses it)',

@@ -143,6 +143,10 @@ export default function StaffManager({ currentUserId, canHardDelete = false }: {
   const [notice, setNotice] = useState<Notice>(null)
 
   const [busyId, setBusyId] = useState<string | null>(null)
+  // The person just created: the roster scrolls to them and lights their row for a few seconds (owner, 2026-10-15:
+  // "when creating an employee scroll down upon creation and highlight the created user"). The form is at the top and
+  // the roster can be long, so without this a new row appeared somewhere off-screen and the owner had to hunt for it.
+  const [flashId, setFlashId] = useState<string | null>(null)
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
 
   // staff.id -> the newest join link (migration 059). Absent = never sent one. The URL itself is never here: only
@@ -204,6 +208,16 @@ export default function StaffManager({ currentUserId, canHardDelete = false }: {
     }
   }
 
+  useEffect(() => {
+    if (!flashId || !members) return
+    const el = document.getElementById(`staff-row-${flashId}`)
+    if (!el) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' })
+    const t = window.setTimeout(() => setFlashId(null), 3400)
+    return () => window.clearTimeout(t)
+  }, [flashId, members])
+
   async function addMember(e: React.FormEvent) {
     e.preventDefault()
     setAdding(true); setNotice(null)
@@ -220,6 +234,7 @@ export default function StaffManager({ currentUserId, canHardDelete = false }: {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'שמירה נכשלה')
       setEmail(''); setFirstName(''); setLastName(''); setAsOwner(false)
+      const createdId = (json as { member?: { id?: string } }).member?.id ?? null
       setNotice({
         kind: 'ok',
         text: json.offline ? T.addedOffline
@@ -229,6 +244,7 @@ export default function StaffManager({ currentUserId, canHardDelete = false }: {
           : T.addedActive,
       })
       await load()
+      if (createdId) setFlashId(createdId)
       // A new offline row exists to be scheduled, so its schedulable state is
       // the next thing the owner will look at — refresh it with the roster
       // rather than leaving the switch reading a stale default.
@@ -574,6 +590,7 @@ export default function StaffManager({ currentUserId, canHardDelete = false }: {
                         delay={Math.min(gi * 2 + i, 8) * 40}
                         isSelf={!!m.auth_user_id && m.auth_user_id === currentUserId}
                         busy={busyId === m.id}
+                        flash={flashId === m.id}
                         schedulable={schedulable[m.id] ?? false}
                         onBadge={(badge) => patchMember(m.id, { badge })}
                         onToggleOwner={() => patchMember(m.id, { role: m.role === 'owner' ? 'staff' : 'owner' })}
@@ -637,10 +654,10 @@ export default function StaffManager({ currentUserId, canHardDelete = false }: {
 }
 
 function MemberRow({
-  m, delay, isSelf, busy, schedulable, onBadge, onToggleOwner, onDisplayName, onRealName, onAddEmail,
+  m, delay, isSelf, busy, flash, schedulable, onBadge, onToggleOwner, onDisplayName, onRealName, onAddEmail,
   joinState, joinExpires, onJoin, onCancelJoin, onToggleSchedulable, onRemove,
 }: {
-  m: Member; delay: number; isSelf: boolean; busy: boolean; schedulable: boolean
+  m: Member; delay: number; isSelf: boolean; busy: boolean; flash: boolean; schedulable: boolean
   onBadge: (badge: string) => void
   onToggleOwner: () => void
   onDisplayName: (name: string | null) => void
@@ -687,8 +704,13 @@ function MemberRow({
     || (m.email?.[0] ?? '?').toUpperCase()
 
   return (
-    <div className="rise" style={{
-      background: 'var(--bg-elev)',
+    <div id={`staff-row-${m.id}`} className="rise" style={{
+      background: flash ? 'rgba(255,138,92,0.10)' : 'var(--bg-elev)',
+      // The just-created row: a ring and a glow that fade out when `flash` clears (the transition below). Colour is
+      // never the only signal — the notice at the top also says who was added.
+      boxShadow: flash ? '0 0 0 2px var(--neon), 0 0 26px rgba(255,94,58,0.45)' : '0 0 0 0 transparent',
+      transition: 'box-shadow .7s var(--ease), background .7s var(--ease)',
+      scrollMarginBlock: 90,
       border: `1px solid ${pending ? 'rgba(255,255,255,0.09)' : 'var(--line)'}`,
       // Dashed = still waiting on a person. An offline row is not waiting on
       // anybody — it is complete — so it reads as solid like a linked account.

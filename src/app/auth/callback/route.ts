@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isOp, isDev } from '@/lib/staff/access'
 import { getLoyaltyEnabled } from '@/lib/settings/server'
+import { JOIN_AUTH_ERROR, JOIN_INTENT_COOKIE, JOIN_INTENT_PATH, joinIntentToken, joinPath } from '@/lib/staff/join'
 
 // After Google sign-in we route by the user's actual ACCESS LEVEL, not by a
 // query param and not by `role` alone.
@@ -15,12 +16,26 @@ import { getLoyaltyEnabled } from '@/lib/settings/server'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  // The join wizard's memory of "this browser is walking a join link" (an HttpOnly cookie, set by POST /api/join/intent,
+  // sent only here). It replaces `?next=` for the wizard, which Supabase's redirect allow-list did not accept — the person
+  // landed on the portal instead of the wizard (2026-10-15). Read once and cleared on EVERY answer below.
+  const intent = joinIntentToken(request.cookies.get(JOIN_INTENT_COOKIE)?.value)
+  const hadIntentCookie = request.cookies.has(JOIN_INTENT_COOKIE)
+  const answer = (path: string): NextResponse => {
+    const res = NextResponse.redirect(`${origin}${path}`)
+    if (hadIntentCookie) {
+      res.cookies.set(JOIN_INTENT_COOKIE, '', { path: JOIN_INTENT_PATH, maxAge: 0, httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' })
+      res.headers.delete('x-middleware-set-cookie')
+    }
+    return res
+  }
   // Optional return-path override — used by /checkin so a customer lands
   // straight back at their QR check-in instead of their normal dashboard.
   // Only ever a same-origin relative path: never `//host/...` (protocol-
   // relative) or an absolute URL, or this becomes an open redirect riding on
-  // the back of a real Google login.
-  const next = safeNext(searchParams.get('next'))
+  // the back of a real Google login. The wizard's own return path is built here from a token whose shape was checked,
+  // never from anything a caller wrote.
+  const next = safeNext(searchParams.get('next')) ?? (intent ? joinPath(intent) : null)
 
   if (code) {
     const supabase = createClient()
@@ -59,11 +74,14 @@ export async function GET(request: NextRequest) {
           dest = '/no-access'
         }
       }
-      return NextResponse.redirect(`${origin}${dest}`)
+      return answer(dest)
     }
   }
 
-  return NextResponse.redirect(`${origin}/customer?error=auth`)
+  // The round trip did not complete (cancelled at Google, an expired or reused code). Someone walking a join link goes
+  // BACK to the wizard, which says so and offers the button again — never to the portal with nothing said.
+  if (intent) return answer(`${joinPath(intent)}?error=${JOIN_AUTH_ERROR}`)
+  return answer('/customer?error=auth')
 }
 
 function safeNext(value: string | null): string | null {
