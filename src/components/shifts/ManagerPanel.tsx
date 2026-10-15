@@ -75,7 +75,7 @@ export default function ManagerPanel() {
           {settings.features.availability && (
             <label style={{ display: 'block' }}>
               <span style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
-                <span>ימי חופש שעובד/ת יכול/ה לסמן בשבוע</span>
+                <span>ימי חופש שעובד/ת יכול/ה לבקש בשבוע</span>
                 <strong className="ltr-isolate">{maxDaysOffOf(settings.features)}</strong>
               </span>
               <input
@@ -86,7 +86,7 @@ export default function ManagerPanel() {
                 style={{ width: '100%' }}
               />
               <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
-                ברירת המחדל {DEFAULT_MAX_DAYS_OFF}. העובדים מסמנים רק משמרות שאי אפשר להם, עד המספר הזה. אתם מחליטים בשיבוץ.
+                ברירת המחדל {DEFAULT_MAX_DAYS_OFF}. העובדים מבקשים ימי חופש מלאים, עד המספר הזה, ויכולים להוסיף לכם הודעה פרטית על אילוצים. אתם מחליטים בשיבוץ.
               </span>
             </label>
           )}

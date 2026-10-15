@@ -4,6 +4,7 @@ import { requireOwner } from '@/lib/owner/guard'
 import { splitName } from '@/lib/staff/name'
 import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { latestJoinLinks, revokeJoin } from '@/lib/staff/join-server'
+import { isTombstone } from '@/lib/staff/hard-delete'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 type Service = SupabaseClient
@@ -62,13 +63,16 @@ export async function GET() {
   const auth = await requireOwner()
   if (!auth.ok) return auth.res
 
-  const { data, error } = await auth.service
+  const { data: all, error } = await auth.service
     .from('staff')
     .select(COLS)
     .order('role', { ascending: true })
     .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: 'טעינת הצוות נכשלה' }, { status: 500 })
+  // Anonymous tombstones (what the developer's permanent delete leaves behind when orders still point at a person)
+  // are not people any more — nobody to restore, so the roster does not list them. See lib/staff/hard-delete.ts.
+  const data = (all ?? []).filter((m) => !isTombstone(m))
 
   // The newest join link of everyone who has not signed in yet (migration 059) — the roster's "link sent /
   // expired" chip. A separate, failure-tolerant read: before 059 is applied the table is not there and this is

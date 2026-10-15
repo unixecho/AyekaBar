@@ -1,4 +1,4 @@
-import { isOp } from '@/lib/staff/access'
+import { isDev, isOp } from '@/lib/staff/access'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import OwnerHeader from '@/components/OwnerHeader'
@@ -30,7 +30,7 @@ export default async function OwnerStaffPage() {
       <OwnerHeader backHref="/owner/dashboard" right={<SignOutButton />} />
 
       <div className="rise" style={{ animationDelay: '140ms' }}>
-        <StaffManager currentUserId={user.id} />
+        <StaffManager currentUserId={user.id} canHardDelete={isDev(me)} />
       </div>
     </main>
   )

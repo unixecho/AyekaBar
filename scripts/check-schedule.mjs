@@ -292,9 +292,11 @@ section('days off — employees mark only what they cannot do, up to the manager
   const sub = dispatch.slice(dispatch.indexOf("case 'submitAvailability'"), dispatch.indexOf("case 'requestShift'"))
   check('the server enforces it: reads the venue\'s cap, trims to employee entries, and refuses over the cap BEFORE the database call',
     /maxDaysOffOf\(/.test(sub) && /employeeEntries\(/.test(sub) && sub.indexOf('too_many_days_off') > -1 && sub.indexOf('too_many_days_off') < sub.indexOf("callSched(service, 'sched_submit_availability'"))
-  check('…and an employee\'s private note is never stored (the manager handles remarks)', /p_note: null/.test(sub))
+  check('…and the employee\'s private message to the manager (אילוצים) IS passed through to be stored', /p_note: action\.note \?\? null/.test(sub))
   const portal = readFileSync(join(SRC, 'components', 'shifts', 'AvailabilityPortal.tsx'), 'utf8')
-  check('the employee screen offers neither custom hours nor "prefer" nor a private remark', !/type="time"/.test(portal) && !/'prefer'|'partial'/.test(portal.replace(/\/\/.*$/gm, '')) && !/הערה למנהל/.test(portal))
+  check('the employee screen offers neither custom hours nor "prefer"; it has the private message to the manager and full-day requests',
+    !/type="time"/.test(portal) && !/'prefer'|'partial'/.test(portal.replace(/\/\/.*$/gm, '')) && /<textarea/.test(portal) && /הודעה פרטית למנהל/.test(portal) && /maxLength=\{300\}/.test(portal))
+  check('the wording is proper Hebrew — "לבקש יום חופש" / "יום חופש", never "אי אפשר לי"', /לבקש יום חופש/.test(portal) && !/אי אפשר לי/.test(portal))
   const planning = readFileSync(join(SRC, 'components', 'shifts', 'PlanningPanel.tsx'), 'utf8')
   const mgr = readFileSync(join(SRC, 'components', 'shifts', 'ManagerPanel.tsx'), 'utf8')
   check('the manager sees each person\'s days off, who is off each day, and can set the number', /daysOffLabel\(/.test(planning) && /offByDate/.test(planning) && /maxDaysOff:/.test(mgr))

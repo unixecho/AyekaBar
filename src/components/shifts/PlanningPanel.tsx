@@ -44,10 +44,10 @@ export default function PlanningPanel() {
           <div className="sch-row"><CalendarCheck size={18} aria-hidden="true" /><h3 id="availability-heading" className="sch-h">זמינות עובדים</h3></div>
           <Pill tone={waiting.length ? 'warn' : 'ok'}>{submissions.length}/{eligible.length} הגישו</Pill>
         </header>
-        <p className="sch-sub">כל עובד/ת יכול/ה לסמן עד {cap} ימי חופש בשבוע (אפשר לשנות בהגדרות). פתחו כרטיס כדי לראות איזה ימים; ירוק זמין, אדום לא זמין.</p>
+        <p className="sch-sub">כל עובד/ת יכול/ה לבקש עד {cap} ימי חופש בשבוע (אפשר לשנות בהגדרות). פתחו כרטיס כדי לראות איזה ימים ואת ההודעה הפרטית אליכם; ירוק זמין, אדום ביקש/ה יום חופש.</p>
         {offByDate.length > 0 && (
-          <div className="sch-card" aria-label="מי לא זמין בכל יום">
-            <strong className="sch-sub" style={{ fontWeight: 700 }}>מי לא זמין בכל יום</strong>
+          <div className="sch-card" aria-label="מי ביקש יום חופש בכל יום">
+            <strong className="sch-sub" style={{ fontWeight: 700 }}>מי ביקש יום חופש בכל יום</strong>
             {offByDate.map((d) => (
               <p key={d.date} className="sch-sub" style={{ margin: 0 }}>
                 <strong>{weekdayLongLabel(parseISODate(d.date).getUTCDay())} {formatDateLabel(d.date)}</strong> · {d.names.join(', ')}
@@ -71,7 +71,7 @@ export default function PlanningPanel() {
                 {weekDates(weekStart).map((date) => {
                   const entry = submission?.entries.find((candidate) => candidate.date === date)
                   const tone = !submission ? 'unset' : entry?.kind === 'unavailable' ? 'unavailable' : entry?.kind === 'partial' ? 'partial' : entry?.kind === 'prefer' ? 'prefer' : 'available'
-                  const label = !submission ? 'לא הוגש' : entry?.kind === 'unavailable' ? 'לא זמין/ה' : entry?.kind === 'partial' ? `${entry.from ?? ''}–${entry.to ?? ''}` : entry?.kind === 'prefer' ? 'רוצה לעבוד' : 'זמין/ה'
+                  const label = !submission ? 'לא הוגש' : entry?.kind === 'unavailable' ? 'יום חופש' : entry?.kind === 'partial' ? `${entry.from ?? ''}–${entry.to ?? ''}` : entry?.kind === 'prefer' ? 'רוצה לעבוד' : 'זמין/ה'
                   return <div key={date} className={`sch-availability-day sch-availability-day--${tone}`}><strong>{weekdayLongLabel(parseISODate(date).getUTCDay())}</strong><span dir={entry?.kind === 'partial' ? 'ltr' : undefined}>{label}</span></div>
                 })}
               </div>

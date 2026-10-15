@@ -299,16 +299,17 @@ export async function performDispatch(action: ScheduleAction): Promise<Row> {
       for (const e of action.entries as { date: string }[]) {
         if (e.date < start || e.date > end) throw refusal('bad_date')
       }
-      // An employee tells the scheduler only which days they cannot work, and no more than the manager allows a
-      // week (lib/shifts/days-off.ts). Custom hours, "prefer" and the private note are the manager's to handle, so a
-      // stale tab that still sends them gets them dropped rather than stored. The database function is unchanged.
+      // An employee asks for full days off, and no more than the manager allows a week (lib/shifts/days-off.ts).
+      // Custom hours and "prefer" are not offered any more, so a stale tab that still sends them gets them dropped
+      // rather than stored. The private message to the manager (אילוצים) IS kept: the database function stores it
+      // and only the sender and managers can read it. The database function is unchanged.
       const { data: cfg } = await service.from('shift_settings').select('features').eq('venue_id', action.venueId).maybeSingle()
       const cap = maxDaysOffOf(cfg?.features as { maxDaysOff?: unknown } | null)
       const entries = employeeEntries(action.entries as { date: string; kind: string }[])
       if (entries.length > cap) throw refusal('too_many_days_off', { max: cap })
       return callSched(service, 'sched_submit_availability', {
         p_actor: staff.id, p_venue: action.venueId, p_week_start: start,
-        p_entries: entries, p_note: null, p_status: action.status,
+        p_entries: entries, p_note: action.note ?? null, p_status: action.status,
       })
     }
 

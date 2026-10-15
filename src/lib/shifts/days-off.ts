@@ -1,16 +1,17 @@
 // What an EMPLOYEE may tell the scheduler about a week (2026-10-15) — PURE, no React, no Supabase.
 // scripts/check-schedule.mjs runs this file.
 //
-// Owner: "Employees only submit what shifts they can't do (only one shift per day, taking several employees, so they
-// select the shift for that day as unavailable). Leave the custom hours and the private remark to the manager. In
-// addition, employees can request X days off per week — the manager decides in the scheduler, default 2 — and it shows
-// on the scheduler for the manager as they build the schedule."
+// Owner, 2026-10-15 (the second statement, which supersedes the first): "employees can only submit two days a week for
+// vacation", and "leave the private remark to the manager" meant a PRIVATE MESSAGE from the employee to the manager
+// about constraints (אילוצים). The bar runs one evening shift a day, so a request is a full day; there is no point
+// blocking part of a day. If a day ever has two shifts, blocking one of them is the natural extension.
 //
-// So the employee's whole submission is a set of days marked `unavailable`, capped at `maxDaysOff` a week:
-//   • the cap is a per-venue number in `shift_settings.features.maxDaysOff` (the manager edits it in the Manager
-//     Panel; no migration — `features` is a jsonb column and a missing key means the default),
-//   • the 'prefer' / 'partial' kinds and the note stay in the data model (the manager side, and old submissions, still
-//     carry them) but the employee screen no longer offers them and the server drops them from an employee's write,
+// So the employee's submission is a set of days marked `unavailable` (shown to them as "יום חופש"), capped at
+// `maxDaysOff` a week, plus one private note:
+//   • the cap is a per-venue number in `shift_settings.features.maxDaysOff` (default 2; the manager can change it in
+//     the Manager Panel; no migration — `features` is a jsonb column and a missing key means the default),
+//   • the 'prefer' / 'partial' kinds stay in the data model (old submissions still carry them) but the employee
+//     screen no longer offers them and the server drops them from an employee's write,
 //   • the cap is enforced on the server (dispatch-write.ts) as well as on the screen.
 
 import type { AvailabilityEntry, ISODate } from './types'

@@ -45,6 +45,11 @@ const T = {
   emptyGroup: 'אין אף אחד בקבוצה הזו.',
   removed: 'הוסרו',
   removedHint: 'ההרשאות שלהם בוטלו וההיסטוריה שלהם נשמרה. שחזור מחזיר גישה בכניסה הבאה עם Google.',
+  removedHintDev: 'ההרשאות שלהם בוטלו וההיסטוריה שלהם נשמרה. שחזור מחזיר גישה בכניסה הבאה עם Google. כמפתח/ת אפשר גם למחוק לצמיתות.',
+  hardDelete: 'מחיקה לצמיתות',
+  confirmHardDelete: 'למחוק לצמיתות?',
+  confirmHardDeleteBody: 'זה לא ניתן לשחזור. חשבון ה-Google של האדם וכל מה שקשור אליו (כולל פרופיל מועדון הנאמנות) יימחקו, וההודעות הפרטיות שלו/ה למנהל. אם יש הזמנות על שמו/ה — תישאר רשומה אנונימית בלי שם ופרטים, כדי שההיסטוריה והקופה יישארו שלמות.',
+  hardDeleteFailed: 'המחיקה נכשלה',
 
   // ── Add-form modes ────────────────────────────────────────────────
   modeAccount: 'עם חשבון',
@@ -115,7 +120,9 @@ const T = {
 
 type Notice = { kind: 'ok' | 'err'; text: string } | null
 
-export default function StaffManager({ currentUserId }: { currentUserId: string }) {
+// `canHardDelete` is the DEVELOPER's power (owner, 2026-10-15): managers can only deactivate. It only shows or hides a
+// button — the route it calls (POST /api/owner/dev/staff) is guarded by `requireDev` on its own.
+export default function StaffManager({ currentUserId, canHardDelete = false }: { currentUserId: string; canHardDelete?: boolean }) {
   const [members, setMembers] = useState<Member[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -350,6 +357,35 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
     }
   }
 
+  function askHardDelete(m: Member) {
+    const who = [m.first_name, m.last_name].filter(Boolean).join(' ') || m.email || 'האדם הזה'
+    setConfirmReq({
+      title: `${T.confirmHardDelete} (${who})`,
+      body: T.confirmHardDeleteBody,
+      confirmLabel: T.hardDelete,
+      onConfirm: () => { void hardDeleteMember(m) },
+    })
+  }
+
+  async function hardDeleteMember(m: Member) {
+    setBusyId(m.id)
+    try {
+      const res = await fetch('/api/owner/dev/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: m.id }),
+      })
+      const json = await res.json().catch(() => ({})) as { error?: string; message?: string }
+      if (!res.ok) throw new Error(json.error ?? T.hardDeleteFailed)
+      setMembers((cur) => cur?.filter((x) => x.id !== m.id) ?? cur)
+      setNotice({ kind: 'ok', text: json.message ?? 'נמחק/ה לצמיתות.' })
+    } catch (err) {
+      setNotice({ kind: 'err', text: err instanceof Error ? err.message : T.hardDeleteFailed })
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div>
@@ -569,7 +605,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                     }}>{members.filter((m) => !m.active).length}</span>
                   </div>
                   <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '3px 0 0', lineHeight: 1.5 }}>
-                    {T.removedHint}
+                    {canHardDelete ? T.removedHintDev : T.removedHint}
                   </p>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -579,6 +615,7 @@ export default function StaffManager({ currentUserId }: { currentUserId: string 
                       m={m}
                       busy={busyId === m.id}
                       onRestore={() => restoreMember(m.id)}
+                      onHardDelete={canHardDelete && !(m.auth_user_id && m.auth_user_id === currentUserId) ? () => askHardDelete(m) : undefined}
                     />
                   ))}
                 </div>
@@ -855,7 +892,7 @@ function MemberRow({
  *  revoked); the only action that makes sense here is restoring them, so
  *  that's the only control this renders. Same shimmer-while-busy treatment
  *  as MemberRow, for the same reason. */
-function RemovedMemberRow({ m, busy, onRestore }: { m: Member; busy: boolean; onRestore: () => void }) {
+function RemovedMemberRow({ m, busy, onRestore, onHardDelete }: { m: Member; busy: boolean; onRestore: () => void; onHardDelete?: () => void }) {
   if (busy) return <MemberRowSkeleton delay={0} />
 
   const meta = badgeMeta(m.badge, m.role)
@@ -899,9 +936,17 @@ function RemovedMemberRow({ m, busy, onRestore }: { m: Member; busy: boolean; on
         )}
       </div>
 
-      <button type="button" onClick={onRestore} disabled={busy} className="press" style={{ ...ghostBtn, flex: '0 0 auto' }}>
-        ↺ {T.restore}
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '0 0 auto' }}>
+        <button type="button" onClick={onRestore} disabled={busy} className="press" style={{ ...ghostBtn, flex: '0 0 auto' }}>
+          ↺ {T.restore}
+        </button>
+        {onHardDelete && (
+          <button type="button" onClick={onHardDelete} disabled={busy} className="press"
+            style={{ ...ghostBtn, flex: '0 0 auto', color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.45)' }}>
+            🗑️ {T.hardDelete}
+          </button>
+        )}
+      </div>
     </div>
   )
 }

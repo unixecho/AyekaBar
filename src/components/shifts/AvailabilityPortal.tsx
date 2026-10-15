@@ -8,13 +8,14 @@ import { addDays, formatDateLabel, formatShiftRange, hasStarted, requestDeadline
 import type { AvailabilityEntry } from '@/lib/shifts/types'
 import { canAddDayOff, countDaysOff, daysOffLabel, employeeEntries, maxDaysOffOf } from '@/lib/shifts/days-off'
 
-// "Which shifts can I NOT do?" — for the week after the one on the schedule tab.
-// There is one shift a day (it takes several people), so marking the day marks that shift.
-// Only exceptions are stored: a day with nothing marked means "available". An employee may mark
-// at most `maxDaysOff` days a week (the manager's setting, default 2 — lib/shifts/days-off.ts);
-// custom hours, "prefer" and a private note are the manager's to handle, so they are not offered
-// here (owner, 2026-10-15). The manager sees what is submitted, and the scheduler warns before
-// putting someone on a day they said they cannot do. Saving and submitting both say so, in words.
+// Days off — for the week after the one on the schedule tab.
+// The bar runs ONE evening shift a day, so a request is always a FULL day (owner, 2026-10-15; if a day ever has
+// two shifts, blocking just one of them is the natural extension — the entry would gain a shift id).
+// Only exceptions are stored: a day with nothing marked means "available". An employee may ask for at most
+// `maxDaysOff` days a week (default 2 — lib/shifts/days-off.ts). Besides the days there is ONE free-text field, a
+// private message to the manager about constraints (אילוצים) — only the manager and the sender can read it.
+// No custom hours, no "prefer". The manager sees what is submitted, and the scheduler warns before putting
+// someone on a day they asked off. Saving and submitting both say so, in words.
 export default function AvailabilityPortal() {
   const { db, dispatch, weekStart, setWeekStart } = useShifts()
   const target = addDays(weekStart, 7)
@@ -22,12 +23,14 @@ export default function AvailabilityPortal() {
 
   // Older submissions may carry hours / "prefer" / a note; only the days-off part is the employee's to edit.
   const [entries, setEntries] = useState<AvailabilityEntry[]>(employeeEntries(existing?.entries ?? []))
+  const [note, setNote] = useState(existing?.note ?? '')
   const [saving, setSaving] = useState<'draft' | 'submitted' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [requestBusy, setRequestBusy] = useState<string | null>(null)
 
   useEffect(() => {
     setEntries(employeeEntries(existing?.entries ?? []))
+    setNote(existing?.note ?? '')
     setError(null)
     // Re-syncs only when the target week changes, deliberately not on every `existing`
     // identity change (a background refresh would otherwise stomp an unsaved edit).
@@ -55,7 +58,7 @@ export default function AvailabilityPortal() {
   // Only days the venue is open: marking a closed day would burn the allowance for nothing.
   const open = db.settings.workingDays.length ? db.settings.workingDays : [0, 1, 2, 3, 4, 5, 6]
   const shownDows = new Set(open)
-  const dirty = JSON.stringify(entries) !== JSON.stringify(employeeEntries(existing?.entries ?? []))
+  const dirty = JSON.stringify(entries) !== JSON.stringify(employeeEntries(existing?.entries ?? [])) || note.trim() !== (existing?.note ?? '')
 
   function toggleDay(date: string) {
     setEntries((prev) => {
@@ -77,7 +80,7 @@ export default function AvailabilityPortal() {
     setSaving(status)
     setError(null)
     const res = await dispatch(
-      { type: 'submitAvailability', venueId: db!.venueId, weekStart: target, entries, note: null, status },
+      { type: 'submitAvailability', venueId: db!.venueId, weekStart: target, entries, note: note.trim() || null, status },
       {
         quiet: true,
         success: status === 'submitted' ? 'הזמינות הוגשה ✓ המנהל/ת יראו אותה, והיא תילקח בחשבון בשיבוץ.' : 'נשמר כטיוטה ✓ (עוד לא הוגש למנהל/ת)',
@@ -106,11 +109,12 @@ export default function AvailabilityPortal() {
 
       <div className={`sch-card ${closed ? '' : 'sch-card--attention'}`}>
         <div className="sch-row"><Clock3 size={18} aria-hidden="true" /><strong>{closed ? 'הגשת הזמינות נסגרה' : `מגישים עד יום שלישי ${formatDateLabel(requestDeadline(target))}`}</strong></div>
-        <p className="sch-sub">{closed ? 'המנהל/ת מכינים את הלוח. לשינוי זמינות מאוחר פנו אליהם. משמרת שפורסמה ונפתחה לבקשות עדיין אפשר לבקש.' : 'עד חצות, שעון ישראל. סמנו את מה שאי אפשר; המנהל/ת מחליטים על השיבוץ.'}</p>
+        <p className="sch-sub">{closed ? 'המנהל/ת מכינים את הלוח. לשינוי זמינות מאוחר פנו אליהם. משמרת שפורסמה ונפתחה לבקשות עדיין אפשר לבקש.' : 'עד חצות, שעון ישראל. המנהל/ת מחליטים על השיבוץ.'}</p>
       </div>
       <p className="sch-sub">
-        יש משמרת אחת ביום (עם כמה עובדים). סמנו את המשמרות שבהן <strong>אי אפשר</strong> לכם לעבוד — עד {cap === 0 ? 'אפס' : cap} ימים בשבוע. יום שלא סימנתם — אתם זמינים.
-        שעות מיוחדות והערות אישיות — ישירות למנהל/ת.
+        {cap === 0
+          ? 'כרגע אי אפשר לבקש ימי חופש. לאילוץ מיוחד כתבו הודעה למנהל/ת למטה.'
+          : <>אפשר לבקש עד <strong>{cap} ימי חופש</strong> בשבוע. יום שלא סימנתם — אתם זמינים לעבודה. אילוצים אחרים כתבו בהודעה למנהל/ת למטה.</>}
       </p>
       <p className={`sch-pill sch-pill--${used >= cap ? 'warn' : 'info'}`} style={{ alignSelf: 'flex-start' }} role="status" aria-live="polite">
         {daysOffLabel(used, cap)}
@@ -135,12 +139,23 @@ export default function AvailabilityPortal() {
                 {weekdayLongLabel(dow)} <span className="sch-faint ltr-isolate" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{formatDateLabel(date)}</span>
               </span>
               <button type="button" className="sch-chip press" aria-pressed={off} disabled={availabilityLocked || blocked} onClick={() => toggleDay(date)}>
-                {off ? 'לא זמין/ה' : blocked ? 'הגעתם למכסה' : 'אי אפשר לי'}
+                {off ? 'יום חופש ✓' : blocked ? 'הגעתם למכסה' : 'לבקש יום חופש'}
               </button>
             </div>
           )
         })}
       </div>
+
+      <label>
+        <span className="sch-label">הודעה פרטית למנהל/ת — אילוצים (לא חובה)</span>
+        <textarea
+          className="sch-input" rows={3} value={note} maxLength={300} disabled={availabilityLocked}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="למשל: לא יכול/ה להתחיל לפני 19:00 ביום שלישי, או מבחן ביום רביעי"
+          style={{ resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        <span className="sch-sub">רק את/ה והמנהל/ת רואים את ההודעה. {note.length}/300</span>
+      </label>
 
       {error && <InlineError>{error}</InlineError>}
 
