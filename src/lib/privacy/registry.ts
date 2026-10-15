@@ -386,11 +386,10 @@ export const LINK_OUT_HOSTS: readonly string[] = [
 // are still listed HERE so scripts/check-privacy.mjs keeps its promise that every
 // host named in src/ is accounted for. (Added 2026-10-13 with lib/dashboard/tiles.ts.)
 //
-// `wa.me` (2026-10-14): the owner's "send on WhatsApp" button in the join-link sheet on /owner/staff
-// (lib/staff/join.ts). It is a plain link the owner chooses to follow; nothing is fetched from it, and it carries the
-// join link the owner is about to send — to the owner's own WhatsApp, not to us. Behind the owner sign-in.
+// `wa.me` was listed here 2026-10-14 for a "send on WhatsApp" button in the join-link sheet and REMOVED 2026-10-15:
+// the button was dropped (the phone's own share sheet reaches WhatsApp), so no host is named for it any more.
 export const STAFF_ONLY_LINK_OUT_HOSTS: readonly string[] = [
-  'supabase.com', 'vercel.com', 'github.com', 'wa.me',
+  'supabase.com', 'vercel.com', 'github.com',
 ]
 
 // ── the inventory's fingerprint ───────────────────────────────────────────

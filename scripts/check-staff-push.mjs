@@ -59,8 +59,9 @@ check('an unset CRON_SECRET can never match an empty bearer', /!!envSecret && be
 const sw = read('public/sw.js')
 check('the service worker tags staff alerts so they replace instead of stacking', /tag: typeof data\.tag === 'string'/.test(sw))
 check('a tap opens the staff app, never an arbitrary page', /\|\| '\/staff'/.test(sw))
-const ownerDash = read('src/app/owner/dashboard/page.tsx')
-check('the card is on the staff home and the owner dashboard', /<StaffPushCard/.test(read('src/app/staff/dashboard/page.tsx')) && /<StaffPushCard/.test(ownerDash))
+// The bodies moved out of the pages 2026-10-15 (the developer's single dashboard shows them as lenses).
+const ownerDash = read('src/components/dashboard/OwnerDashboard.tsx')
+check('the card is on the staff home and the owner dashboard', /<StaffPushCard/.test(read('src/components/dashboard/EmployeeDashboard.tsx')) && /<StaffPushCard/.test(ownerDash))
 check('request-driven writes push what they just notified', /afterResponse\(\(\) => flushStaffPush\(\)\)/.test(read('src/app/api/shifts/dispatch/route.ts')))
 const push = read('src/lib/push/staff.ts')
 check('rows are claimed BEFORE sending (at-most-once, no double sends from overlapping runs)', push.indexOf('.update({ push_sent_at: now })') > -1 && push.indexOf('.update({ push_sent_at: now })') < push.indexOf('sendToOne(service, device, payload)'))

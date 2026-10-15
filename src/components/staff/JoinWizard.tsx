@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { AuthHandoff, GoogleG } from '@/components/AuthHandoff'
-import StaffPushCard from '@/components/staff/StaffPushCard'
+import StaffTour from '@/components/staff/StaffTour'
 import { haptic } from '@/lib/haptics'
 import {
   WIZARD_STEPS, joinPath, messageFor, progressIndex, wizardStep,
@@ -206,23 +206,10 @@ export default function JoinWizard(p: JoinWizardProps) {
           </section>
         )}
 
-        {/* ── 4 · done ───────────────────────────────────────────────────── */}
-        {step === 'done' && (
-          <section className="rise" style={sectionStyle} aria-labelledby="join-h" role="status">
-            <div aria-hidden style={{ fontSize: '2.2rem', textAlign: 'center' }}>✅</div>
-            <h1 id="join-h" ref={headingRef} tabIndex={-1} style={h1Style}>החשבון חובר</h1>
-            <p style={leadStyle}>
-              {p.signedInEmail ? <><bdi dir="ltr">{p.signedInEmail}</bdi> מחובר עכשיו לצוות. </> : null}
-              מעכשיו אפשר לראות את המשמרות ולבקש החלפות.
-            </p>
-            <Link href="/staff/dashboard" className="press" style={{ ...primaryBtn, textDecoration: 'none' }}>לאזור הצוות</Link>
-            <Link href="/staff/schedule" className="press" style={{ ...ghostBtn, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              🗓️ המשמרות שלי
-            </Link>
-            {/* The last step the scheduler rebuild already designed a card for: alerts on this phone. */}
-            <div style={{ textAlign: 'start' }}><StaffPushCard variant="wizard" /></div>
-          </section>
-        )}
+        {/* ── 4 · tour ───────────────────────────────────────────────────── */}
+        {/* The account is linked. Instead of a button into the dashboard, a short tour of what the dashboard holds
+            (owner, 2026-10-15); its last button goes to the login panel. */}
+        {step === 'tour' && <StaffTour who={who} />}
       </div>
 
       <AuthHandoff

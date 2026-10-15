@@ -8,6 +8,7 @@ import { useSettingsDraft } from '@/components/shifts/SettingsDraft'
 import { PresetCatalog, RoleCatalog, StationCatalog } from '@/components/shifts/CatalogEditor'
 import RosterPanel from '@/components/shifts/RosterPanel'
 import { SAFETY_BOUNDS } from '@/lib/shifts/config'
+import { DEFAULT_MAX_DAYS_OFF, MAX_DAYS_OFF_CEILING, maxDaysOffOf } from '@/lib/shifts/days-off'
 import { effectiveWeek, settingsFromWeek, usualHours, type DayHours, type HoursWeek } from '@/lib/shifts/hours-edit'
 import { weekdayLongLabel } from '@/lib/shifts/time'
 import type { SafetyRules } from '@/lib/shifts/types'
@@ -71,6 +72,24 @@ export default function ManagerPanel() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <FeatureRow label="הגשת זמינות עצמית" on={settings.features.availability} onToggle={(v) => patch({ features: { ...settings.features, availability: v } })} />
           <FeatureRow label="בקשות החלפת משמרות" on={settings.features.swaps} onToggle={(v) => patch({ features: { ...settings.features, swaps: v } })} />
+          {settings.features.availability && (
+            <label style={{ display: 'block' }}>
+              <span style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
+                <span>ימי חופש שעובד/ת יכול/ה לסמן בשבוע</span>
+                <strong className="ltr-isolate">{maxDaysOffOf(settings.features)}</strong>
+              </span>
+              <input
+                type="range" min={0} max={MAX_DAYS_OFF_CEILING} step={1}
+                value={maxDaysOffOf(settings.features)}
+                aria-label="ימי חופש לעובד בשבוע"
+                onChange={(e) => patch({ features: { ...settings.features, maxDaysOff: Number(e.target.value) } })}
+                style={{ width: '100%' }}
+              />
+              <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                ברירת המחדל {DEFAULT_MAX_DAYS_OFF}. העובדים מסמנים רק משמרות שאי אפשר להם, עד המספר הזה. אתם מחליטים בשיבוץ.
+              </span>
+            </label>
+          )}
         </div>
       </section>
 

@@ -11,7 +11,7 @@
 //   • every refusal the SQL can give has a sentence in Hebrew and a 4xx — checked AGAINST the SQL text, so adding a
 //     reason to migration 059 without teaching the app fails here (the "one rule spelled twice" lesson);
 //   • the token's shape, the wizard's screen logic, the link state shown to the owner, the share message;
-//   • that a join link is not a new thing to disclose: nothing stored on the device, no new host except staff-only wa.me;
+//   • that a join link is not a new thing to disclose: nothing stored on the device, no new host (a WhatsApp button, and with it wa.me, was removed 2026-10-15);
 //   • that the sign-in hand-off is the house interstitial and follows the same-origin `next` rule.
 //
 // What the database does with a link is proved by check-migration-059-060.mjs.
@@ -125,11 +125,36 @@ section('the wizard’s screens')
   check('a good link, nobody signed in → welcome', S({}) === 'welcome')
   check('…after the welcome → connect', S({ introSeen: true }) === 'connect')
   check('signed in (back from Google) → confirm, whatever the intro state', S({ signedIn: true }) === 'confirm' && S({ signedIn: true, introSeen: true }) === 'confirm')
-  check('claimed → done, even if the link has just been spent (status would now read "used")', S({ claimed: true, status: 'used', signedIn: true }) === 'done')
+  check('claimed → the tour, even if the link has just been spent (status would now read "used")', S({ claimed: true, status: 'used', signedIn: true }) === 'tour')
   for (const status of ['unknown', 'expired', 'used', 'revoked', 'inactive', 'linked']) {
     check(`a ${status} link → a dead end, signed in or not`, S({ status }) === 'dead' && S({ status, signedIn: true }) === 'dead')
   }
-  check('the progress dots: 3 steps, confirm shares step 2', J.WIZARD_STEPS.length === 3 && J.progressIndex('welcome') === 0 && J.progressIndex('connect') === 1 && J.progressIndex('confirm') === 1 && J.progressIndex('done') === 2)
+  check('the progress dots: 3 steps, confirm shares step 2', J.WIZARD_STEPS.length === 3 && J.progressIndex('welcome') === 0 && J.progressIndex('connect') === 1 && J.progressIndex('confirm') === 1 && J.progressIndex('tour') === 2)
+}
+
+section('the dashboard tour (2026-10-15)')
+{
+  writeFileSync(join(outDir, 'tour.mjs'), transpile(read('src/lib/staff/tour.ts'), 'tour.ts'))
+  const T = await import(pathToFileURL(join(outDir, 'tour.mjs')).href)
+  const tiles = read('src/lib/dashboard/tiles.ts')
+  const keys = T.TOUR_SLIDES.map((s) => s.key)
+  check('the tour explains the schedule, payslips, the POS and the loyalty club (the four things the owner named)',
+    ['schedule', 'payslips', 'pos', 'loyalty'].every((k) => keys.includes(k)))
+  check('every slide has Hebrew copy: a title, a lead and at least one point', T.TOUR_SLIDES.every((s) => HEBREW.test(s.title) && HEBREW.test(s.lead) && s.points.length > 0 && s.points.every((p) => HEBREW.test(p))))
+  check('slide keys are unique', new Set(keys).size === keys.length)
+  check('the miniature’s tiles are the REAL dashboard tiles — same id, icon and label as the registry',
+    T.TOUR_TILES.every((t) => new RegExp(`id: '${t.id}',[^\\n]*icon: '${t.icon}', he: '${t.he}'`).test(tiles)))
+  check('every slide that lights a tile names one the miniature has', T.TOUR_SLIDES.every((s) => s.tile === null || T.TOUR_TILES.some((t) => t.id === s.tile)))
+  check('the tour ends at the login panel', T.TOUR_END_HREF === '/login')
+  check('clampSlide never leaves the range (NaN, negatives, overshoot)', [NaN, -5, 0, 2.7, 99, Infinity].every((i) => { const c = T.clampSlide(i); return Number.isInteger(c) && c >= 0 && c < T.TOUR_SLIDES.length }))
+  check('only the last slide is "last"', T.TOUR_SLIDES.every((_, i) => T.isLastSlide(i) === (i === T.TOUR_SLIDES.length - 1)))
+  const tour = read('src/components/staff/StaffTour.tsx')
+  const wizSrc = read('src/components/staff/JoinWizard.tsx')
+  check('the wizard hands the claimed person to the tour — and no longer ends on a button into the dashboard',
+    /<StaffTour\b/.test(wizSrc) && !/href="\/staff\/dashboard"[^>]*>לאזור הצוות<\/Link>\s*<Link href="\/staff\/schedule"/.test(wizSrc))
+  check('the tour’s last action goes to TOUR_END_HREF, and the tour can be left at any slide', /TOUR_END_HREF/.test(tour) && /דילוג/.test(tour))
+  check('the tour offers the push card the scheduler built (its "wizard" variant)', /StaffPushCard variant="wizard"/.test(tour))
+  check('the tour stores nothing on the device', !/localStorage|sessionStorage|document\.cookie|indexedDB/.test(tour))
 }
 
 section('what the owner sees next to a person who has not joined')
@@ -153,9 +178,13 @@ section('the message the owner sends')
   check('it greets by first name, is Hebrew, and ends with the link on its own line', t.startsWith('היי דנה,') && HEBREW.test(t) && t.endsWith(`\n${url}`))
   check('without a name it still reads naturally', J.shareText(null, url).startsWith('היי,'))
   const l = J.shareLinks(t)
-  check('WhatsApp / SMS / mail links carry the whole text, encoded', decodeURIComponent(l.whatsapp.split('?text=')[1]) === t && decodeURIComponent(l.sms.split('body=')[1]) === t && decodeURIComponent(l.mailto.split('&body=')[1]) === t)
-  check('…and can’t be bent into another URL by the text (newlines and & are encoded)', !/[\n ]/.test(l.whatsapp) && !l.whatsapp.slice(l.whatsapp.indexOf('?text=') + 6).includes('&'))
-  check('WhatsApp is the one new host, and it is declared staff-only', /'wa\.me'/.test(read('src/lib/privacy/registry.ts').split('STAFF_ONLY_LINK_OUT_HOSTS')[1] ?? ''))
+  check('SMS / mail links carry the whole text, encoded', decodeURIComponent(l.sms.split('body=')[1]) === t && decodeURIComponent(l.mailto.split('&body=')[1]) === t)
+  check('…and can’t be bent into another URL by the text (newlines and & are encoded)', !/[\n ]/.test(l.sms) && !l.sms.slice(l.sms.indexOf('body=') + 5).includes('&'))
+  check('the message contains the link exactly once', t.split(url).length === 2)
+  check('no WhatsApp link, and no wa.me host declared (owner, 2026-10-15: it did not work)',
+    !('whatsapp' in l) && !/wa\.me/i.test(read('src/lib/privacy/registry.ts').replace(/\/\/.*$/gm, '')) && !/wa\.me|וואטסאפ/i.test(read('src/components/staff/JoinLinkSheet.tsx').replace(/\/\/.*$/gm, '')))
+  const sheet = read('src/components/staff/JoinLinkSheet.tsx')
+  check('the share sheet is handed the text only — passing `url` as well printed the link twice', /navigator\.share\(\{[^}]*\}\)/.test(sheet) && !/navigator\.share\(\{[^}]*\burl\b/.test(sheet))
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -196,7 +225,6 @@ section('wiring (read as text)')
   check('wizard: there is a way to swap the account', /זה לא החשבון שלי/.test(wiz) && /api\/auth\/signout/.test(wiz))
   check('wizard: every screen moves focus to its heading and the progress is announced', /headingRef\.current\?\.focus/.test(wiz) && /aria-current/.test(wiz))
   check('wizard: stores NOTHING on the device', !/localStorage|sessionStorage|document\.cookie|indexedDB/.test(wiz + code('src/components/staff/JoinLinkSheet.tsx')))
-  check('wizard: the last step offers the push card the scheduler already built (its "wizard" variant)', /StaffPushCard variant="wizard"/.test(wiz))
   check('wizard: the dead end is a sentence plus a way out, never a blank', /<Dead/.test(wiz) && /לדף הכניסה/.test(wiz))
 
   const callback = read('src/app/auth/callback/route.ts')

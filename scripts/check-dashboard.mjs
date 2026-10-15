@@ -38,6 +38,7 @@ const FILES = {
   'lib/waiter/access.ts': 'waiter-access.mjs',
   'lib/dashboard/tiles.ts': 'tiles.mjs',
   'lib/a11y-scope.ts': 'a11y-scope.mjs',
+  'lib/dashboard/lens.ts': 'lens.mjs',
   'lib/zreport/rules.ts': 'zrules.mjs',
 }
 const IMPORTS = {
@@ -64,6 +65,7 @@ const A = await load('staff-access.mjs')
 const B = await load('badges.mjs')
 const T = await load('tiles.mjs')
 const S = await load('a11y-scope.mjs')
+const L = await load('lens.mjs')
 
 let pass = 0
 const failures = []
@@ -205,6 +207,24 @@ check('…in all six categories, employee first, dev last',
 check('the dev ALSO has the employee experience (my shifts / POS / loyalty)', ['my-shifts', 'pos', 'loyalty'].every((i) => devAll.includes(i)))
 check('a non-dev owner never sees a dev tile', !devView(owner).some((i) => i.startsWith('dev-')))
 check('a fake dev (badge without admin) sees no dev tile and no owner tile', !devView(fakeDev).some((i) => i.startsWith('dev-') || i === 'staff'))
+
+section('the developer\'s ONE perspective with three views (owner, 2026-10-15)')
+{
+  const rd = (p) => readFileSync(new URL(p, SRC), 'utf8')
+  check('the three views are manager, employee, developer — in the order the owner named them', JSON.stringify(L.LENSES.map((l) => l.id)) === JSON.stringify(['manager', 'employee', 'dev']))
+  check('?view= is made safe: the three known values pass, everything else is the default',
+    ['manager', 'employee', 'dev'].every((v) => L.parseLens(v) === v) &&
+    ['x', '', null, undefined, 1, '../owner'].every((v) => L.parseLens(v) === L.DEFAULT_LENS) && L.parseLens(['manager']) === 'manager')
+  const devPage = rd('app/owner/dev/page.tsx')
+  check('/owner/dev renders the SAME bodies the owner and staff pages render, so the views cannot drift', /<OwnerDashboard /.test(devPage) && /<EmployeeDashboard /.test(devPage) && /<LensTabs/.test(devPage))
+  check('…and those pages render them too', /<OwnerDashboard /.test(rd('app/owner/dashboard/page.tsx')) && /<EmployeeDashboard /.test(rd('app/staff/dashboard/page.tsx')))
+  check('a developer who opens the owner or staff dashboard is sent to the matching view',
+    /isDev\(me\)\) redirect\('\/owner\/dev\?view=manager'\)/.test(rd('app/owner/dashboard/page.tsx')) && /isDev\(me\)\) redirect\('\/owner\/dev\?view=employee'\)/.test(rd('app/staff/dashboard/page.tsx')))
+  check('/owner/dev still re-checks isDev server-side', /!isDev\(me\)\) redirect\('\/no-access'\)/.test(devPage))
+  const tabs = rd('components/dashboard/LensTabs.tsx')
+  check('the switcher is a real tablist and stores nothing on the device (the view lives in the URL)', /role="tablist"/.test(tabs) && /role="tab"/.test(tabs) && /aria-selected/.test(tabs) && !/localStorage|sessionStorage|document\.cookie|indexedDB/.test(tabs))
+  check('only the active view is mounted (the manager view polls every 30s; it must not poll behind the others)', /\{panels\[lens\]\}/.test(tabs))
+}
 
 console.log(`\n${pass} passed, ${failures.length} failed`)
 if (failures.length) {

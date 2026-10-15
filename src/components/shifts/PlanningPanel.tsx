@@ -4,6 +4,7 @@ import { CalendarCheck, ChevronDown, Clock3, MessageSquareText, Scale } from 'lu
 import { useShifts } from './ShiftsProvider'
 import RequestsPanel from './RequestsPanel'
 import { Pill } from './ui'
+import { countDaysOff, daysOffLabel, maxDaysOffOf } from '@/lib/shifts/days-off'
 import { formatDateLabel, formatHours, requestDeadline, requestsOpen, weekDates, weekdayLongLabel, parseISODate } from '@/lib/shifts/time'
 
 export default function PlanningPanel() {
@@ -16,6 +17,18 @@ export default function PlanningPanel() {
   const waiting = eligible.filter((r) => !submitted.has(r.staffId))
   const balance = new Map(db.saturdayBalance.map((r) => [r.staffId, r]))
   const availabilityByStaff = new Map(submissions.map((submission) => [submission.staffId, submission]))
+  const cap = maxDaysOffOf(db.settings.features)
+  const nameOf = new Map(eligible.map((r) => [r.staffId, r.displayName]))
+  // Who cannot work which day — the manager's view while building the week (days with nobody off are left out).
+  const offByDate = weekDates(weekStart)
+    .map((date) => ({
+      date,
+      names: submissions
+        .filter((sub) => sub.entries.some((e) => e.date === date && e.kind === 'unavailable'))
+        .map((sub) => nameOf.get(sub.staffId))
+        .filter((n): n is string => !!n),
+    }))
+    .filter((d) => d.names.length > 0)
 
   return (
     <aside className="sch-planning-pane" aria-label="בקשות העובדים ושיבוץ הוגן">
@@ -31,7 +44,17 @@ export default function PlanningPanel() {
           <div className="sch-row"><CalendarCheck size={18} aria-hidden="true" /><h3 id="availability-heading" className="sch-h">זמינות עובדים</h3></div>
           <Pill tone={waiting.length ? 'warn' : 'ok'}>{submissions.length}/{eligible.length} הגישו</Pill>
         </header>
-        <p className="sch-sub">כל עובד/ת מוצג/ת בכרטיס סגור. פתחו רק את מי שצריך לבדוק; ירוק זמין, אדום לא זמין, וכתום מציין שעות מוגבלות.</p>
+        <p className="sch-sub">כל עובד/ת יכול/ה לסמן עד {cap} ימי חופש בשבוע (אפשר לשנות בהגדרות). פתחו כרטיס כדי לראות איזה ימים; ירוק זמין, אדום לא זמין.</p>
+        {offByDate.length > 0 && (
+          <div className="sch-card" aria-label="מי לא זמין בכל יום">
+            <strong className="sch-sub" style={{ fontWeight: 700 }}>מי לא זמין בכל יום</strong>
+            {offByDate.map((d) => (
+              <p key={d.date} className="sch-sub" style={{ margin: 0 }}>
+                <strong>{weekdayLongLabel(parseISODate(d.date).getUTCDay())} {formatDateLabel(d.date)}</strong> · {d.names.join(', ')}
+              </p>
+            ))}
+          </div>
+        )}
         <div className="sch-availability-people">
           {eligible.map((person) => {
             const submission = availabilityByStaff.get(person.staffId)
@@ -40,8 +63,8 @@ export default function PlanningPanel() {
             const preferred = submission?.entries.filter((entry) => entry.kind === 'prefer').length ?? 0
             return <details key={person.staffId} className="sch-availability-person">
               <summary>
-                <span><strong>{person.displayName}</strong><small>{submission ? `${7 - unavailable - partial} ימים זמינים${preferred ? ` · ${preferred} מועדפים` : ''}` : 'טרם הוגש'}</small></span>
-                <Pill tone={submission ? 'ok' : 'neutral'}>{submission ? 'הוגש' : 'ממתין'}</Pill>
+                <span><strong>{person.displayName}</strong><small>{submission ? `${daysOffLabel(countDaysOff(submission.entries), cap)}${partial || preferred ? ' · יש פרטים נוספים בכרטיס' : ''}` : 'טרם הוגש'}</small></span>
+                <Pill tone={!submission ? 'neutral' : unavailable > cap ? 'warn' : 'ok'}>{!submission ? 'ממתין' : unavailable > cap ? 'מעל המכסה' : 'הוגש'}</Pill>
                 <ChevronDown size={17} className="sch-disclosure-chevron" aria-hidden="true" />
               </summary>
               <div className="sch-availability-days">

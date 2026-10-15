@@ -5,28 +5,29 @@ import { CalendarPlus, CheckCircle2, ChevronLeft, ChevronRight, Clock3 } from 'l
 import { useShifts } from '@/components/shifts/ShiftsProvider'
 import { InlineError, Notice } from '@/components/shifts/ui'
 import { addDays, formatDateLabel, formatShiftRange, hasStarted, requestDeadline, requestsOpen, weekDates, weekdayLongLabel } from '@/lib/shifts/time'
-import type { AvailabilityEntry, AvailabilityKind } from '@/lib/shifts/types'
+import type { AvailabilityEntry } from '@/lib/shifts/types'
+import { canAddDayOff, countDaysOff, daysOffLabel, employeeEntries, maxDaysOffOf } from '@/lib/shifts/days-off'
 
-const KIND_LABELS: Record<Exclude<AvailabilityKind, 'partial'>, string> = { unavailable: 'לא זמין/ה', prefer: 'מעדיף/ה לעבוד' }
-
-// "Which days can I NOT work?" — for the week after the one on the schedule tab.
-// Only exceptions are stored: a day with nothing marked means "available". The
-// manager sees what is submitted, and the scheduler warns before putting someone
-// on a day they said they cannot do. Saving and submitting both say so, in words.
+// "Which shifts can I NOT do?" — for the week after the one on the schedule tab.
+// There is one shift a day (it takes several people), so marking the day marks that shift.
+// Only exceptions are stored: a day with nothing marked means "available". An employee may mark
+// at most `maxDaysOff` days a week (the manager's setting, default 2 — lib/shifts/days-off.ts);
+// custom hours, "prefer" and a private note are the manager's to handle, so they are not offered
+// here (owner, 2026-10-15). The manager sees what is submitted, and the scheduler warns before
+// putting someone on a day they said they cannot do. Saving and submitting both say so, in words.
 export default function AvailabilityPortal() {
   const { db, dispatch, weekStart, setWeekStart } = useShifts()
   const target = addDays(weekStart, 7)
   const existing = db?.availability.find((a) => a.weekStart === target && a.staffId === db.viewerStaffId)
 
-  const [entries, setEntries] = useState<AvailabilityEntry[]>(existing?.entries ?? [])
-  const [note, setNote] = useState(existing?.note ?? '')
+  // Older submissions may carry hours / "prefer" / a note; only the days-off part is the employee's to edit.
+  const [entries, setEntries] = useState<AvailabilityEntry[]>(employeeEntries(existing?.entries ?? []))
   const [saving, setSaving] = useState<'draft' | 'submitted' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [requestBusy, setRequestBusy] = useState<string | null>(null)
 
   useEffect(() => {
-    setEntries(existing?.entries ?? [])
-    setNote(existing?.note ?? '')
+    setEntries(employeeEntries(existing?.entries ?? []))
     setError(null)
     // Re-syncs only when the target week changes, deliberately not on every `existing`
     // identity change (a background refresh would otherwise stomp an unsaved edit).
@@ -49,23 +50,25 @@ export default function AvailabilityPortal() {
       !hasStarted(shift, db.now) &&
       !db.assignments.some((assignment) => assignment.shiftId === shift.id && assignment.staffId === db.viewerStaffId)
   )
-  const dirty = JSON.stringify(entries) !== JSON.stringify(existing?.entries ?? []) || note !== (existing?.note ?? '')
+  const cap = maxDaysOffOf(db.settings.features)
+  const used = countDaysOff(entries)
+  // Only days the venue is open: marking a closed day would burn the allowance for nothing.
+  const open = db.settings.workingDays.length ? db.settings.workingDays : [0, 1, 2, 3, 4, 5, 6]
+  const shownDows = new Set(open)
+  const dirty = JSON.stringify(entries) !== JSON.stringify(employeeEntries(existing?.entries ?? []))
 
-  function setKind(date: string, kind: AvailabilityKind | null) {
+  function toggleDay(date: string) {
     setEntries((prev) => {
-      const rest = prev.filter((e) => e.date !== date)
-      return kind ? [...rest, { date, kind, ...(kind === 'partial' ? { from: db!.settings.openTime, to: db!.settings.closeTime } : {}) }] : rest
+      if (prev.some((e) => e.date === date)) return prev.filter((e) => e.date !== date)
+      if (!canAddDayOff(prev, cap)) return prev
+      return [...prev, { date, kind: 'unavailable' }]
     })
-  }
-
-  function setTime(date: string, field: 'from' | 'to', value: string) {
-    setEntries((prev) => prev.map((e) => e.date === date ? { ...e, [field]: value } : e))
   }
 
   async function request(shiftId: string) {
     setRequestBusy(shiftId)
     setError(null)
-    const res = await dispatch({ type: 'requestShift', shiftId, note: note.trim() || null }, { quiet: true, success: 'הבקשה נשלחה למנהל/ת. השיבוץ ייקבע לאחר האישור ופרסום הלוח.' })
+    const res = await dispatch({ type: 'requestShift', shiftId, note: null }, { quiet: true, success: 'הבקשה נשלחה למנהל/ת. השיבוץ ייקבע לאחר האישור ופרסום הלוח.' })
     if (!res.ok) setError(res.message)
     setRequestBusy(null)
   }
@@ -74,7 +77,7 @@ export default function AvailabilityPortal() {
     setSaving(status)
     setError(null)
     const res = await dispatch(
-      { type: 'submitAvailability', venueId: db!.venueId, weekStart: target, entries, note: note.trim() || null, status },
+      { type: 'submitAvailability', venueId: db!.venueId, weekStart: target, entries, note: null, status },
       {
         quiet: true,
         success: status === 'submitted' ? 'הזמינות הוגשה ✓ המנהל/ת יראו אותה, והיא תילקח בחשבון בשיבוץ.' : 'נשמר כטיוטה ✓ (עוד לא הוגש למנהל/ת)',
@@ -103,9 +106,15 @@ export default function AvailabilityPortal() {
 
       <div className={`sch-card ${closed ? '' : 'sch-card--attention'}`}>
         <div className="sch-row"><Clock3 size={18} aria-hidden="true" /><strong>{closed ? 'הגשת הזמינות נסגרה' : `מגישים עד יום שלישי ${formatDateLabel(requestDeadline(target))}`}</strong></div>
-        <p className="sch-sub">{closed ? 'המנהל/ת מכינים את הלוח. לשינוי זמינות מאוחר פנו אליהם. משמרת שפורסמה ונפתחה לבקשות עדיין אפשר לבקש.' : 'עד חצות, שעון ישראל. סמנו זמינות ובחרו משמרות מועדפות; המנהל/ת מחליטים על השיבוץ.'}</p>
+        <p className="sch-sub">{closed ? 'המנהל/ת מכינים את הלוח. לשינוי זמינות מאוחר פנו אליהם. משמרת שפורסמה ונפתחה לבקשות עדיין אפשר לבקש.' : 'עד חצות, שעון ישראל. סמנו את מה שאי אפשר; המנהל/ת מחליטים על השיבוץ.'}</p>
       </div>
-      <p className="sch-sub">סמנו ימים שבהם <strong>אי אפשר</strong> לכם לעבוד, שעות חלקיות או העדפה. יום שלא סימנתם — אתם זמינים.</p>
+      <p className="sch-sub">
+        יש משמרת אחת ביום (עם כמה עובדים). סמנו את המשמרות שבהן <strong>אי אפשר</strong> לכם לעבוד — עד {cap === 0 ? 'אפס' : cap} ימים בשבוע. יום שלא סימנתם — אתם זמינים.
+        שעות מיוחדות והערות אישיות — ישירות למנהל/ת.
+      </p>
+      <p className={`sch-pill sch-pill--${used >= cap ? 'warn' : 'info'}`} style={{ alignSelf: 'flex-start' }} role="status" aria-live="polite">
+        {daysOffLabel(used, cap)}
+      </p>
 
       {existing?.status === 'submitted' && !dirty && (
         <p className="sch-pill sch-pill--ok" style={{ alignSelf: 'flex-start' }}>
@@ -116,33 +125,22 @@ export default function AvailabilityPortal() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {dates.map((date, dow) => {
-          const entry = entries.find((e) => e.date === date)
+          if (!shownDows.has(dow)) return null
+          const off = entries.some((e) => e.date === date)
+          // At the cap, the unmarked days are not clickable — but a marked one always is, so the person can swap days.
+          const blocked = !off && !canAddDayOff(entries, cap)
           return (
             <div key={date} className="sch-card" style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', padding: '10px 12px' }}>
               <span style={{ flex: '1 1 110px', fontWeight: 700 }}>
                 {weekdayLongLabel(dow)} <span className="sch-faint ltr-isolate" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{formatDateLabel(date)}</span>
               </span>
-              {(['unavailable', 'prefer', 'partial'] as const).map((k) => {
-                const active = entry?.kind === k
-                return (
-                  <button key={k} type="button" className="sch-chip press" aria-pressed={active} disabled={availabilityLocked} onClick={() => setKind(date, active ? null : k)}>
-                    {k === 'partial' ? 'שעות מסוימות' : KIND_LABELS[k]}
-                  </button>
-                )
-              })}
-              {entry?.kind === 'partial' && <div className="sch-row" style={{ width: '100%' }}>
-                <label style={{ flex: 1 }}><span className="sch-label">משעה</span><input type="time" className="sch-input ltr-isolate" value={entry.from ?? ''} disabled={availabilityLocked} onChange={(e) => setTime(date, 'from', e.target.value)} /></label>
-                <label style={{ flex: 1 }}><span className="sch-label">עד שעה</span><input type="time" className="sch-input ltr-isolate" value={entry.to ?? ''} disabled={availabilityLocked} onChange={(e) => setTime(date, 'to', e.target.value)} /></label>
-              </div>}
+              <button type="button" className="sch-chip press" aria-pressed={off} disabled={availabilityLocked || blocked} onClick={() => toggleDay(date)}>
+                {off ? 'לא זמין/ה' : blocked ? 'הגעתם למכסה' : 'אי אפשר לי'}
+              </button>
             </div>
           )
         })}
       </div>
-
-      <label>
-        <span className="sch-label">הערה למנהל/ת (לא חובה)</span>
-        <input className="sch-input" value={note} maxLength={300} disabled={availabilityLocked} onChange={(e) => setNote(e.target.value)} placeholder="משהו שחשוב למנהל/ת לדעת" />
-      </label>
 
       {error && <InlineError>{error}</InlineError>}
 

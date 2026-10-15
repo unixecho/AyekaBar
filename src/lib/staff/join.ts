@@ -123,29 +123,31 @@ export const messageFor = (key: JoinStatus | ClaimReason): JoinMessage => JOIN_M
 
 // ── the wizard's screens ───────────────────────────────────────────────────
 
-export type WizardStep = 'dead' | 'welcome' | 'connect' | 'confirm' | 'done'
+export type WizardStep = 'dead' | 'welcome' | 'connect' | 'confirm' | 'tour'
 
 /** Which screen to show. `introSeen` is the one piece of local state: the welcome screen is shown first and the
- *  visitor taps through it. Everything else is a fact the server knows (status, signed in, already claimed). */
+ *  visitor taps through it. Everything else is a fact the server knows (status, signed in, already claimed).
+ *  Once the account is linked the last screen is the dashboard TOUR (lib/staff/tour.ts), which ends at the login
+ *  panel — not a button into the dashboard (owner, 2026-10-15). */
 export function wizardStep(s: { status: JoinStatus; signedIn: boolean; claimed: boolean; introSeen: boolean }): WizardStep {
-  if (s.claimed) return 'done'
+  if (s.claimed) return 'tour'
   if (s.status !== 'ok') return 'dead'
   if (s.signedIn) return 'confirm'
   return s.introSeen ? 'connect' : 'welcome'
 }
 
-/** The progress dots: 3 steps — meet, connect Google, done. */
+/** The progress dots: 3 steps — meet, connect Google, tour. */
 export const WIZARD_STEPS = [
   { key: 'welcome', label: 'ברוכים הבאים' },
   { key: 'connect', label: 'חיבור Google' },
-  { key: 'done', label: 'מוכנים' },
+  { key: 'tour', label: 'סיור באזור הצוות' },
 ] as const
 
 export function progressIndex(step: WizardStep): number {
   switch (step) {
     case 'welcome': return 0
     case 'connect': case 'confirm': return 1
-    case 'done': return 2
+    case 'tour': return 2
     default: return 0
   }
 }
@@ -169,10 +171,11 @@ export function shareText(firstName: string | null, url: string): string {
   return `${hello} זה הקישור להצטרפות לצוות אייכה בר. נכנסים, מתחברים עם חשבון Google ואפשר לראות את המשמרות:\n${url}`
 }
 
-export function shareLinks(text: string): { whatsapp: string; sms: string; mailto: string } {
+/** No WhatsApp link on purpose (owner, 2026-10-15: it did not work). The phone's own share sheet — the "שיתוף"
+ *  button — reaches WhatsApp anyway. */
+export function shareLinks(text: string): { sms: string; mailto: string } {
   const t = encodeURIComponent(text)
   return {
-    whatsapp: `https://wa.me/?text=${t}`,
     sms: `sms:?&body=${t}`,
     mailto: `mailto:?subject=${encodeURIComponent('הצטרפות לצוות אייכה בר')}&body=${t}`,
   }

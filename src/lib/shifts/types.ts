@@ -45,7 +45,9 @@ export type SafetyRules = {
   maxConsecutiveDays: number
 }
 
-export type FeatureFlags = { availability: boolean; swaps: boolean }
+/** `maxDaysOff` (2026-10-15): how many days a week an employee may mark unavailable. Optional because venues written
+ *  before it existed have no such key — read it through `maxDaysOffOf()` (lib/shifts/days-off.ts), never directly. */
+export type FeatureFlags = { availability: boolean; swaps: boolean; maxDaysOff?: number }
 
 export type RuleSeverity = 'error' | 'warning' | 'off'
 

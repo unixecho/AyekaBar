@@ -66,7 +66,7 @@ function emit(tsPath) {
 
 // Pure modules only. Server-only files (guard, state-query, dispatch-write) and
 // type-only files are deliberately NOT here — and the purity check below proves it.
-const PURE = ['time', 'names', 'presets', 'coverage', 'messages', 'snapshot-diff', 'rules', 'view', 'access', 'schema', 'config', 'serialize', 'actions', 'people', 'hours-edit', 'draft', 'poster-model', 'poster-pdf']
+const PURE = ['time', 'names', 'presets', 'coverage', 'messages', 'snapshot-diff', 'rules', 'view', 'access', 'schema', 'config', 'serialize', 'actions', 'people', 'hours-edit', 'draft', 'poster-model', 'poster-pdf', 'days-off']
 for (const n of PURE) emit(join(SHIFTS, `${n}.ts`))
 emit(join(SRC, 'lib', 'staff', 'access.ts'))
 
@@ -86,6 +86,7 @@ const People = await load('lib/shifts/people.mjs')
 const HE = await load('lib/shifts/hours-edit.mjs')
 const Dr = await load('lib/shifts/draft.mjs')
 const PM = await load('lib/shifts/poster-model.mjs')
+const DO = await load('lib/shifts/days-off.mjs')
 const PDF = await load('lib/shifts/poster-pdf.mjs')
 
 // ---- Output ---------------------------------------------------------------------------------------------
@@ -266,6 +267,39 @@ check('out-of-range safety values are refused', throwsZod(() => S.parseAction({ 
 check('a member patch is limited to its own fields', throwsZod(() => S.parseAction({ type: 'setMember', venueId: U, staffId: U2, patch: { role: 'owner' } })))
 
 // ============================================================================================================
+section('days off — employees mark only what they cannot do, up to the manager\'s number (owner, 2026-10-15)')
+{
+  check('the default is 2 a week when the venue never set one', DO.DEFAULT_MAX_DAYS_OFF === 2 && DO.maxDaysOffOf({}) === 2 && DO.maxDaysOffOf(null) === 2 && DO.maxDaysOffOf(undefined) === 2)
+  check('a manager-chosen number is honoured, including 0 and 7', DO.maxDaysOffOf({ maxDaysOff: 0 }) === 0 && DO.maxDaysOffOf({ maxDaysOff: 3 }) === 3 && DO.maxDaysOffOf({ maxDaysOff: 7 }) === 7)
+  check('anything that is not a whole number 0..7 falls back to the default', [-1, 8, 1.5, NaN, '3', null, {}, true].every((v) => DO.maxDaysOffOf({ maxDaysOff: v }) === 2))
+  const e = (date, kind = 'unavailable', extra = {}) => ({ date, kind, ...extra })
+  const mixed = [e('2030-01-06'), e('2030-01-07', 'prefer'), e('2030-01-08', 'partial', { from: '17:00', to: '21:00' }), e('2030-01-06'), e('2030-01-09')]
+  const out = DO.employeeEntries(mixed)
+  check('an employee write keeps only "unavailable", once per date, with no times', JSON.stringify(out) === JSON.stringify([e('2030-01-06'), e('2030-01-09')]))
+  check('days are counted by distinct date, and only the unavailable ones', DO.countDaysOff(mixed) === 2)
+  check('at the cap you cannot add; under it you can; the cap 0 refuses everything', !DO.canAddDayOff(out, 2) && DO.canAddDayOff(out, 3) && !DO.canAddDayOff([], 0))
+  check('days left never goes negative', DO.daysOffLeft(out, 1) === 0 && DO.daysOffLeft(out, 5) === 3)
+  check('the label reads "used of cap"', DO.daysOffLabel(1, 2).includes('1 מתוך 2'))
+  check('the settings patch accepts maxDaysOff 0..7 and refuses the rest',
+    !throwsZod(() => S.settingsPatchSchema.parse({ features: { availability: true, swaps: true, maxDaysOff: 3 } })) &&
+    !throwsZod(() => S.settingsPatchSchema.parse({ features: { availability: true, swaps: false } })) &&
+    throwsZod(() => S.settingsPatchSchema.parse({ features: { availability: true, swaps: true, maxDaysOff: 9 } })) &&
+    throwsZod(() => S.settingsPatchSchema.parse({ features: { availability: true, swaps: true, maxDaysOff: 1.5 } })) &&
+    throwsZod(() => S.settingsPatchSchema.parse({ features: { availability: true, swaps: true, surprise: 1 } })))
+  check('the refusal has a plain Hebrew sentence that names the number, and a 400',
+    Msg.scheduleMessage('too_many_days_off', { max: 2 }).includes('2') && /[א-ת]/.test(Msg.scheduleMessage('too_many_days_off', { max: 0 })) && Msg.scheduleStatus('too_many_days_off') === 400)
+  const dispatch = readFileSync(join(SHIFTS, 'dispatch-write.ts'), 'utf8')
+  const sub = dispatch.slice(dispatch.indexOf("case 'submitAvailability'"), dispatch.indexOf("case 'requestShift'"))
+  check('the server enforces it: reads the venue\'s cap, trims to employee entries, and refuses over the cap BEFORE the database call',
+    /maxDaysOffOf\(/.test(sub) && /employeeEntries\(/.test(sub) && sub.indexOf('too_many_days_off') > -1 && sub.indexOf('too_many_days_off') < sub.indexOf("callSched(service, 'sched_submit_availability'"))
+  check('…and an employee\'s private note is never stored (the manager handles remarks)', /p_note: null/.test(sub))
+  const portal = readFileSync(join(SRC, 'components', 'shifts', 'AvailabilityPortal.tsx'), 'utf8')
+  check('the employee screen offers neither custom hours nor "prefer" nor a private remark', !/type="time"/.test(portal) && !/'prefer'|'partial'/.test(portal.replace(/\/\/.*$/gm, '')) && !/הערה למנהל/.test(portal))
+  const planning = readFileSync(join(SRC, 'components', 'shifts', 'PlanningPanel.tsx'), 'utf8')
+  const mgr = readFileSync(join(SRC, 'components', 'shifts', 'ManagerPanel.tsx'), 'utf8')
+  check('the manager sees each person\'s days off, who is off each day, and can set the number', /daysOffLabel\(/.test(planning) && /offByDate/.test(planning) && /maxDaysOff:/.test(mgr))
+}
+
 section('the warnings engine + "what would approving this change?"')
 const wk = '2030-01-06'
 const baseSettings = {

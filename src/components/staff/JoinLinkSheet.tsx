@@ -11,8 +11,8 @@ import { expiryLabel, shareLinks, shareText } from '@/lib/staff/join'
 // message means generating a new link, which retires this one. The sheet says so plainly, because the alternative
 // (the owner closing it and expecting to find the link on the roster) is the one way this flow can disappoint.
 //
-// Sharing is deliberately boring: copy, WhatsApp (this bar's staff live in it), SMS, and the phone's own share
-// sheet when it has one. The message text is built in lib/staff/join.ts so it is tested, not improvised here.
+// Sharing is deliberately boring: copy, SMS, and the phone's own share sheet when it has one (that is how it reaches
+// WhatsApp — a dedicated WhatsApp button was removed 2026-10-15, it did not work). The message text is built in lib/staff/join.ts so it is tested, not improvised here.
 
 export interface JoinLinkShown {
   name: string
@@ -47,7 +47,8 @@ export default function JoinLinkSheet({ link, onClose }: { link: JoinLinkShown |
 
   async function share() {
     haptic('select')
-    try { await navigator.share({ title: 'הצטרפות לצוות אייכה בר', text, url: link!.url }) } catch { /* cancelled */ }
+    // `text` already ends with the link. Passing `url` as well made WhatsApp (and others) print it twice.
+    try { await navigator.share({ title: 'הצטרפות לצוות אייכה בר', text }) } catch { /* cancelled */ }
   }
 
   return (
@@ -80,7 +81,6 @@ export default function JoinLinkSheet({ link, onClose }: { link: JoinLinkShown |
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
-          <a className="press" href={links.whatsapp} target="_blank" rel="noopener noreferrer" style={{ ...ghost, ...anchor }}>💬 וואטסאפ</a>
           <a className="press" href={links.sms} style={{ ...ghost, ...anchor }}>✉️ הודעה</a>
           {canShare && <button type="button" className="press" onClick={share} style={ghost}>⤴︎ שיתוף</button>}
         </div>

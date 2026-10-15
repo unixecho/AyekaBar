@@ -81,6 +81,12 @@ export function scheduleMessage(reason: string, details: Details = {}): string {
       const date = typeof details.date === 'string' ? details.date : null
       return `סימנתם שאתם לא זמינים${date ? ` ב${formatDayLabel(date)}` : ' ביום הזה'}. עדכנו קודם את הזמינות שלכם בלשונית "זמינות".`
     }
+    case 'too_many_days_off': {
+      const max = typeof details.max === 'number' ? details.max : null
+      return max === 0
+        ? 'המנהל/ת הגדירו שאי אפשר לסמן ימי חופש בשבוע. לבקשה מיוחדת פנו אליהם ישירות.'
+        : `אפשר לסמן עד ${max ?? 'מספר מוגבל של'} ימי חופש בשבוע. הסירו יום אחד או פנו למנהל/ת לבקשה חריגה.`
+    }
     case 'shift_full':
       return 'המשמרת כבר מאוישת במלואה. אפשר לבקש החלפה עם מי שמשובץ/ת בה.'
     case 'duplicate_person':

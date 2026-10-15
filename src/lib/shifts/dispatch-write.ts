@@ -23,6 +23,7 @@ import type { ScheduleAction } from './actions'
 import type { SettingsPatch } from './schema'
 import { DEFAULT_PRESETS } from './config'
 import { syncShiftsToPresets } from './preset-sync'
+import { employeeEntries, maxDaysOffOf } from './days-off'
 
 type Service = ReturnType<typeof createServiceClient>
 type Row = Record<string, unknown>
@@ -298,9 +299,16 @@ export async function performDispatch(action: ScheduleAction): Promise<Row> {
       for (const e of action.entries as { date: string }[]) {
         if (e.date < start || e.date > end) throw refusal('bad_date')
       }
+      // An employee tells the scheduler only which days they cannot work, and no more than the manager allows a
+      // week (lib/shifts/days-off.ts). Custom hours, "prefer" and the private note are the manager's to handle, so a
+      // stale tab that still sends them gets them dropped rather than stored. The database function is unchanged.
+      const { data: cfg } = await service.from('shift_settings').select('features').eq('venue_id', action.venueId).maybeSingle()
+      const cap = maxDaysOffOf(cfg?.features as { maxDaysOff?: unknown } | null)
+      const entries = employeeEntries(action.entries as { date: string; kind: string }[])
+      if (entries.length > cap) throw refusal('too_many_days_off', { max: cap })
       return callSched(service, 'sched_submit_availability', {
         p_actor: staff.id, p_venue: action.venueId, p_week_start: start,
-        p_entries: action.entries, p_note: action.note ?? null, p_status: action.status,
+        p_entries: entries, p_note: null, p_status: action.status,
       })
     }
 
