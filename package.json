@@ -16,7 +16,7 @@
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
     "@vercel/functions": "^2.2.0",
-    "a11y-widget": "https://github.com/unixecho/a11y-widget/archive/refs/tags/v1.1.1.tar.gz",
+    "a11y-widget": "https://github.com/unixecho/a11y-widget/archive/refs/tags/v1.2.0.tar.gz",
     "jose": "^5.9.6",
     "lucide-react": "^1.45.0",
     "next": "14.2.16",

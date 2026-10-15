@@ -21,7 +21,14 @@ import { a11yDisabledOn } from '@/lib/a11y-scope'
 // `storageKey` is this app's PRE-EXISTING localStorage key — passed through
 // deliberately so visitors' already-saved settings survived the move onto the
 // shared package. Keep it.
-const CONFIG: A11yWidgetConfig = { storageKey: 'ayeka.a11y.prefs.v1', statementHref: '/accessibility' }
+const CONFIG: A11yWidgetConfig = {
+  storageKey: 'ayeka.a11y.prefs.v1',
+  statementHref: '/accessibility',
+  // The menu's back arrow: named outright so the launcher keeps clear of it even
+  // if the header around it is ever not sticky. (The cart, the globe and anything
+  // else fixed or sticky are found by the widget itself.)
+  avoid: ['.menu-back'],
+}
 
 /** The CSS custom properties the widget's provider writes to <html>. */
 const ROOT_VARS = [
