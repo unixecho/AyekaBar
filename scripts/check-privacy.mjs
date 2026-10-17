@@ -188,6 +188,13 @@ section('visit counting — anonymous, cookieless, nothing on the device (the on
     /from '@vercel\/analytics\/next'/.test(mount) && /beforeSend=/.test(mount) && /sanitizeVisitEvent\(/.test(mount) && /countingRefused\(/.test(mount) &&
     /doNotTrack/.test(mount) && /globalPrivacyControl/.test(mount) &&
     [...code].filter(([f, c]) => f !== 'src/components/SiteAnalytics.tsx' && /@vercel\/analytics/.test(c)).length === 0)
+  // FOUND ON THE LIVE SCRIPT (2026-10-17): the file Vercel serves at the seeded /<id>/script.js is not in the repo, and it
+  // contains a localStorage path — the key `__va_attribution`, written ONLY when the site tells it who a visitor is
+  // (the identify / group API). We never do, so nothing is written (verified live: storage held only declared keys).
+  // The day anything calls those, the script starts storing an identifier on the device: fail until it is declared.
+  check('nothing identifies or groups a visitor (no window.va, identify(), group(), track() anywhere in src/) — the live script would then store __va_attribution on the device',
+    ![...code].some(([f, c]) => !f.startsWith('src/lib/privacy/') && /window\.va\b|\bidentify\(|\bgroup\(|\btrack\(/.test(c)) &&
+    !/identify|group|track/.test(mount.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')))
   check('the root layout mounts it, outside #a11y-scope',
     /<SiteAnalytics \/>/.test(code.get('src/app/layout.tsx') ?? '') &&
     (code.get('src/app/layout.tsx') ?? '').indexOf('<SiteAnalytics />') > (code.get('src/app/layout.tsx') ?? '').indexOf('</div>'))
