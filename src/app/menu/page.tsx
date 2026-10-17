@@ -2,8 +2,13 @@ import { fetchMenu } from '@/lib/menu/fetch'
 import { getCartActionFlags, getMenuCartEnabled, getCustomerFeedbackEnabled, getSiteLanguages } from '@/lib/settings/server'
 import MenuView from '@/components/MenuView'
 import type { Metadata } from 'next'
+import { pageShare } from '@/lib/site'
 
-export const metadata: Metadata = { title: 'תפריט · אייכה בר' }
+export const metadata: Metadata = pageShare(
+  'תפריט דיגיטלי · אייכה בר',
+  'התפריט המלא של אייכה בר בחריש — קוקטיילים, בירות, אוכל ומחירים, בעברית, אנגלית וערבית. מתעדכן בזמן אמת.',
+  '/menu',
+)
 
 // Always render fresh from the published menu (owner may publish mid-service).
 export const dynamic = 'force-dynamic'

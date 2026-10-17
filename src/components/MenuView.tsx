@@ -18,7 +18,7 @@ import DinerStrip from '@/components/cart/DinerStrip'
 import AddToCartControl from '@/components/cart/AddToCartControl'
 import FeedbackButton from '@/components/FeedbackButton'
 import StorageNotice from '@/components/privacy/StorageNotice'
-import { COOKIES_LINK_LABEL, COOKIES_PATH } from '@/lib/privacy/notice'
+import { COOKIES_LINK_LABEL, COOKIES_PATH, PRIVACY_LINK_LABEL, PRIVACY_PATH } from '@/lib/privacy/notice'
 
 const POLL_MS = 30_000
 
@@ -300,6 +300,9 @@ export default function MenuView({
           </Link>
           {/* What the site keeps on the visitor's device — the same link, in the
               same place, as the portal's footer (the one shared label). */}
+          <Link href={PRIVACY_PATH} className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline', fontSize: '0.8rem' }}>
+            {PRIVACY_LINK_LABEL[lang]}
+          </Link>
           <Link href={COOKIES_PATH} className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline', fontSize: '0.8rem' }}>
             {COOKIES_LINK_LABEL[lang]}
           </Link>

@@ -118,6 +118,13 @@ export default function CookiesView({ languages }: { languages?: Lang[] }) {
           <p style={small}>{T.legacyNote[lang]}</p>
         </Section>
 
+        <Section title={T.countingTitle[lang]}>
+          <p style={{ margin: '0 0 8px' }}>{T.countingIntro[lang]}</p>
+          <ul style={listStyle}>
+            {T.counting.map((s, i) => <li key={i}>{s[lang]}</li>)}
+          </ul>
+        </Section>
+
         <Section title={T.othersTitle[lang]}>
           <p style={{ margin: '0 0 8px' }}>{T.othersIntro[lang]}</p>
           <ul style={listStyle}>

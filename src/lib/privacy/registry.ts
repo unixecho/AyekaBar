@@ -24,10 +24,13 @@ import { ACK_KEY } from './notice'
 // recommendation of the Authority (non-binding, from a payments guidance) asks
 // for opt-in for cookies beyond those strictly necessary. Everything declared
 // here is either needed for something the visitor is using or is a choice the
-// visitor made, and nothing is analytics or advertising — so what is owed is a
-// CLEAR, FINDABLE NOTICE, not a consent gate. The day an analytics or
-// advertising item is added this file refuses (CONSENT_MECHANISM_BUILT, below)
-// until a real opt-in exists. PLAYBOOK.md §3 has the sources and the reasoning.
+// visitor made, and nothing STORED on a device is analytics or advertising — so
+// what is owed is a CLEAR, FINDABLE NOTICE, not a consent gate. The day an
+// analytics or advertising ITEM is added this file refuses (CONSENT_MECHANISM_BUILT,
+// below) until a real opt-in exists. The one thing the site does measure — page
+// views, anonymous, no cookie, nothing on the device (2026-10-17) — is declared
+// separately as VISIT_COUNTING and held to its promises by the harness.
+// PLAYBOOK.md §3 has the sources and the reasoning.
 // This is engineering, not legal advice.
 //
 // THE RULES FOR AN ENTRY
@@ -73,10 +76,26 @@ export interface StorageItem {
  *  real consent mechanism is built — see the harness. */
 export const CONSENT_MECHANISM_BUILT = false
 
+/** The visit counting (Vercel Web Analytics, components/SiteAnalytics.tsx). It is NOT a StorageItem because it
+ *  stores nothing on the device — the reason an opt-in is not owed for it (PLAYBOOK §3.2) — so it is declared
+ *  here, where the harness holds it to that: the package must contain no cookie / storage write, the mount must
+ *  filter through lib/analytics.ts, and the page copy must say so. Part of the notice's fingerprint, so everyone
+ *  sees the one-time notice again when it changes. */
+export const VISIT_COUNTING = {
+  id: 'vercel-web-analytics',
+  provider: 'Vercel Web Analytics',
+  storesOnDevice: false,
+  setsCookie: false,
+  /** Honoured: the browser's Do Not Track and Global Privacy Control signals. */
+  honoursDoNotTrack: true,
+  /** Never counted; mirrors COUNTING_EXCLUDED_PREFIXES in lib/analytics.ts (the harness compares them). */
+  excludedPrefixes: ['/owner', '/staff', '/customer', '/join', '/checkin', '/login', '/auth', '/no-access', '/api'] as readonly string[],
+} as const
+
 /** Shown on /cookies. A human bumps this when the PAGE's meaning changes; the
  *  one-time notice re-appears whenever the inventory itself changes — that is
  *  what `INVENTORY_VERSION` in notice.ts is pinned to (`inventoryVersion`, below). */
-export const PRIVACY_PAGE_UPDATED = '2026-10-15'
+export const PRIVACY_PAGE_UPDATED = '2026-10-17'
 
 export const STORAGE_REGISTRY: readonly StorageItem[] = [
   // ── needed for something the visitor is using ───────────────────────────
@@ -432,6 +451,7 @@ export function inventoryVersion(items: readonly StorageItem[] = STORAGE_REGISTR
   const lines = items
     .map((i) => [i.kind, i.name, i.category, i.audience].join('|'))
     .sort()
+    .concat(`measurement|${VISIT_COUNTING.id}|${VISIT_COUNTING.storesOnDevice}`)
     .join('\n')
   let h = 0x811c9dc5
   for (let i = 0; i < lines.length; i++) {

@@ -10,7 +10,7 @@ import LanguageSwitch, { useLanguage, type Lang } from '@/components/LanguageSwi
 import ReviewWall from '@/components/ReviewWall'
 import FeedbackButton from '@/components/FeedbackButton'
 import StorageNotice from '@/components/privacy/StorageNotice'
-import { COOKIES_LINK_LABEL, COOKIES_PATH } from '@/lib/privacy/notice'
+import { COOKIES_LINK_LABEL, COOKIES_PATH, PRIVACY_LINK_LABEL, PRIVACY_PATH } from '@/lib/privacy/notice'
 
 const LINKS = {
   menu: '/menu',
@@ -253,6 +253,7 @@ export default function Portal({
               3.2.6 Consistent Help, the reasoning behind that file's own note). */}
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: 16, rowGap: 12 }}>
             <Link href="/accessibility" className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{t.accessibility}</Link>
+            <Link href={PRIVACY_PATH} className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{PRIVACY_LINK_LABEL[lang]}</Link>
             <Link href={COOKIES_PATH} className="tap44" style={{ color: 'var(--text-faint)', textDecoration: 'underline' }}>{COOKIES_LINK_LABEL[lang]}</Link>
           </div>
         </footer>

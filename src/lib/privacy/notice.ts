@@ -19,6 +19,7 @@ type Text = Record<Lang, string>
 const t = (he: string, en: string, ar: string): Text => ({ he, en, ar })
 
 export const COOKIES_PATH = '/cookies'
+export const PRIVACY_PATH = '/privacy'
 
 /** The footer link — one string, used by the portal and by the menu. */
 export const COOKIES_LINK_LABEL: Text = t(
@@ -27,12 +28,15 @@ export const COOKIES_LINK_LABEL: Text = t(
   'ملفات تعريف الارتباط والتخزين',
 )
 
+/** The footer's privacy-policy link, beside the cookies one. */
+export const PRIVACY_LINK_LABEL: Text = t('מדיניות פרטיות', 'Privacy policy', 'سياسة الخصوصية')
+
 export const NOTICE_COPY = {
   label: t('הודעה על אחסון במכשיר', 'Notice about on-device storage', 'إشعار حول التخزين على الجهاز'),
   text: t(
-    'האתר שומר במכשיר שלכם רק מה שנחוץ כדי שיעבוד כמו שביקשתם — השפה, הגדרות הנגישות ורשימת ההזמנה. בלי מעקב ובלי פרסום.',
-    'This site keeps only what it needs on your device to work the way you asked — your language, accessibility settings and order list. No tracking, no advertising.',
-    'يحفظ هذا الموقع على جهازكم ما يلزمه فقط ليعمل كما طلبتم — اللغة وإعدادات إمكانية الوصول وقائمة الطلب. بلا تتبّع وبلا إعلانات.'),
+    'האתר שומר במכשיר שלכם רק מה שנחוץ כדי שיעבוד כמו שביקשתם — השפה, הגדרות הנגישות ורשימת ההזמנה. ביקורים נספרים באופן אנונימי וללא עוגיות. בלי מעקב ובלי פרסום.',
+    'This site keeps only what it needs on your device to work the way you asked — your language, accessibility settings and order list. Visits are counted anonymously, without cookies. No tracking, no advertising.',
+    'يحفظ هذا الموقع على جهازكم ما يلزمه فقط ليعمل كما طلبتم — اللغة وإعدادات إمكانية الوصول وقائمة الطلب. تُعدّ الزيارات بشكل مجهول ودون ملفات تعريف ارتباط. بلا تتبّع وبلا إعلانات.'),
   ok: t('הבנתי', 'Got it', 'فهمت'),
   details: t('פרטים', 'Details', 'التفاصيل'),
 }
@@ -43,7 +47,7 @@ export const ACK_KEY = 'ayeka.privacy.ack.v1'
 /** The fingerprint of lib/privacy/registry.ts's inventory (`inventoryVersion()`).
  *  Change what the site stores and the harness fails until this is updated — and
  *  every visitor who had acknowledged the old inventory sees the notice again. */
-export const INVENTORY_VERSION = '6bea11da'
+export const INVENTORY_VERSION = 'b29042c6'
 
 // ── the notice's memory ───────────────────────────────────────────────────
 export interface PrivacyAck { v: string; at: number }

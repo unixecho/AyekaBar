@@ -3,8 +3,13 @@ import { getAccessibilityStatement, getAccessibilityStatementUpdatedAt } from '@
 import { WIDGET_COVERAGE } from 'a11y-widget'
 import { COOKIES_PATH } from '@/lib/privacy/notice'
 import type { Metadata } from 'next'
+import { pageShare } from '@/lib/site'
 
-export const metadata: Metadata = { title: 'הצהרת נגישות · אייכה בר' }
+export const metadata: Metadata = pageShare(
+  'הצהרת נגישות · אייכה בר',
+  'הצהרת הנגישות של אתר אייכה בר: מה הותאם, מה נבדק, ואיך לפנות אלינו אם נתקלתם בקושי.',
+  '/accessibility',
+)
 
 // The accessibility statement (הצהרת נגישות) required by Israel's Equal
 // Rights for Persons with Disabilities regulations (תקנות נגישות השירות) —

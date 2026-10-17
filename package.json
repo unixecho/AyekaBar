@@ -15,6 +15,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
+    "@vercel/analytics": "2.0.1",
     "@vercel/functions": "^2.2.0",
     "a11y-widget": "https://github.com/unixecho/a11y-widget/archive/refs/tags/v1.2.1.tar.gz",
     "jose": "^5.9.6",

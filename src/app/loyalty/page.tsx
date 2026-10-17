@@ -1,8 +1,13 @@
 import Link from 'next/link'
 import { getLoyaltyEnabled } from '@/lib/settings/server'
 import type { Metadata } from 'next'
+import { pageShare } from '@/lib/site'
 
-export const metadata: Metadata = { title: 'מועדון נאמנות · אייכה בר' }
+export const metadata: Metadata = pageShare(
+  'מועדון נאמנות · אייכה בר',
+  'מצטרפים למועדון הנאמנות של אייכה בר: צוברים נקודות בכל ביקור ומממשים הטבות — בלי סיסמה, עם חשבון Google.',
+  '/loyalty',
+)
 
 const REWARDS = [
   { pts: 10, label: 'כוס בירה חינם', icon: '🍺' },

@@ -19,7 +19,8 @@ import './privacy.css'
 //
 // WHAT IT IS, AND IS NOT. A notice, not a consent gate. Everything this site
 // stores is either needed for something the visitor is using or is a choice they
-// made, and none of it is analytics or advertising, so Israeli law (which has no
+// made, and none of it is analytics or advertising (the one thing counted — page views — stores
+// nothing on the device, see VISIT_COUNTING), so Israeli law (which has no
 // cookie-specific rule) asks for clear, findable information rather than an
 // opt-in; the full reasoning and sources are in PLAYBOOK.md §3. So it has one
 // honest button — "Got it" — and a way to the details, and nothing in it pretends

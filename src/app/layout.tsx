@@ -5,6 +5,8 @@ import PageTransitions from '@/components/PageTransitions'
 import IntroGate from '@/components/intro/IntroGate'
 import LegacyCleanup from '@/components/privacy/LegacyCleanup'
 import A11yGate from '@/components/A11yGate'
+import SiteAnalytics from '@/components/SiteAnalytics'
+import { SITE_URL, SHARE_IMAGE, SITE_DESCRIPTION } from '@/lib/site'
 
 // The one typeface, SELF-HOSTED (2026-10-04). It used to be an @import of Google
 // Fonts at the top of globals.css, which made every visitor's browser contact
@@ -21,12 +23,38 @@ const rubik = Rubik({
   variable: '--font-rubik',
 })
 
+// Pages that do not set their own title/description inherit these, and every page inherits the
+// share image (a page that sets its own openGraph must repeat `images` — Next replaces, not merges).
+
 export const metadata: Metadata = {
-  title: 'אייכה · בר',
-  description: 'אייכה בר — חריש · תפריט דיגיטלי ומועדון נאמנות',
+  metadataBase: new URL(SITE_URL),
+  title: 'אייכה בר · חריש',
+  description: SITE_DESCRIPTION,
+  applicationName: 'אייכה בר',
   icons: {
-    icon: '/assets/favicon.svg',
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/assets/favicon.svg', type: 'image/svg+xml' },
+      { url: '/assets/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/assets/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/assets/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
     apple: '/assets/apple-touch-icon.png',
+  },
+  openGraph: {
+    type: 'website',
+    siteName: 'אייכה בר',
+    locale: 'he_IL',
+    title: 'אייכה בר · חריש',
+    description: SITE_DESCRIPTION,
+    url: '/',
+    images: [SHARE_IMAGE],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'אייכה בר · חריש',
+    description: SITE_DESCRIPTION,
+    images: [SHARE_IMAGE.url],
   },
 }
 
@@ -90,6 +118,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             visitor's browser — Negishot's cookie and storage keys above all — on
             whichever page they happen to land first. See lib/privacy/registry.ts. */}
         <LegacyCleanup />
+        {/* Anonymous, cookieless visit counting (Vercel Web Analytics). Renders nothing; private pages and
+            visitors who send Do Not Track / GPC are never counted — lib/analytics.ts, declared on /privacy and /cookies. */}
+        <SiteAnalytics />
         {/* Negishot (negishot.co.il) REMOVED 2026-09-12 on the owner's
             explicit instruction, replaced by the in-house widget above.
             At the time of that removal, no one other than the author had

@@ -155,8 +155,76 @@ section('registry — the claim "no tracking, no advertising" is only ever true 
   const pkg = JSON.parse(read('package.json'))
   const deps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
   const DENY = /analytics|speed-insights|gtag|google-tag|fbq|facebook-pixel|hotjar|clarity|plausible|posthog|mixpanel|segment|amplitude|sentry|datadog|fullstory|logrocket|intercom|crisp|tawk|heap|matomo|pixel/i
-  check('package.json has no analytics / tracking / chat dependency', !deps.some((d) => DENY.test(d)),
-    deps.filter((d) => DENY.test(d)).join(', '))
+  // ONE analytics package is allowed, by exact name, and only while the "visit counting" section below holds
+  // it to its promises (cookieless, nothing stored, private pages excluded, DNT/GPC honoured).
+  const ALLOWED_COUNTING_DEP = '@vercel/analytics'
+  check('package.json has no analytics / tracking / chat dependency — except the one declared visit counter',
+    !deps.some((d) => d !== ALLOWED_COUNTING_DEP && DENY.test(d)),
+    deps.filter((d) => d !== ALLOWED_COUNTING_DEP && DENY.test(d)).join(', '))
+}
+
+section('visit counting — anonymous, cookieless, nothing on the device (the one thing the site measures)')
+{
+  const A = await load('src/lib/analytics.ts', 'analytics.mjs')
+  const pkg = JSON.parse(read('package.json'))
+  const V = R.VISIT_COUNTING
+  check('it is declared in the registry: stores nothing on the device, sets no cookie, honours Do Not Track',
+    V.storesOnDevice === false && V.setsCookie === false && V.honoursDoNotTrack === true && V.provider === 'Vercel Web Analytics')
+  check('the package is pinned to an exact version (an upgrade is a deliberate act that re-runs the next check)',
+    /^\d+\.\d+\.\d+$/.test(pkg.dependencies?.['@vercel/analytics'] ?? ''), String(pkg.dependencies?.['@vercel/analytics']))
+
+  // The package's own code must not write a cookie or touch any storage. (The script Vercel serves at
+  // /_vercel/insights is not in the repo; its behaviour is Vercel's documented one — no cookies, a hash of
+  // the request discarded after 24 hours — and was checked on the live site: HANDOFF 2026-10-17 (c).)
+  const dist = join(ROOT_DIR, 'node_modules/@vercel/analytics/dist')
+  const walk = (d) => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? walk(p) : [p] })
+  const files = existsSync(dist) ? walk(dist).filter((p) => /\.(m?js|cjs)$/.test(p)) : []
+  const writers = files.filter((p) => /document\.cookie|localStorage|sessionStorage|indexedDB/.test(readFileSync(p, 'utf8')))
+  check('@vercel/analytics (installed) contains no cookie / localStorage / sessionStorage / indexedDB access',
+    files.length > 0 && writers.length === 0, files.length === 0 ? 'package not installed — run npm ci' : writers.join(', '))
+
+  const mount = code.get('src/components/SiteAnalytics.tsx') ?? ''
+  check('the only mount is SiteAnalytics, which sends every event through sanitizeVisitEvent + countingRefused',
+    /from '@vercel\/analytics\/next'/.test(mount) && /beforeSend=/.test(mount) && /sanitizeVisitEvent\(/.test(mount) && /countingRefused\(/.test(mount) &&
+    /doNotTrack/.test(mount) && /globalPrivacyControl/.test(mount) &&
+    [...code].filter(([f, c]) => f !== 'src/components/SiteAnalytics.tsx' && /@vercel\/analytics/.test(c)).length === 0)
+  check('the root layout mounts it, outside #a11y-scope',
+    /<SiteAnalytics \/>/.test(code.get('src/app/layout.tsx') ?? '') &&
+    (code.get('src/app/layout.tsx') ?? '').indexOf('<SiteAnalytics />') > (code.get('src/app/layout.tsx') ?? '').indexOf('</div>'))
+
+  // behaviour — the real functions
+  const ev = (url) => ({ type: 'pageview', url })
+  const B = 'https://www.ayeka.bar'
+  check('public pages are counted, with the address reduced to origin + path',
+    ['/', '/menu', '/loyalty', '/privacy', '/cookies', '/accessibility'].every((p) => A.sanitizeVisitEvent(ev(B + p + '?x=1#y'), false)?.url === B + p))
+  check('no query string and no fragment ever leaves the browser',
+    A.sanitizeVisitEvent(ev(B + '/menu?table=7&token=abc#frag'), false).url === B + '/menu')
+  check('every private prefix is dropped — the prefix itself, anything under it, any case, doubled slashes',
+    A.COUNTING_EXCLUDED_PREFIXES.every((p) => [p, p + '/x', p + '/x/y?z=1', p.toUpperCase(), '/' + p].every((u) => A.sanitizeVisitEvent(ev(B + u), false) === null)))
+  check('a one-time join link or a check-in token can never be counted',
+    A.sanitizeVisitEvent(ev(B + '/join/abc123'), false) === null && A.sanitizeVisitEvent(ev(B + '/checkin?token=zzz'), false) === null)
+  check('a look-alike path (/ownership, /menu/owner) is still a public page',
+    A.sanitizeVisitEvent(ev(B + '/ownership'), false) !== null && A.sanitizeVisitEvent(ev(B + '/menu/owner'), false) !== null)
+  check('an unparsable address sends nothing', A.sanitizeVisitEvent(ev('not a url'), false) === null)
+  check('Do Not Track and Global Privacy Control are honoured; a missing signal is not a refusal',
+    A.countingRefused({ doNotTrack: '1' }) && A.countingRefused({ doNotTrack: 'yes' }) && A.countingRefused({ globalPrivacyControl: true }) &&
+    !A.countingRefused({}) && !A.countingRefused({ doNotTrack: '0', globalPrivacyControl: false }) && !A.countingRefused({ doNotTrack: null }))
+  check('a refused visitor is never sent', A.sanitizeVisitEvent(ev(B + '/menu'), true) === null)
+
+  // the three statements of the promise stay in step with each other
+  check('the registry\'s excluded list is the one the code enforces',
+    same([...V.excludedPrefixes], [...A.COUNTING_EXCLUDED_PREFIXES]))
+  const robots = code.get('src/app/robots.ts') ?? ''
+  check('robots.txt disallows the same prefixes (a private page is neither indexed nor counted)',
+    A.COUNTING_EXCLUDED_PREFIXES.every((p) => robots.includes(`'${p}'`)))
+  check('/privacy and /cookies both say visits are counted, by whom, and what is never counted',
+    /Vercel Web Analytics/.test(code.get('src/lib/privacy/policy.ts') ?? '') && /Do Not Track/.test(code.get('src/lib/privacy/policy.ts') ?? '') &&
+    /Vercel Web Analytics/.test(code.get('src/lib/privacy/copy.ts') ?? '') && /Do Not Track/.test(code.get('src/lib/privacy/copy.ts') ?? '') &&
+    C.COOKIES_COPY.counting.length >= 4 && /בלי עוגיות/.test(C.COOKIES_COPY.counting[0].he))
+  check('the one-time notice no longer claims there is no counting — it says visits are counted anonymously',
+    /נספרים באופן אנונימי/.test(N.NOTICE_COPY.text.he) && /counted anonymously/.test(N.NOTICE_COPY.text.en))
+  check('the pinned notice version is the one that includes the counting declaration (so everyone sees the new notice once)',
+    N.INVENTORY_VERSION === R.inventoryVersion() && N.INVENTORY_VERSION !== '6bea11da')
 }
 
 section('page copy — every string has all three languages')

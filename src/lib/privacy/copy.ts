@@ -10,8 +10,10 @@ import type { StorageAudience, StorageCategory, StorageKind } from './registry'
 // Claims made here that the code must keep true — each is pinned by
 // scripts/check-privacy.mjs, so a feature that breaks one fails the check
 // instead of quietly making this page a lie:
-//   • "no tracking, analytics or advertising" — no registry item in those
-//     categories, and no analytics dependency in package.json;
+//   • "no tracking or advertising cookies; visits are counted anonymously,
+//     without cookies" — no registry item in the analytics/marketing categories,
+//     and the ONLY analytics dependency is @vercel/analytics, whose code writes
+//     no cookie or storage, mounted through lib/analytics.ts (VISIT_COUNTING);
 //   • "if you do not sign in you get no cookies" — the only cookies declared are
 //     the sign-in ones, audience `signed-in`;
 //   • "loads nothing from other companies except Vercel and Supabase" — no
@@ -36,9 +38,9 @@ export const COOKIES_COPY = {
 
   shortTitle: t('בקצרה', 'In short', 'باختصار'),
   short: [
-    t('אין באתר עוגיות מעקב, אנליטיקה או פרסום.',
-      'The site uses no tracking, analytics or advertising cookies.',
-      'لا يستخدم الموقع ملفات تتبّع أو تحليلات أو إعلانات.'),
+    t('אין באתר עוגיות מעקב או פרסום. ביקורים נספרים באופן אנונימי וללא עוגיות.',
+      'The site uses no tracking or advertising cookies. Visits are counted anonymously, without cookies.',
+      'لا يستخدم الموقع ملفات تتبّع أو إعلانات. تُعدّ الزيارات بشكل مجهول ودون ملفات تعريف ارتباط.'),
     t('מי שלא מתחבר לחשבון ולא מקליד קוד שמלצר נתן לו — לא מקבל אף עוגייה.',
       'If you do not sign in and do not type a code a waiter gave you, you get no cookies at all.',
       'من لا يسجّل الدخول إلى حساب ولا يكتب رمزًا أعطاه إياه النادل لا يحصل على أي ملف تعريف ارتباط.'),
@@ -79,9 +81,33 @@ export const COOKIES_COPY = {
     },
   } as Record<'necessary' | 'functional' | 'staff', { title: Text; note: Text }>,
   noneLine: t(
-    'אנליטיקה: אין. פרסום: אין.',
-    'Analytics: none. Advertising: none.',
-    'التحليلات: لا شيء. الإعلانات: لا شيء.'),
+    'ספירת ביקורים: אנונימית, בלי לשמור דבר במכשיר. פרסום: אין.',
+    'Visit counting: anonymous, nothing stored on your device. Advertising: none.',
+    'عدّ الزيارات: مجهول ودون تخزين أي شيء على جهازكم. الإعلانات: لا شيء.'),
+
+  // The one thing the site measures — see lib/analytics.ts and VISIT_COUNTING in registry.ts.
+  countingTitle: t('ספירת ביקורים', 'Counting visits', 'عدّ الزيارات'),
+  countingIntro: t(
+    'כדי לדעת אילו עמודים משמשים אנשים, האתר סופר ביקורים באמצעות Vercel Web Analytics — שירות של חברת האחסון שלנו. הספירה אנונימית, ואינה שומרת דבר במכשיר שלכם.',
+    'To know which pages people use, the site counts visits with Vercel Web Analytics — a service of the company that hosts us. The counting is anonymous and stores nothing on your device.',
+    'لمعرفة أي الصفحات يستخدمها الناس، يعدّ الموقع الزيارات عبر Vercel Web Analytics — خدمة تابعة للشركة التي تستضيفنا. العدّ مجهول ولا يخزّن أي شيء على جهازكم.'),
+  counting: [
+    t('בלי עוגיות, בלי אחסון במכשיר ובלי מזהה קבוע. כדי לא לספור אותו אדם פעמיים באותו יום משתמשים בסימן שנוצר מהבקשה עצמה, והוא נמחק אחרי 24 שעות.',
+      'No cookies, nothing stored on your device and no lasting identifier. To avoid counting the same person twice in a day, a mark made from the request itself is used, and it is discarded after 24 hours.',
+      'لا ملفات تعريف ارتباط ولا تخزين على جهازكم ولا معرّف دائم. ولكي لا يُحتسب الشخص نفسه مرتين في اليوم تُستخدم علامة تُنشأ من الطلب نفسه، وتُحذف بعد 24 ساعة.'),
+    t('לכל ביקור נרשמים: העמוד, הזמן, האתר שממנו הגעתם, אזור גאוגרפי כללי, סוג המכשיר, מערכת ההפעלה והדפדפן. שום דבר מזה אינו מקושר לשמכם, לדוא"ל או לכתובת ה־IP שלכם.',
+      'For each visit the page, the time, the site you came from, a general region, the device type, the operating system and the browser are recorded. None of it is tied to your name, your email or your IP address.',
+      'يُسجَّل لكل زيارة: الصفحة والوقت والموقع الذي جئتم منه ومنطقة جغرافية عامة ونوع الجهاز ونظام التشغيل والمتصفح. لا شيء من ذلك مرتبط باسمكم أو بريدكم الإلكتروني أو عنوان الـIP الخاص بكم.'),
+    t('עמודי ההתחברות, האזור האישי, הצוות והבעלים, וקישורים אישיים — לא נספרים כלל. וכתובת שנספרת נשלחת בלי מה שאחרי סימן השאלה.',
+      'The sign-in pages, the personal area, the staff and owner areas, and personal links are not counted at all. And an address that is counted is sent without anything after the question mark.',
+      'صفحات تسجيل الدخول والمنطقة الشخصية ومنطقتا الطاقم والمالك والروابط الشخصية لا تُحتسب إطلاقًا. والعنوان الذي يُحتسب يُرسل دون ما يلي علامة الاستفهام.'),
+    t('אם הדפדפן שלכם שולח אות "אל תעקבו" (Do Not Track) או Global Privacy Control — לא נספור אתכם.',
+      'If your browser sends a "Do Not Track" or Global Privacy Control signal, we do not count you.',
+      'إذا أرسل متصفحكم إشارة "عدم التتبّع" (Do Not Track) أو Global Privacy Control فلن نحتسبكم.'),
+    t('הנתונים משמשים רק לסטטיסטיקה מצטברת על העמודים — לא לפרסום ולא למכירה.',
+      'The data is used only for combined statistics about the pages — not for advertising and not sold.',
+      'تُستخدم البيانات فقط لإحصاءات مجمّعة عن الصفحات — لا للإعلانات ولا تُباع.'),
+  ],
   cacheNote: t(
     'הדפדפן שומר גם עותקים של קבצי האתר (תמונות, סקריפטים) כדי לטעון מהר יותר, כמו בכל אתר. הם אינם מכילים מידע עליכם.',
     'Your browser also keeps copies of the site’s files (images, scripts) so it loads faster, as with any website. They hold no information about you.',
@@ -140,9 +166,9 @@ export const COOKIES_COPY = {
     'يعمل لصالحنا مزوّدا خدمة. يتصل متصفحكم بهما، لذا يصلهما عنوان الـIP الخاص بكم — كما في أي موقع:'),
   others: [
     { name: 'Vercel', text: t(
-      'אחסון האתר. כל עמוד שאתם פותחים מגיע ממנה.',
-      'Hosts the site. Every page you open comes from it.',
-      'تستضيف الموقع. كل صفحة تفتحونها تأتي منها.') },
+      'אחסון האתר. כל עמוד שאתם פותחים מגיע ממנה, והיא גם סופרת ביקורים באופן אנונימי (ראו "ספירת ביקורים").',
+      'Hosts the site. Every page you open comes from it, and it also counts visits anonymously (see "Counting visits").',
+      'تستضيف الموقع. كل صفحة تفتحونها تأتي منها، وهي أيضًا تعدّ الزيارات بشكل مجهول (انظروا "عدّ الزيارات").') },
     { name: 'Supabase', text: t(
       'מסד הנתונים וההתחברות שלנו. עמוד התפריט פונה אליה ישירות מהדפדפן שלכם כדי להציג את התפריט העדכני.',
       'Our database and sign-in. The menu page asks it directly, from your browser, for the up-to-date menu.',
