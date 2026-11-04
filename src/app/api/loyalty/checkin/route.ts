@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { verifyQRToken } from '@/lib/loyalty/qr'
 import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { getLoyaltyEnabled } from '@/lib/settings/server'
+
+// A signed QR token is a few hundred bytes. Anything longer is refused before it can reach fraud_log.
+const MAX_TOKEN_LENGTH = 2048
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,8 +19,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { token } = body as { token: string }
 
-    if (!token || typeof token !== 'string') {
+    if (!token || typeof token !== 'string' || token.length > MAX_TOKEN_LENGTH) {
       return NextResponse.json({ error: 'Missing token' }, { status: 400 })
+    }
+
+    // The switch is enforced here too: the middleware only covers the club's pages, not this route.
+    if (!(await getLoyaltyEnabled())) {
+      return NextResponse.json({ error: 'Loyalty club is not active' }, { status: 403 })
     }
 
     // 1. Verify the customer is authenticated

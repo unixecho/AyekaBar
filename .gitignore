@@ -21,6 +21,11 @@ BLUEPRINT.md
 GOOGLE-OAUTH-SETUP.md
 SIGNOUT_IMPLEMENTATION.md
 .claude/
+# Other agents' local context and config: they describe the architecture, and this repository is public
+AGENTS.md
+CLAUDE_CODEX_COLLABORATION.md
+.codex/
+.mcp.json
 
 # Dependencies
 node_modules/

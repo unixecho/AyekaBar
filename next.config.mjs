@@ -1,21 +1,37 @@
+const isProd = process.env.NODE_ENV === 'production'
+const supabase = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://uemnappyzjqntildlhlr.supabase.co')
+const supabaseSocket = `${supabase.protocol === 'https:' ? 'wss:' : 'ws:'}//${supabase.host}`
+
+// Everything the browser may load or contact. scripts/check-privacy.mjs already holds the code to "no remote script, font
+// or iframe", so this list stays short. Next's App Router emits inline bootstrap scripts, hence 'unsafe-inline' on
+// script-src; what this policy adds is that an injected script could neither load more code nor send a stolen session
+// anywhere except this site and Supabase. Dev adds 'unsafe-eval' (webpack) and Vercel's debug analytics script.
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isProd ? '' : " 'unsafe-eval' https://va.vercel-scripts.com"}`,
+  "style-src 'self' 'unsafe-inline'",
+  `img-src 'self' data: blob: ${supabase.origin}`,
+  "font-src 'self' data: blob:",
+  `connect-src 'self' blob: data: ${supabase.origin} ${supabaseSocket}`,
+  "media-src 'self' data: blob:",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "frame-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  ...(isProd ? ['upgrade-insecure-requests'] : []),
+].join('; ')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // a11y-widget ships TypeScript/TSX source, not a pre-built bundle (see its
   // own README) — this is what makes Next transpile it like first-party code.
   transpilePackages: ['a11y-widget'],
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        // The live project, migrated to Frankfurt 2026-08-09 (see
-        // MIGRATION_PLAN.md / HANDOFF.md). This used to point at
-        // xdvjhhgmrmrfccgdnnja.supabase.co, the old pre-migration Tokyo
-        // project — stale since the cutover; nothing should be resolving
-        // image URLs against it any more.
-        hostname: 'uemnappyzjqntildlhlr.supabase.co',
-      },
-    ],
-  },
+  poweredByHeader: false,
+  // Nothing here uses next/image, so the optimizer route is switched off rather than left as attack surface.
+  images: { unoptimized: true },
 
   // Baseline hardening. The owner/staff dashboards perform privileged actions
   // (point adjustments, staff grants, the loyalty switch), so they must never
@@ -27,7 +43,8 @@ const nextConfig = {
         source: '/:path*',
         headers: [
           { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+          { key: 'Content-Security-Policy', value: contentSecurityPolicy },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           // Keeps the check-in token in /checkin?token=… out of the Referer
           // header on cross-origin navigation.

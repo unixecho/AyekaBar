@@ -335,7 +335,7 @@ section('the staff-side card and the service worker')
   check('the card renders nothing when nothing is waiting (a signal renders only when it is true)', /if \(orders\.length === 0\) return null/.test(card))
   check('the first answer is quiet; only a NEW order dings', /known\.current !== null && fresh\.length > 0/.test(card))
   check('the card refreshes the moment the service worker reports a push', /type === 'staff-alert'/.test(card))
-  check('the staff dashboard mounts the card', /<PendingRemoteOrders \/>/.test(code('src/app/staff/dashboard/page.tsx')))
+  check('the staff dashboard mounts the card', /<PendingRemoteOrders \/>/.test(code('src/components/dashboard/EmployeeDashboard.tsx')))
 
   const sw = read('public/sw.js')
   check('a plain schedule alert is untouched: no vibrate, no requireInteraction unless the payload asks', /if \(Array\.isArray\(data\.vibrate\)\)/.test(sw) && /if \(data\.urgent === true\)/.test(sw))

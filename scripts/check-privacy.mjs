@@ -450,9 +450,12 @@ section('code ↔ registry — the facts the page states come from the code')
     /Path=\//.test(session.attributes) && /SameSite=Lax/.test(session.attributes) &&
     /400 days/.test(session.attributes) && /not HttpOnly/.test(session.attributes) &&
     LANGS.every((l) => /400/.test(session.keeps[l])))
-  check('this app passes no cookie options of its own to the Supabase clients',
-    !/cookieOptions/.test(code.get('src/lib/supabase/client.ts') ?? '') && !/cookieOptions/.test(code.get('src/lib/supabase/server.ts') ?? '') &&
-    !/cookieOptions/.test(code.get('src/middleware.ts') ?? ''))
+  check('the only cookie option this app adds to the Supabase clients is Secure',
+    /^export const SESSION_COOKIE_OPTIONS = \{ secure: process\.env\.NODE_ENV === 'production' \}$/m.test(read('src/lib/supabase/cookie-options.ts')) &&
+    ['src/lib/supabase/client.ts', 'src/lib/supabase/server.ts', 'src/middleware.ts'].every((f) => {
+      const uses = (code.get(f) ?? '').match(/cookieOptions[^\n]*/g) ?? []
+      return uses.length === 1 && /cookieOptions: SESSION_COOKIE_OPTIONS/.test(uses[0])
+    }))
 }
 
 // ───────────────────────────────────────────────────────────────────────────

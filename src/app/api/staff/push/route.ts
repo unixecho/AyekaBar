@@ -5,6 +5,7 @@ import { DEV_TEMPLATE_IDS, devPushStatus, devSendTemplate, isPushDeveloper } fro
 import { sendStaffTest } from '@/lib/push/staff'
 import { resolveStaffIdentity } from '@/lib/staff/session'
 import { createServiceClient } from '@/lib/supabase/server'
+import { isAllowedPushEndpoint } from '@/lib/push/endpoint'
 
 // A signed-in staff member registers, checks, tests and removes the push subscription of the phone
 // they are holding. The identity always comes from the session, never from the body, so nobody can
@@ -15,7 +16,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 const subscription = z
   .object({
-    endpoint: z.string().url().max(1000).refine((value) => value.startsWith('https://'), 'push endpoints are https'),
+    endpoint: z.string().url().max(1000).refine(isAllowedPushEndpoint, 'not a known push service'),
     keys: z.object({ p256dh: z.string().min(10).max(300), auth: z.string().min(8).max(100) }).strict(),
   })
   .passthrough() // PushSubscription.toJSON() also carries expirationTime

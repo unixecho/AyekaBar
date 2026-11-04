@@ -4,6 +4,8 @@ import { LOYALTY_ENABLED } from '@/lib/settings/keys'
 import { isOp, isDev, canEditMenu, OP_ONLY_PREFIXES, DEV_ONLY_PREFIXES, MENU_EDITOR_PREFIX } from '@/lib/staff/access'
 import { SCHEDULE_PREFIXES } from '@/lib/shifts/access'
 import { canManageFloor, FLOOR_PREFIXES } from '@/lib/waiter/access'
+import { apiRefusal } from '@/lib/http/api-guard'
+import { SESSION_COOKIE_OPTIONS } from '@/lib/supabase/cookie-options'
 
 // The employee area. /staff/dashboard is the home; the other two were added
 // 2026-10-13 with it (the staff member's loyalty-club tile, and the Z-report
@@ -39,12 +41,22 @@ const inSection = (pathname: string, root: string) =>
   pathname === root || pathname.startsWith(`${root}/`)
 
 export async function middleware(request: NextRequest) {
+  const refused = apiRefusal({
+    method: request.method,
+    pathname: request.nextUrl.pathname,
+    origin: request.headers.get('origin'),
+    host: request.headers.get('host'),
+    contentLength: request.headers.get('content-length'),
+  })
+  if (refused) return NextResponse.json({ error: refused.error }, { status: refused.status, headers: { 'Cache-Control': 'no-store' } })
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: SESSION_COOKIE_OPTIONS,
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -124,6 +136,7 @@ export async function middleware(request: NextRequest) {
       .from('staff')
       .select('role, badge')
       .eq('auth_user_id', user.id)
+      .eq('active', true)
       .maybeSingle()
 
     // No linked row yet? The owner may have authorized this person by email

@@ -22,6 +22,7 @@ export async function requireStaff(): Promise<
     .from('staff')
     .select('role')
     .eq('auth_user_id', user.id)
+    .eq('active', true)
     .maybeSingle()
 
   if (!me) {

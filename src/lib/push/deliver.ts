@@ -7,6 +7,7 @@
 
 import webpush from 'web-push'
 import { createServiceClient } from '@/lib/supabase/server'
+import { isAllowedPushEndpoint } from '@/lib/push/endpoint'
 
 export type Service = ReturnType<typeof createServiceClient>
 
@@ -24,6 +25,10 @@ export async function sendToOne(
   payload: object,
   options: { ttlSeconds?: number } = {},
 ): Promise<SendOutcome> {
+  if (!isAllowedPushEndpoint(row.endpoint)) {
+    console.error('Staff push refused: endpoint is not a known push service', row.id)
+    return { ok: false, statusCode: null, detail: 'endpoint_not_allowed' }
+  }
   try {
     await webpush.sendNotification({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } }, JSON.stringify(payload), {
       urgency: 'high',

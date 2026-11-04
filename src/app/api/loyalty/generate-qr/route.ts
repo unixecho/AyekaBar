@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireStaff } from '@/lib/staff/guard'
 import { generateQRToken, getExpiresAt } from '@/lib/loyalty/qr'
+import { getLoyaltyEnabled } from '@/lib/settings/server'
 
 // Mints the check-in QR token staff show to customers. This is the one thing
 // standing between "customer visited the bar" and "customer awarded themselves
@@ -9,6 +10,9 @@ export async function POST() {
   try {
     const auth = await requireStaff()
     if (!auth.ok) return auth.res
+    if (!(await getLoyaltyEnabled())) {
+      return NextResponse.json({ error: 'Loyalty club is not active' }, { status: 403 })
+    }
 
     const businessId = process.env.NEXT_PUBLIC_BUSINESS_ID!
     const token = await generateQRToken(businessId)

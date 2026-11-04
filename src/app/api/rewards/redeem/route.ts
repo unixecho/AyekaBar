@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { getLoyaltyEnabled } from '@/lib/settings/server'
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,8 +15,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null) as { rewardId?: string } | null
     const rewardId = body?.rewardId
 
-    if (!rewardId || typeof rewardId !== 'string') {
+    if (!rewardId || typeof rewardId !== 'string' || !UUID.test(rewardId)) {
       return NextResponse.json({ error: 'Missing rewardId' }, { status: 400 })
+    }
+
+    // The switch is enforced here too: the middleware only covers the club's pages, not this route.
+    if (!(await getLoyaltyEnabled())) {
+      return NextResponse.json({ error: 'Loyalty club is not active' }, { status: 403 })
     }
 
     const supabase = createClient()

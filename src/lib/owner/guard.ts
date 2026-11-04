@@ -18,6 +18,7 @@ async function guard(allow: (row: AccessRow) => boolean): Promise<Guarded> {
     .from('staff')
     .select('role, badge')
     .eq('auth_user_id', user.id)
+    .eq('active', true)
     .maybeSingle()
 
   if (!me || !allow(me)) {
