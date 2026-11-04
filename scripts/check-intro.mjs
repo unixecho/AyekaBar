@@ -132,9 +132,10 @@ section('where it plays')
   check('the portal', C.isIntroPath('/') === true)
   check('NOT the menu — a table\'s QR code lands there and wants the menu now', C.isIntroPath('/menu') === false)
   check('NOT the owner or staff areas', ['/owner/dashboard', '/owner', '/owner/intro', '/staff/dashboard', '/login'].every((p) => C.isIntroPath(p) === false))
-  check('NOT a lookalike path', ['/menu/', '//', '/ ', '/index'].every((p) => C.isIntroPath(p) === false))
+  check('NOT a lookalike path', ['/menu/', '//', '/ ', '/index/', '/index/x'].every((p) => C.isIntroPath(p) === false))
   check('no path at all is not a path', [null, undefined, ''].every((p) => C.isIntroPath(p) === false))
-  check('the list is exactly the portal', same(C.INTRO_PATHS, ['/']))
+  check('the portal under the name a Vercel prerender gives it (server /index, browser /)', C.isIntroPath('/index') === true)
+  check('the list is exactly the portal', same(C.INTRO_PATHS, ['/', '/index']))
 }
 
 // ───────────────────────────────────────────────────────────────────────────

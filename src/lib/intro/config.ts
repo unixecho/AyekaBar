@@ -24,7 +24,9 @@
 // The owner/staff areas are not on it either — an owner refreshes the dashboard
 // dozens of times a shift. Adding a page is one entry here.
 
-export const INTRO_PATHS: readonly string[] = ['/']
+// `/index` is the same page: since Next 16 a Vercel prerender of `/` sees that pathname on the server while the
+// browser sees `/`. Without it the overlay is missing from the HTML and hydration fails (React #418).
+export const INTRO_PATHS: readonly string[] = ['/', '/index']
 
 export function isIntroPath(pathname: string | null | undefined): boolean {
   return typeof pathname === 'string' && INTRO_PATHS.includes(pathname)
