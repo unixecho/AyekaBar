@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: 'קישורי פורטל · אייכ�
 // defense-in-depth re-check every other /owner/* page does.
 
 export default async function OwnerLinksPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

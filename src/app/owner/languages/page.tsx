@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: 'שפות האתר · אייכה בר
 // defense-in-depth re-check every other /owner/* page does.
 
 export default async function OwnerLanguagesPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

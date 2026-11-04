@@ -124,7 +124,7 @@ export async function PATCH(request: NextRequest) {
     // it so closing the box reaches live visitors on their next navigation
     // rather than up to 60s later. The ENDPOINT is already refusing by then
     // regardless; this is about not showing a button that will fail.
-    revalidateTag(SETTINGS_TAG)
+    revalidateTag(SETTINGS_TAG, { expire: 0 })
     return NextResponse.json({ enabled: data.value as boolean })
   }
 

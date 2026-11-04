@@ -40,7 +40,7 @@ const LOYALTY_ROUTES = ['/customer', '/checkin']
 const inSection = (pathname: string, root: string) =>
   pathname === root || pathname.startsWith(`${root}/`)
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const refused = apiRefusal({
     method: request.method,
     pathname: request.nextUrl.pathname,

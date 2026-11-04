@@ -1,5 +1,5 @@
 // The one rule every state-changing /api request passes before any route code runs. PURE, called from
-// src/middleware.ts and tested by scripts/check-security.mjs.
+// src/proxy.ts and tested by scripts/check-security.mjs.
 //
 // ── SAME-ORIGIN ─────────────────────────────────────────────────────────
 // The session cookie is SameSite=Lax, which stops another SITE, but staff.ayeka.bar counts as the same site as

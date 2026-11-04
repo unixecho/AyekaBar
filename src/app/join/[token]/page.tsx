@@ -30,8 +30,8 @@ export const metadata: Metadata = {
 }
 export const dynamic = 'force-dynamic'
 
-export default async function JoinPage({ params, searchParams }: { params: { token: string }; searchParams?: { error?: string | string[] } }) {
-  const token = params.token
+export default async function JoinPage(props: { params: Promise<{ token: string }>; searchParams?: Promise<{ error?: string | string[] }> }) {
+  const [{ token }, searchParams] = await Promise.all([props.params, props.searchParams])
   const wellFormed = isJoinToken(token)
 
   let peek = parsePeek(null)
@@ -39,7 +39,7 @@ export default async function JoinPage({ params, searchParams }: { params: { tok
   let limited = false
   if (wellFormed) {
     const within = await checkRateLimit(
-      `join-peek:ip:${clientIp({ headers: headers() })}`, JOIN_LIMITS.peek.max, JOIN_LIMITS.peek.windowSeconds)
+      `join-peek:ip:${clientIp({ headers: await headers() })}`, JOIN_LIMITS.peek.max, JOIN_LIMITS.peek.windowSeconds)
     if (within) {
       const service = createServiceClient()
       const out = await peekJoin(service, token)
@@ -53,7 +53,7 @@ export default async function JoinPage({ params, searchParams }: { params: { tok
   // Who is signed in right now, if anyone — the wizard skips the "connect" screen for them and shows which
   // account will be linked. A person who is ALREADY on the roster is told so up front rather than discovering it
   // when they press confirm.
-  const { data: { user } } = await createClient().auth.getUser()
+  const { data: { user } } = await (await createClient()).auth.getUser()
   let alreadyStaff = false
   if (user) {
     const { data: row } = await createServiceClient()

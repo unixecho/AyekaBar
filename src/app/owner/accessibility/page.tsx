@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: 'הצהרת נגישות (ניהול)
 // here.
 
 export default async function OwnerAccessibilityPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

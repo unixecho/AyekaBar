@@ -9,7 +9,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = { title: 'דוחות ומשמרות · אייכה בר' }
 
 export default async function OwnerReportsPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

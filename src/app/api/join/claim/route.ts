@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (!host || host !== request.headers.get('host')) return fail('bad_request', 403, 'בקשה לא תקינה.')
   }
 
-  const { data: { user } } = await createClient().auth.getUser()
+  const { data: { user } } = await (await createClient()).auth.getUser()
   if (!user) return fail('no_user', 401, messageFor('no_user').body)
 
   const body = await request.json().catch(() => null) as { token?: unknown } | null

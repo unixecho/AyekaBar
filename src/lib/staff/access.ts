@@ -98,7 +98,7 @@ export const OP_ONLY_PREFIXES = [
 ]
 
 /** Sections only the developer opens. Also OP-gated by middleware (a dev row
- *  is an OP row), then narrowed by `isDev` — see middleware.ts. */
+ *  is an OP row), then narrowed by `isDev` — see proxy.ts. */
 export const DEV_ONLY_PREFIXES = ['/owner/dev']
 
 export const MENU_EDITOR_PREFIX = '/owner/editor'

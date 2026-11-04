@@ -347,7 +347,7 @@ section('code ↔ registry — cookies are written only where Supabase\'s own ar
 {
   const WRITE = /document\.cookie\s*=|\.cookies\.set\(|cookieStore\.set\(|cookies\(\)\.set\(/g
   const ALLOW = {
-    'src/middleware.ts': 'passes the Supabase client\'s own cookies through',
+    'src/proxy.ts': 'passes the Supabase client\'s own cookies through',
     'src/lib/supabase/server.ts': 'passes the Supabase client\'s own cookies through',
     'src/app/api/auth/signout/route.ts': 'deletes only',
     // Remote ordering (2026-10-13): the ONE cookie a customer can receive without an account. Held to its own
@@ -452,7 +452,7 @@ section('code ↔ registry — the facts the page states come from the code')
     LANGS.every((l) => /400/.test(session.keeps[l])))
   check('the only cookie option this app adds to the Supabase clients is Secure',
     /^export const SESSION_COOKIE_OPTIONS = \{ secure: process\.env\.NODE_ENV === 'production' \}$/m.test(read('src/lib/supabase/cookie-options.ts')) &&
-    ['src/lib/supabase/client.ts', 'src/lib/supabase/server.ts', 'src/middleware.ts'].every((f) => {
+    ['src/lib/supabase/client.ts', 'src/lib/supabase/server.ts', 'src/proxy.ts'].every((f) => {
       const uses = (code.get(f) ?? '').match(/cookieOptions[^\n]*/g) ?? []
       return uses.length === 1 && /cookieOptions: SESSION_COOKIE_OPTIONS/.test(uses[0])
     }))
@@ -660,7 +660,7 @@ section('wiring — the page, the footer links, the notice, the cleanup')
     /acknowledgeNotice\(\)/.test(view) && /acknowledgeNotice/.test(code.get('src/lib/privacy/browser.ts') ?? '') &&
     /acknowledgeNotice\(\)/.test(notice))
 
-  const mw = code.get('src/middleware.ts') ?? ''
+  const mw = code.get('src/proxy.ts') ?? ''
   const access =(code.get('src/lib/staff/access.ts') ?? '') + (code.get('src/lib/shifts/access.ts') ?? '') + (code.get('src/lib/waiter/access.ts') ?? '')
   check('/cookies is public — not behind sign-in and not behind the loyalty switch',
     !/['"]\/cookies/.test(mw + access))

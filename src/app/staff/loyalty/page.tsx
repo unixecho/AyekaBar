@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: 'מועדון נאמנות · אזו�
 // thing instead of showing a QR that would award nothing.
 
 export default async function StaffLoyaltyPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   const { data: me } = await supabase.from('staff').select('role').eq('auth_user_id', user.id).maybeSingle()

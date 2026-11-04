@@ -343,7 +343,7 @@ section('the owner\'s switch — the gate, the API, the page, the tile')
   check('it accepts a bare boolean and refuses anything else', /typeof body\.introEnabled !== 'boolean'/.test(branch) && /status: 400/.test(branch))
   check('it writes the row PUBLIC — or the signed-out portal would silently ignore the owner\'s "off"',
     /key: INTRO_ENABLED/.test(branch) && /is_public: true/.test(branch))
-  check('it busts the settings cache tag, so the next load of any page reflects the flip', /revalidateTag\(SETTINGS_TAG\)/.test(branch))
+  check('it busts the settings cache tag, so the next load of any page reflects the flip', /revalidateTag\(SETTINGS_TAG, \{ expire: 0 \}\)/.test(branch))
   check('it records who flipped it', /updated_by: auth\.userId/.test(branch))
   check('the GET returns it too, defaulting ON when there is no row',
     /introEnabled: introRow \? normalizeIntroEnabled\(introRow\.value\) : INTRO_ENABLED_DEFAULT/.test(route))

@@ -20,7 +20,7 @@ const STAFF_COLUMNS = 'id, auth_user_id, role, badge, active, email, display_nam
 
 /** Who is calling: the Google session's staff row, or null (signed out, not on the roster, or removed). */
 export async function resolveStaffIdentity(): Promise<StaffIdentity | null> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()

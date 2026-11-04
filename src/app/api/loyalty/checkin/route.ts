@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Verify the customer is authenticated
-    const supabase = createClient()
+    const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {

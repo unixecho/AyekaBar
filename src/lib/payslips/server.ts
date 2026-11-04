@@ -54,7 +54,7 @@ export function staffFullName(r: {
 /** The signed-in, ACTIVE staff member — or null. `isOp` is the owner test from lib/staff/access.ts, the same one
  *  middleware and every other owner route use. */
 export async function currentPayslipViewer(): Promise<PayslipViewerCtx | null> {
-  const { data: { user } } = await createClient().auth.getUser()
+  const { data: { user } } = await (await createClient()).auth.getUser()
   if (!user) return null
   const { data: me } = await createServiceClient()
     .from('staff')

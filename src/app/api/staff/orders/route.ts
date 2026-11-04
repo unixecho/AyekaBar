@@ -26,7 +26,7 @@ export async function GET() {
   const guard = await requireStaff()
   if (!guard.ok) return guard.res
 
-  const { data, error } = await createClient().rpc('waiter_pending_submissions')
+  const { data, error } = await (await createClient()).rpc('waiter_pending_submissions')
   const noStore = { headers: { 'Cache-Control': 'no-store' } }
   if (error) return NextResponse.json({ orders: [] }, noStore)
 

@@ -59,7 +59,7 @@ async function readClubStats() {
 }
 
 export default async function OwnerLoyaltyPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

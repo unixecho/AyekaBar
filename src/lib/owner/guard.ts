@@ -9,7 +9,7 @@ type Guarded =
 
 /** Shared plumbing: resolve the caller's staff row, then apply `allow`. */
 async function guard(allow: (row: AccessRow) => boolean): Promise<Guarded> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
 

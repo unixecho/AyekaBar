@@ -328,7 +328,7 @@ section('the server helpers and the push sender')
 section('the staff-side card and the service worker')
 {
   const api = code('src/app/api/staff/orders/route.ts')
-  check('the card\'s API asks the database AS THE USER (so the recipient rule sees a real caller), behind requireStaff', /requireStaff\(\)/.test(api) && /createClient\(\)\.rpc\('waiter_pending_submissions'\)/.test(api) && !/createServiceClient/.test(api))
+  check('the card\'s API asks the database AS THE USER (so the recipient rule sees a real caller), behind requireStaff', /requireStaff\(\)/.test(api) && /\(await createClient\(\)\)\.rpc\('waiter_pending_submissions'\)/.test(api) && !/createServiceClient/.test(api))
   check('it returns counts, the table and the time — never the payload', !/payload:/.test(api.slice(api.indexOf('NextResponse.json'))) && /orders = \(/.test(api))
   check('an unapplied migration is an empty list, not an error', /if \(error\) return NextResponse\.json\(\{ orders: \[\] \}/.test(api))
   const card = code('src/components/staff/PendingRemoteOrders.tsx')

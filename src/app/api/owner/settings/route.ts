@@ -101,7 +101,7 @@ export async function PATCH(request: NextRequest) {
     // Every page renders the intro's gate through the root layout, and reads
     // this through the tagged, cached settings fetch — bust it, so the next
     // load of any page reflects the flip.
-    revalidateTag(SETTINGS_TAG)
+    revalidateTag(SETTINGS_TAG, { expire: 0 })
 
     return NextResponse.json({
       introEnabled: normalizeIntroEnabled(data.value),
@@ -133,7 +133,7 @@ export async function PATCH(request: NextRequest) {
     if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
     // The portal and menu read this through the tagged, cached settings fetch.
-    revalidateTag(SETTINGS_TAG)
+    revalidateTag(SETTINGS_TAG, { expire: 0 })
 
     return NextResponse.json({
       siteLanguages: normalizeSiteLanguages(data.value),
@@ -172,7 +172,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
-    revalidateTag(SETTINGS_TAG)
+    revalidateTag(SETTINGS_TAG, { expire: 0 })
 
     return NextResponse.json({
       accessibilityStatement: data.value as AccessibilityStatement,
@@ -257,7 +257,7 @@ export async function PATCH(request: NextRequest) {
 
     // Portal + loyalty pages read this through a tagged, cached fetch — bust it
     // so the switch takes effect on the live site immediately.
-    revalidateTag(SETTINGS_TAG)
+    revalidateTag(SETTINGS_TAG, { expire: 0 })
 
     return NextResponse.json({
       loyaltyEnabled: data.value as boolean,
@@ -284,7 +284,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
-    revalidateTag(SETTINGS_TAG)
+    revalidateTag(SETTINGS_TAG, { expire: 0 })
 
     return NextResponse.json({
       loyaltyVisible: data.value as boolean,
@@ -326,7 +326,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
-    revalidateTag(SETTINGS_TAG)
+    revalidateTag(SETTINGS_TAG, { expire: 0 })
 
     return NextResponse.json({
       portalLinks: data.value as Record<PortalLinkKey, string>,
@@ -378,7 +378,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
-    revalidateTag(SETTINGS_TAG)
+    revalidateTag(SETTINGS_TAG, { expire: 0 })
 
     return NextResponse.json({
       portalReviews: normalizeReviews(data.value, PORTAL_REVIEWS_DEFAULT),

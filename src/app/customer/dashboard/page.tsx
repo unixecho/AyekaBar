@@ -44,7 +44,7 @@ interface ProfileData {
   }>
 }
 
-async function getOrFetchCustomer(supabase: ReturnType<typeof createClient>, userId: string): Promise<CustomerRow | null> {
+async function getOrFetchCustomer(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<CustomerRow | null> {
   const cols = 'id, points, total_visits, last_visit_at, created_at, first_name, last_name, phone'
   const { data: existing } = await supabase
     .from('customers')
@@ -67,7 +67,7 @@ async function getOrFetchCustomer(supabase: ReturnType<typeof createClient>, use
 }
 
 async function getProfile(): Promise<ProfileData | null> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
@@ -113,7 +113,7 @@ async function getProfile(): Promise<ProfileData | null> {
 }
 
 export default async function CustomerDashboardPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

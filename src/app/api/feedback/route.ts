@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     // feedback, because the feedback is the point and the link is a bonus.
     let customerId: string | null = null
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: customer } = await createServiceClient()

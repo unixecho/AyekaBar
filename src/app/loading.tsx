@@ -1,6 +1,8 @@
 // The fallback for any route that has no loading.tsx of its own (the menu and the dashboards each
 // have a skeleton shaped like their real page; this covers the rest). It shows only while the
-// server is still preparing a page after a client-side navigation — never on a first visit to `/`.
+// server is still preparing a page after a client-side navigation. Since React 19.2 a first visit to a
+// large static page (`/`, `/cookies`) also carries it in the HTML, swapped for the content by an inline
+// script at the first frame, so it should not reach the screen unless the HTML arrives slowly.
 // The words are for screen readers only: the language is the visitor's own choice, kept in the
 // browser, so a server file cannot pick one — it says both.
 export default function Loading() {

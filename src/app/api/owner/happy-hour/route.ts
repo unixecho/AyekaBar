@@ -93,7 +93,7 @@ export async function PUT(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
-  revalidateTag(SETTINGS_TAG)
+  revalidateTag(SETTINGS_TAG, { expire: 0 })
 
   // Record the window, the discount and what it covers — the owner needs to be
   // able to answer "who put 50% on the cocktails and when".

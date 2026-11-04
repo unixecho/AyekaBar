@@ -42,8 +42,9 @@ const STATE_STYLE: Record<HealthRow['state'], { dot: string; label: string }> = 
   info: { dot: 'var(--text-faint)', label: 'מידע' },
 }
 
-export default async function DevDashboardPage({ searchParams }: { searchParams?: { view?: string | string[] } }) {
-  const supabase = createClient()
+export default async function DevDashboardPage(props: { searchParams?: Promise<{ view?: string | string[] }> }) {
+  const searchParams = await props.searchParams
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

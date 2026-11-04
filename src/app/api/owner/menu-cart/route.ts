@@ -81,7 +81,7 @@ export async function PATCH(request: NextRequest) {
   // /menu reads this through the tagged, cached settings fetch — bust it so
   // the switch reaches customers already sitting with the page open on their
   // next navigation rather than up to 60s later.
-  revalidateTag(SETTINGS_TAG)
+  revalidateTag(SETTINGS_TAG, { expire: 0 })
 
   // No-ops until migration 048 widens menu_audit's action CHECK to accept
   // this value; logAudit swallows the rejection by design ("a missing log

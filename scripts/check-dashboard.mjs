@@ -16,7 +16,7 @@
 //     that every internal tile points at a page that exists.
 //   • That the Dev badge opens nothing on its own (isDev needs OP too), and is
 //     matched regardless of case, as the live row was typed by hand.
-//   • That middleware.ts really protects the new routes, and that the layout
+//   • That proxy.ts really protects the new routes, and that the layout
 //     really mounts the widget through the gate.
 //   • Where the accessibility widget is off: /owner and /staff only.
 
@@ -131,8 +131,8 @@ for (const t of internal.filter((x) => x.audience === 'staff')) {
 }
 
 // ── middleware really protects what the registry assumes ───────────────
-section('middleware.ts and the layout')
-const mw = read('middleware.ts')
+section('proxy.ts and the layout')
+const mw = read('proxy.ts')
 check('middleware imports isDev and DEV_ONLY_PREFIXES', /isDev/.test(mw) && /DEV_ONLY_PREFIXES/.test(mw))
 check('middleware denies /owner/dev to non-devs', /devProtected && !isDev\(row\)/.test(mw))
 check('the dev prefix is OP-protected too (opProtected includes it)', /opProtected\s*=[^\n]*devProtected/.test(mw))
@@ -187,7 +187,7 @@ check('an owner sees both payslip tiles on the right dashboards (their own on th
   staffView(owner).includes('payslips') && ownerView(owner).includes('payslips-admin'))
 check('a waiter never sees the owner\'s payslip library', !staffView(waiter).includes('payslips-admin') && !ownerView(waiter).includes('payslips-admin'))
 check('middleware protects both payslip prefixes',
-  /STAFF_PREFIXES\s*=\s*\[[^\]]*'\/staff\/payslips'/.test(read('middleware.ts')))
+  /STAFF_PREFIXES\s*=\s*\[[^\]]*'\/staff\/payslips'/.test(read('proxy.ts')))
 
 const OLD = ['/owner/editor', '/owner/schedule', '/owner/floor', '/owner/staff', '/owner/loyalty', '/owner/links',
   '/owner/languages', '/owner/intro', '/owner/reports', '/owner/accessibility', '/owner/feedback', '/owner/audit']

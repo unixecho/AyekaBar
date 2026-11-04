@@ -296,7 +296,7 @@ function AccountBox({ email }: { email: string | null }) {
 }
 
 function Dead({ headingRef, title, body, signedIn }: {
-  headingRef: React.RefObject<HTMLHeadingElement>; title: string; body: string; signedIn: boolean
+  headingRef: React.RefObject<HTMLHeadingElement | null>; title: string; body: string; signedIn: boolean
 }) {
   return (
     <section className="rise" style={sectionStyle} aria-labelledby="join-h">

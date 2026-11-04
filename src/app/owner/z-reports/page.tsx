@@ -24,7 +24,7 @@ const hm = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: 
 const dmy = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', day: 'numeric', month: 'numeric' })
 
 export default async function ZReportsPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   const { data: me } = await supabase.from('staff').select('role, badge').eq('auth_user_id', user.id).maybeSingle()

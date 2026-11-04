@@ -13,7 +13,7 @@ export async function requireStaff(): Promise<
   | { ok: true; service: SupabaseClient; userId: string; role: string }
   | { ok: false; res: NextResponse }
 > {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
 

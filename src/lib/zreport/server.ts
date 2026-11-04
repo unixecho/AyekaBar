@@ -53,7 +53,7 @@ export interface ZViewer {
 /** The signed-in staff member (session cookie), or null. Reads their own row
  *  with the service role so a name is always available. */
 export async function currentStaff(): Promise<ZViewer | null> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const { data: me } = await createServiceClient()

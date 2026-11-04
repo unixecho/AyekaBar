@@ -75,7 +75,7 @@ export type ScheduleContext = {
 export async function resolveScheduleContext(): Promise<
   { ok: true; ctx: ScheduleContext } | { ok: false; reason: 'unauthenticated' | 'not_staff' | 'no_venue' }
 > {
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()

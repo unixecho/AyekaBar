@@ -24,7 +24,7 @@ export const metadata: Metadata = { title: 'לוח בקרה · אייכה בר' 
 export const dynamic = 'force-dynamic'
 
 export default async function OwnerDashboardPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

@@ -17,12 +17,12 @@ export const metadata = {
   robots: { index: false, follow: false },
 }
 
-export default async function SchedulePrintPage({ searchParams }: { searchParams: { week?: string } }) {
+export default async function SchedulePrintPage(props: { searchParams: Promise<{ week?: string }> }) {
   const resolved = await resolveScheduleContext()
   if (!resolved.ok) redirect(resolved.reason === 'unauthenticated' ? '/login' : '/no-access')
 
   // Validated rather than trusted: this lands in date arithmetic, and a malformed value would render a week of NaN.
-  const requested = searchParams.week
+  const requested = (await props.searchParams).week
   const weekStart = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? weekStartOf(requested) : weekStartOf(todayIn(resolved.ctx.venue.timezone))
 
   return (

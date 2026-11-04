@@ -78,7 +78,7 @@ section('the route lists match the routes on disk')
 
 section('middleware wiring')
 {
-  const mw = read('src/middleware.ts')
+  const mw = read('src/proxy.ts')
   check('the guard runs before any Supabase call', mw.indexOf('apiRefusal(') > 0 && mw.indexOf('apiRefusal(') < mw.indexOf('createServerClient('))
   check('the matcher does not skip /api', !/\(\?!api|\(\?!.*\|api\|/.test(mw))
   check('a deactivated row opens nothing', /\.eq\('active', true\)/.test(mw) && /\.eq\('active', true\)/.test(read('src/lib/owner/guard.ts')) && /\.eq\('active', true\)/.test(read('src/lib/staff/guard.ts')))
@@ -116,8 +116,11 @@ section('response headers')
 }
 {
   const lock = JSON.parse(read('package-lock.json'))
-  check('sharp, the library behind the image-optimizer RCEs, is not installed', !lock.packages['node_modules/sharp'])
-  check('Next is on the last 14.x release or newer', !/^14\.2\.(\d|[12]\d|3[0-4])$/.test(lock.packages['node_modules/next'].version), lock.packages['node_modules/next'].version)
+  // Next 15+ pulls sharp in as its own optional dependency, so "not installed" can no longer be the rule. What keeps it
+  // out of reach is that nothing can ask for it: the optimizer is switched off and nothing imports next/image.
+  check('the image optimizer, the only caller of sharp, is switched off', /images: { unoptimized: true }/.test(read('next.config.mjs')))
+  const [major, minor, patch] = lock.packages['node_modules/next'].version.split('.').map(Number)
+  check('Next is on a release that carries the 2026 Server Components DoS fixes (16.4.1 or newer)', major > 16 || (major === 16 && (minor > 4 || (minor === 4 && patch >= 1))), lock.packages['node_modules/next'].version)
 }
 
 section('the loyalty switch holds on its API routes')

@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest) {
   if (error) return NextResponse.json({ error: 'שמירה נכשלה' }, { status: 500 })
 
   // The menu and the routes it gates all read these through the tagged cache.
-  revalidateTag(SETTINGS_TAG)
+  revalidateTag(SETTINGS_TAG, { expire: 0 })
 
   return NextResponse.json(
     wantsCall

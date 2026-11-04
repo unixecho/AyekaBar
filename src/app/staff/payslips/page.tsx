@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic'
 // for both; this is the second.
 
 export default async function StaffPayslipsPage() {
-  const { data: { user } } = await createClient().auth.getUser()
+  const { data: { user } } = await (await createClient()).auth.getUser()
   if (!user) redirect('/login')
   const viewer = await currentPayslipViewer()
   if (!viewer) redirect('/no-access')

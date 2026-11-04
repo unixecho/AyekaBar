@@ -20,7 +20,7 @@ export const metadata = { title: 'מפת השולחנות · אייכה בר' }
  * controls are worth rendering.
  */
 export default async function OwnerFloorPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

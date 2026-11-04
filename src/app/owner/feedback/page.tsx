@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: 'משוב מלקוחות · אייכ�
 // every other page in this directory.
 
 export default async function OwnerFeedbackPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

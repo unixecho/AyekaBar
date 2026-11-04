@@ -10,7 +10,7 @@
 // customer-facing page should get the widget by default (forgetting to list it
 // would silently strip an accessibility feature from the public), while a new
 // back-office page lives under /owner or /staff by the same rule that already
-// gates it in middleware.ts.
+// gates it in proxy.ts.
 
 export const A11Y_DISABLED_PREFIXES = ['/owner', '/staff'] as const
 

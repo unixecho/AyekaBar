@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic'
 // /owner/dev?view=employee IS this, so a developer who lands here is sent there.
 
 export default async function StaffDashboardPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

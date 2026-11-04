@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: 'צוות · אייכה בר' }
 // time someone was hired.
 
 export default async function OwnerStaffPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

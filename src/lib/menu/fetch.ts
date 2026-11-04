@@ -7,7 +7,7 @@ import {
 
 /** Server-side fetch (first paint / SEO). */
 export async function fetchMenu(): Promise<MenuData | null> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { data, error } = await supabase
     .from('public_menus')

@@ -12,7 +12,7 @@
 //   /owner/dev         → everything, in the same order, plus `dev`
 //
 // A tile's `audience` is a SHOW/HIDE rule for the UI. It is not authorization —
-// middleware.ts, the page's own server-side re-check and the API guards are the
+// proxy.ts, the page's own server-side re-check and the API guards are the
 // gate, and `scripts/check-dashboard.mjs` fails if a tile's audience is wider
 // than the prefix list that protects its route (a tile that leads to a wall).
 
