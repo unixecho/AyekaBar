@@ -6,6 +6,7 @@ import { checkRateLimit, clientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { latestJoinLinks, revokeJoin } from '@/lib/staff/join-server'
 import { isTombstone } from '@/lib/staff/hard-delete'
 import { pickIdentity } from '@/lib/staff/profile'
+import { isDev } from '@/lib/staff/access'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 type Service = SupabaseClient
@@ -62,11 +63,11 @@ async function phonesById(service: Service): Promise<Map<string, string>> {
 async function loadRow(service: Service, id: string) {
   const { data } = await service
     .from('staff')
-    .select('id, auth_user_id, role, email, active')
+    .select('id, auth_user_id, role, badge, email, active')
     .eq('id', id)
     .maybeSingle()
   return data as
-    { id: string; auth_user_id: string | null; role: string; email: string | null; active: boolean } | null
+    { id: string; auth_user_id: string | null; role: string; badge: string | null; email: string | null; active: boolean } | null
 }
 
 /** An "offline" roster entry: no account, no address, exists to be scheduled.
@@ -135,6 +136,7 @@ export async function POST(request: NextRequest) {
     { email?: string; badge?: string; role?: string; firstName?: string; lastName?: string } | null
   const email = body?.email?.trim().toLowerCase()
   const badge = body?.badge?.trim() || null
+  if (badge?.toLowerCase() === 'dev') return NextResponse.json({ error: 'תג מפתח אינו ניתן להקצאה' }, { status: 403 })
   const role = body?.role === 'owner' ? 'owner' : 'staff'
 
   // The name the OWNER typed, valid for both shapes below. Added 2026-10-13:
@@ -176,8 +178,9 @@ export async function POST(request: NextRequest) {
   // back to life rather than staying invisible, the same "re-invite ==
   // restore" shortcut reactivateTable() gives the floor plan.
   const { data: existing } = await auth.service
-    .from('staff').select('id, active, auth_user_id, first_name').ilike('email', likeExact(email)).maybeSingle()
+    .from('staff').select('id, active, auth_user_id, first_name, role, badge').ilike('email', likeExact(email)).maybeSingle()
   if (existing) {
+    if (isDev(existing) && !isDev(auth.staff)) return NextResponse.json({ error: 'אין הרשאה לשנות חשבון מפתח' }, { status: 403 })
     const update: Record<string, unknown> = { role, badge, active: true }
     // Re-inviting someone who never signed in is the natural moment to fix a
     // misspelt name. A LINKED row keeps its name — that is their Google
@@ -240,6 +243,8 @@ export async function PATCH(request: NextRequest) {
 
   const row = await loadRow(auth.service, id)
   if (!row) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 })
+  if (isDev(row) && !isDev(auth.staff)) return NextResponse.json({ error: 'אין הרשאה לשנות חשבון מפתח' }, { status: 403 })
+  if (body?.badge?.trim().toLowerCase() === 'dev' && !isDev(row)) return NextResponse.json({ error: 'תג מפתח אינו ניתן להקצאה' }, { status: 403 })
 
   const patch: Record<string, unknown> = {}
   if (body && 'badge' in body) patch.badge = body.badge?.trim() || null
@@ -411,6 +416,7 @@ export async function DELETE(request: NextRequest) {
 
   const row = await loadRow(auth.service, id)
   if (!row) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 })
+  if (isDev(row) && !isDev(auth.staff)) return NextResponse.json({ error: 'אין הרשאה לשנות חשבון מפתח' }, { status: 403 })
 
   // Prevent self-lockout.
   if (row.auth_user_id === auth.userId) {

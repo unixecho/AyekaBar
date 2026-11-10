@@ -95,7 +95,7 @@ export const VISIT_COUNTING = {
 /** Shown on /cookies. A human bumps this when the PAGE's meaning changes; the
  *  one-time notice re-appears whenever the inventory itself changes — that is
  *  what `INVENTORY_VERSION` in notice.ts is pinned to (`inventoryVersion`, below). */
-export const PRIVACY_PAGE_UPDATED = '2026-10-17'
+export const PRIVACY_PAGE_UPDATED = '2026-11-10'
 
 export const STORAGE_REGISTRY: readonly StorageItem[] = [
   // ── needed for something the visitor is using ───────────────────────────
@@ -374,44 +374,24 @@ export const STORAGE_REGISTRY: readonly StorageItem[] = [
       'حتى إغلاق اللسان، أو حفظ المسودة أو إلغائها.'),
   },
   {
-    id: 'staff-push-off', kind: 'localStorage', name: 'ayeka:staff-push-off:v1',
+    id: 'dashboard-tools', kind: 'localStorage', name: 'ayeka.preview.tools.v1:*',
     category: 'functional', audience: 'staff', sentToServer: false,
     what: t(
-      'סימון שהתראות הטלפון של הצוות כבויות במכשיר הזה.',
-      'A mark that the staff phone alerts are switched off on this device.',
-      'علامة بأن تنبيهات الهاتف للطاقم متوقفة على هذا الجهاز.'),
+      'מספר הפעמים ומועד הפתיחה האחרון של כל כלי בלוח הבקרה, בנפרד לכל איש צוות.',
+      'How often and when each dashboard tool was last opened, separated by staff member.',
+      'عدد مرات فتح كل أداة في لوحة التحكم وآخر وقت فُتحت فيه، لكل موظف على حدة.'),
     why: t(
-      'כדי לכבד את הבחירה שלך ולא לבקש שוב. לא בשימוש באתר הציבורי.',
-      'To respect your choice and not ask again. Not used on the public site.',
-      'لاحترام اختيارك وعدم السؤال مجدداً. لا يُستخدم في الموقع العام.'),
+      'כדי לסדר קיצורים והצעות חיפוש לפי הכלים שנפתחים בפועל. לא בשימוש באתר הציבורי.',
+      'To rank shortcuts and search suggestions by tools actually opened. Not used on the public site.',
+      'لترتيب الاختصارات واقتراحات البحث بحسب الأدوات المستخدمة فعلاً. لا يُستخدم في الموقع العام.'),
     when: t(
-      'רק כשעובד מכבה את ההתראות במכשיר.',
-      'Only when a staff member turns the alerts off on the device.',
-      'فقط عندما يوقف أحد أفراد الطاقم التنبيهات على الجهاز.'),
+      'רק כשאיש צוות פותח כלי מלוח הבקרה.',
+      'Only when a staff member opens a tool from the dashboard.',
+      'فقط عندما يفتح أحد أفراد الطاقم أداة من لوحة التحكم.'),
     keeps: t(
-      'עד שימחקו אותו או יפעילו את ההתראות מחדש.',
-      'Until it is deleted or the alerts are switched on again.',
-      'حتى يُحذف أو تُفعَّل التنبيهات من جديد.'),
-  },
-  {
-    id: 'staff-push-snooze', kind: 'localStorage', name: 'ayeka:staff-push-snooze:v1',
-    category: 'functional', audience: 'staff', sentToServer: false,
-    what: t(
-      'מתי להזכיר שוב לעובד להפעיל התראות טלפון.',
-      'When to remind a staff member again about phone alerts.',
-      'متى نذكّر أحد أفراد الطاقم مجدداً بتنبيهات الهاتف.'),
-    why: t(
-      'כדי שבקשה שנדחתה לא תחזור בכל ביקור. לא בשימוש באתר הציבורי.',
-      'So a request that was postponed does not come back on every visit. Not used on the public site.',
-      'لكي لا يعود طلب تم تأجيله في كل زيارة. لا يُستخدم في الموقع العام.'),
-    when: t(
-      'רק כשעובד בוחר "אחר כך" בכרטיס ההתראות.',
-      'Only when a staff member chooses "later" on the alerts card.',
-      'فقط عندما يختار أحد أفراد الطاقم "لاحقاً" في بطاقة التنبيهات.'),
-    keeps: t(
-      'שלושה ימים, ואז היא נמחקת מעצמה.',
-      'Three days, then it clears itself.',
-      'ثلاثة أيام، ثم تُمحى من تلقاء نفسها.'),
+      'עד לאיפוס ההמלצות או למחיקת נתוני האתר מהמכשיר.',
+      'Until recommendations are reset or site data is cleared from this device.',
+      'حتى إعادة ضبط الاقتراحات أو مسح بيانات الموقع من هذا الجهاز.'),
   },
 ]
 

@@ -60,6 +60,7 @@ export function isDev(row: AccessRow | null | undefined): boolean {
 /** Owner-panel sections that are NOT the editor. Kept as a list so middleware
  *  and the dashboard agree on what OP actually gates. */
 export const OP_ONLY_PREFIXES = [
+  '/owner/preview/glass',
   '/owner/dashboard',
   '/owner/customers',
   '/owner/rewards',

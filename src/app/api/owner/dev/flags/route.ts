@@ -5,6 +5,7 @@ import {
   SETTINGS_TAG,
   TABLE_ORDERING_ENABLED, TABLE_ORDERING_ENABLED_DEFAULT,
   WAITER_CALL_ENABLED, WAITER_CALL_ENABLED_DEFAULT,
+  OMS_STAFF_DASHBOARD_ENABLED, OMS_STAFF_DASHBOARD_ENABLED_DEFAULT,
 } from '@/lib/settings/keys'
 
 // The developer's in-development switches (/owner/dev).
@@ -27,7 +28,7 @@ import {
 // here (app_settings has no write policy). `updated_by`/`updated_at` are the
 // record of who flipped it and when.
 
-const FLAG_KEYS = [WAITER_CALL_ENABLED, TABLE_ORDERING_ENABLED]
+const FLAG_KEYS = [WAITER_CALL_ENABLED, TABLE_ORDERING_ENABLED, OMS_STAFF_DASHBOARD_ENABLED]
 
 export async function GET() {
   const auth = await requireDev()
@@ -45,6 +46,7 @@ export async function GET() {
     waiterCallUpdatedAt: row(WAITER_CALL_ENABLED)?.updated_at ?? null,
     tableOrderingEnabled: (row(TABLE_ORDERING_ENABLED)?.value as boolean | undefined) ?? TABLE_ORDERING_ENABLED_DEFAULT,
     tableOrderingUpdatedAt: row(TABLE_ORDERING_ENABLED)?.updated_at ?? null,
+    omsStaffDashboardEnabled: (row(OMS_STAFF_DASHBOARD_ENABLED)?.value as boolean | undefined) ?? OMS_STAFF_DASHBOARD_ENABLED_DEFAULT,
   })
 }
 
@@ -53,23 +55,24 @@ export async function PATCH(request: NextRequest) {
   if (!auth.ok) return auth.res
 
   const body = (await request.json().catch(() => null)) as
-    { waiterCallEnabled?: unknown; tableOrderingEnabled?: unknown } | null
+    { waiterCallEnabled?: unknown; tableOrderingEnabled?: unknown; omsStaffDashboardEnabled?: unknown } | null
   // One switch per request, and it must be a real boolean — never a truthy string, never both at once.
   const wantsCall = typeof body?.waiterCallEnabled === 'boolean'
   const wantsOrdering = typeof body?.tableOrderingEnabled === 'boolean'
-  if (!body || wantsCall === wantsOrdering) {
+  const wantsOms = typeof body?.omsStaffDashboardEnabled === 'boolean'
+  if (!body || Number(wantsCall) + Number(wantsOrdering) + Number(wantsOms) !== 1) {
     return NextResponse.json({ error: 'ערך לא תקין' }, { status: 400 })
   }
 
-  const key = wantsCall ? WAITER_CALL_ENABLED : TABLE_ORDERING_ENABLED
-  const value = wantsCall ? (body.waiterCallEnabled as boolean) : (body.tableOrderingEnabled as boolean)
+  const key = wantsCall ? WAITER_CALL_ENABLED : wantsOrdering ? TABLE_ORDERING_ENABLED : OMS_STAFF_DASHBOARD_ENABLED
+  const value = wantsCall ? (body.waiterCallEnabled as boolean) : wantsOrdering ? (body.tableOrderingEnabled as boolean) : (body.omsStaffDashboardEnabled as boolean)
 
   const { data, error } = await auth.service
     .from('app_settings')
     .upsert({
       key,
       value,
-      is_public: true, // the signed-out /menu page reads it before rendering
+      is_public: true, // the dashboard reads the off-by-default visibility setting
       updated_at: new Date().toISOString(),
       updated_by: auth.userId,
     }, { onConflict: 'key' })
@@ -83,6 +86,7 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json(
     wantsCall
       ? { waiterCallEnabled: data.value === true, waiterCallUpdatedAt: data.updated_at }
-      : { tableOrderingEnabled: data.value === true, tableOrderingUpdatedAt: data.updated_at },
+      : wantsOrdering ? { tableOrderingEnabled: data.value === true, tableOrderingUpdatedAt: data.updated_at }
+      : { omsStaffDashboardEnabled: data.value === true },
   )
 }

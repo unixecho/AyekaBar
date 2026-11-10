@@ -1,11 +1,10 @@
 import { isDev, isOp } from '@/lib/staff/access'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { splitName } from '@/lib/staff/name'
-import OwnerHeader from '@/components/OwnerHeader'
-import SignOutButton from '@/components/SignOutButton'
 import OwnerDashboard from '@/components/dashboard/OwnerDashboard'
+import PreviewFrame from '@/components/glass-preview/PreviewFrame'
+import { OWNER_CATEGORIES, sectionsFor } from '@/lib/dashboard/tiles'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'לוח בקרה · אייכה בר' }
@@ -31,7 +30,7 @@ export default async function OwnerDashboardPage() {
   // Middleware already gates this, but verify server-side too (defense in depth).
   const { data: me } = await supabase
     .from('staff')
-    .select('role, badge, email, first_name')
+    .select('id, role, badge, email, first_name')
     .eq('auth_user_id', user.id)
     .maybeSingle()
   if (!me || !isOp(me)) redirect('/no-access')
@@ -53,22 +52,10 @@ export default async function OwnerDashboardPage() {
   // The developer's one perspective holds the manager view as a lens.
   if (isDev(me)) redirect('/owner/dev?view=manager')
 
-  return (
-    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <OwnerHeader right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* The owner is an employee too — this is the employee dashboard, exactly as the staff see it (2026-10-13). */}
-          <Link href="/staff/dashboard" className="press" style={headerLink}>🧑‍🍳 תצוגת עובד</Link>
-          <SignOutButton />
-        </div>
-      } />
-
-      <OwnerDashboard me={me} />
-    </main>
-  )
-}
-
-const headerLink: React.CSSProperties = {
-  fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-dim)', textDecoration: 'none',
-  border: '1px solid var(--line-strong)', borderRadius: 999, padding: '5px 11px', whiteSpace: 'nowrap',
+  const tiles = sectionsFor(me, OWNER_CATEGORIES).flatMap((section) => section.tiles)
+    .filter((tile) => tile.id !== 'loyalty-admin')
+  return <PreviewFrame mode="live" tiles={tiles} staffId={me.id} backHref="/owner/dashboard"
+    scheduleHref="/owner/schedule" secondaryLink={{ href: '/staff/dashboard', label: 'תצוגת עובד' }}>
+    <OwnerDashboard me={me} />
+  </PreviewFrame>
 }

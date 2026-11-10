@@ -345,7 +345,12 @@ section('the staff-side card and the service worker')
   check('a tap still opens only a same-origin staff path', /\|\| '\/staff'/.test(sw))
 
   const flags = code('src/app/api/owner/dev/flags/route.ts')
-  check('the dev flags route is the DEVELOPER\'s (requireDev) for both verbs, and PATCH takes exactly one real boolean', (flags.match(/requireDev\(\)/g) ?? []).length === 2 && /wantsCall === wantsOrdering/.test(flags) && /typeof body\?\.waiterCallEnabled === 'boolean'/.test(flags))
+  check('the dev flags route is the DEVELOPER\'s (requireDev) for both verbs, and PATCH takes exactly one real boolean',
+    (flags.match(/requireDev\(\)/g) ?? []).length === 2 &&
+    /Number\(wantsCall\) \+ Number\(wantsOrdering\) \+ Number\(wantsOms\) !== 1/.test(flags) &&
+    /typeof body\?\.waiterCallEnabled === 'boolean'/.test(flags) &&
+    /typeof body\?\.tableOrderingEnabled === 'boolean'/.test(flags) &&
+    /typeof body\?\.omsStaffDashboardEnabled === 'boolean'/.test(flags))
   // The general manager's route may READ the two switches (to show them) but may only WRITE the cart's own.
   const mc = code('src/app/api/owner/menu-cart/route.ts')
   const mcPatch = mc.slice(mc.indexOf('export async function PATCH'))

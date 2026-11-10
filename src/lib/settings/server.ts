@@ -4,6 +4,7 @@ import {
   PORTAL_LINKS, PORTAL_LINKS_DEFAULT, type PortalLinkKey,
   PORTAL_REVIEWS,
   OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT,
+  OMS_STAFF_DASHBOARD_ENABLED, OMS_STAFF_DASHBOARD_ENABLED_DEFAULT,
   ACCESSIBILITY_STATEMENT, ACCESSIBILITY_STATEMENT_DEFAULT, type AccessibilityStatement,
   MENU_CART_ENABLED, MENU_CART_ENABLED_DEFAULT,
   TABLE_ORDERING_ENABLED, TABLE_ORDERING_ENABLED_DEFAULT,
@@ -63,6 +64,10 @@ export function getLoyaltyVisible(): Promise<boolean> {
  *  means the deck observes a live service and cannot write. */
 export function getOverallDemoMode(): Promise<boolean> {
   return readSetting<boolean>(OMS_OVERALL_DEMO_MODE, OMS_OVERALL_DEMO_MODE_DEFAULT)
+}
+
+export async function getOmsStaffDashboardEnabled(): Promise<boolean> {
+  return (await readSetting<boolean>(OMS_STAFF_DASHBOARD_ENABLED, OMS_STAFF_DASHBOARD_ENABLED_DEFAULT)) === true
 }
 
 /** Does the digital menu offer its order-building cart? See

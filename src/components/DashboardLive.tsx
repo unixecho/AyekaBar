@@ -32,13 +32,14 @@ import ShiftStatusCard from '@/components/ShiftStatusCard'
 const POLL_MS = 30_000
 
 export default function DashboardLive({
-  initialStats, initialSignals, initialDetails, initialOverallDemoMode, initialShiftStatus,
+  initialStats, initialSignals, initialDetails, initialOverallDemoMode, initialShiftStatus, showOverall = true,
 }: {
   initialStats: DashboardStats
   initialSignals: DashboardSignal[]
   initialDetails: DashboardDetails
   initialOverallDemoMode: boolean
   initialShiftStatus: ShiftStatusData
+  showOverall?: boolean
 }) {
   const [stats, setStats] = useState(initialStats)
   const [signals, setSignals] = useState(initialSignals)
@@ -112,9 +113,9 @@ export default function DashboardLive({
           פעיל" alert the same instant way, and so a toggle FROM the signal
           stack reaches back to move this switch (via the live overallDemoMode
           state above, not the one-time initial prop). */}
-      <div style={{ marginBottom: 16 }}>
+      {showOverall && <div style={{ marginBottom: 16 }}>
         <OverallViewCard initialDemoMode={overallDemoMode} onToggled={refresh} />
-      </div>
+      </div>}
     </>
   )
 }

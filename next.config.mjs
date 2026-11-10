@@ -30,6 +30,8 @@ const nextConfig = {
   // own README) — this is what makes Next transpile it like first-party code.
   transpilePackages: ['a11y-widget'],
   poweredByHeader: false,
+  // The local-only Next badge covers the preview's fixed bottom navigation on phones.
+  devIndicators: false,
   // Nothing here uses next/image, so the optimizer route is switched off rather than left as attack surface.
   images: { unoptimized: true },
 

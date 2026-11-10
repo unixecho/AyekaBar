@@ -137,5 +137,18 @@ section('this public repository stays clean')
   }
 }
 
+section('zod — the version the audit asked for, and a bad body is still the caller\'s 400')
+{
+  const { z, ZodError } = await import('zod')
+  const pkg = JSON.parse(read('node_modules/zod/package.json'))
+  const [major, minor, patch] = pkg.version.split('.').map(Number)
+  check('zod is at least 4.6.6 (GHSA-mrhx-c7xc-m3w5)', major > 4 || (major === 4 && (minor > 6 || (minor === 6 && patch >= 6))), pkg.version)
+  let caught = null
+  try { z.object({ a: z.string().uuid() }).strict().parse(null) } catch (e) { caught = e }
+  check('parse() throws what apiRoute catches as ZodError', caught instanceof ZodError)
+  check('the failing path of a null body is empty, so it reads (body)', caught?.issues?.[0]?.path?.length === 0)
+  check('apiRoute still maps ZodError to a 400', /err instanceof ZodError[\s\S]{0,200}ApiError\(400/.test(read('src/lib/http/errors.ts')))
+}
+
 console.log(`\n${pass} passed, ${failures.length} failed`)
 if (failures.length) { console.log('FAILED:'); failures.forEach((f) => console.log(`  ${f}`)); process.exit(1) }

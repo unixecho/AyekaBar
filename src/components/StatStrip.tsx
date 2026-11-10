@@ -56,7 +56,7 @@ export default function StatStrip({
 }) {
   return (
     <>
-      <div className="rise" style={{ ...strip, marginBottom: expanded ? 7 : 16 }}>
+      <div className="rise ag-stat-strip" style={{ ...strip, marginBottom: expanded ? 7 : 16 }}>
         {/* Tabs, not tables: a quick purchase has no table and two combined
             tables share one tab. See readFloor() for why the label moved to
             match the query rather than the other way round. */}

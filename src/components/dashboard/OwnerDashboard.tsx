@@ -9,7 +9,7 @@ import { readZOverview } from '@/lib/zreport/server'
 import { readDashboardSignals, OVERALL_DEMO_SIGNAL_ID } from '@/lib/owner/signals'
 import { readDashboardDetails } from '@/lib/owner/signal-details'
 import { readShiftStatus } from '@/lib/owner/shift-status'
-import type { AccessRow } from '@/lib/staff/access'
+import { isDev, type AccessRow } from '@/lib/staff/access'
 
 // The owner / manager dashboard BODY — everything under the header (rebuilt 2026-08-29, "the beating heart for the
 // business"; moved out of the page 2026-10-15 so the developer's single dashboard can show it as its "manager" lens).
@@ -39,19 +39,20 @@ export default async function OwnerDashboard({ me }: { me: AccessRow }) {
 
   return (
     <>
+      <div className="rise" style={{ animationDelay: '30ms', marginBottom: 14 }}>
+        <StaffPushCard variant="home" />
+      </div>
       <DashboardLive
         initialStats={stats} initialSignals={signals} initialDetails={details}
         initialOverallDemoMode={overallDemoMode} initialShiftStatus={shiftStatus}
+        showOverall={isDev(me)}
       />
-
-      {/* Phone alerts for the owner too: a colleague asking for a shift, a request or swap waiting for a decision. */}
-      <div className="rise" style={{ animationDelay: '120ms', marginBottom: 14 }}>
-        <StaffPushCard variant="home" />
-      </div>
 
       <ZReportCard overview={zOverview} />
 
-      <DashboardSections sections={sectionsFor(me, OWNER_CATEGORIES)} baseDelay={150} />
+      <DashboardSections sections={sectionsFor(me, OWNER_CATEGORIES).map((section) => ({
+        ...section, tiles: section.tiles.filter((tile) => tile.id !== 'loyalty-admin' || isDev(me)),
+      }))} baseDelay={150} />
 
       {/* The owner's push test bench: sends real alerts to this owner only and shows what the server sees. */}
       <DevPushPanel />

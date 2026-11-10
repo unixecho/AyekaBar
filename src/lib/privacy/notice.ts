@@ -47,7 +47,7 @@ export const ACK_KEY = 'ayeka.privacy.ack.v1'
 /** The fingerprint of lib/privacy/registry.ts's inventory (`inventoryVersion()`).
  *  Change what the site stores and the harness fails until this is updated — and
  *  every visitor who had acknowledged the old inventory sees the notice again. */
-export const INVENTORY_VERSION = 'b29042c6'
+export const INVENTORY_VERSION = '95f6210b'
 
 // ── the notice's memory ───────────────────────────────────────────────────
 export interface PrivacyAck { v: string; at: number }

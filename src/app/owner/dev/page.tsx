@@ -1,12 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { isDev } from '@/lib/staff/access'
-import { badgeMeta } from '@/lib/staff/badges'
 import { DEV_CATEGORIES, sectionsFor } from '@/lib/dashboard/tiles'
 import { parseLens } from '@/lib/dashboard/lens'
 import { readDevHealth, type HealthRow } from '@/lib/owner/dev-health'
-import OwnerHeader from '@/components/OwnerHeader'
-import SignOutButton from '@/components/SignOutButton'
+import PreviewFrame from '@/components/glass-preview/PreviewFrame'
 import DashboardSections from '@/components/dashboard/DashboardSections'
 import DevFlagsCard from '@/components/dashboard/DevFlagsCard'
 import EmployeeDashboard from '@/components/dashboard/EmployeeDashboard'
@@ -57,8 +55,6 @@ export default async function DevDashboardPage(props: { searchParams?: Promise<{
 
   const health = await readDevHealth()
   const devSections = sectionsFor(me, DEV_CATEGORIES).filter((s) => s.category.id === 'dev')
-  const meta = badgeMeta(me.badge, me.role)
-  const firstName = me.display_name?.trim() || me.first_name?.trim() || null
 
   const devPanel = (
     <>
@@ -88,35 +84,14 @@ export default async function DevDashboardPage(props: { searchParams?: Promise<{
     </>
   )
 
-  return (
-    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <OwnerHeader right={<SignOutButton />} />
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div className="rise" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text)' }}>
-            {firstName ? `שלום, ${firstName}` : 'שלום'}
-          </h1>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: `${meta.color}18`, border: `1px solid ${meta.color}44`, color: meta.color,
-            borderRadius: 999, padding: '3px 11px', fontSize: '0.76rem', fontWeight: 700,
-          }}>
-            <span aria-hidden>{meta.emoji}</span>{meta.he}
-          </span>
-        </div>
-
-        <LensTabs
-          initial={parseLens(searchParams?.view)}
-          panels={{
-            manager: <OwnerDashboard me={me} />,
-            employee: <EmployeeDashboard me={me} />,
-            dev: devPanel,
-          }}
-        />
-      </div>
-    </main>
-  )
+  const tiles = sectionsFor(me, DEV_CATEGORIES).flatMap((section) => section.tiles)
+  return <PreviewFrame mode="live" tiles={tiles} staffId={me.id} backHref="/owner/dev" scheduleHref="/owner/schedule">
+    <LensTabs initial={parseLens(searchParams?.view)} panels={{
+      manager: <OwnerDashboard me={me} />,
+      employee: <EmployeeDashboard me={me} />,
+      dev: devPanel,
+    }} />
+  </PreviewFrame>
 }
 
 const srOnly: React.CSSProperties = {

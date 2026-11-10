@@ -6,7 +6,10 @@
 .app-install__button { min-height: 52px; }
 .app-install__primary { display: flex; align-items: center; justify-content: center; gap: 9px; background: var(--neon); color: var(--bg); border: 0; border-radius: 16px; font-weight: 700; font-size: .95rem; cursor: pointer; }
 .app-push { display: grid; gap: 16px; padding: 18px; margin-block-end: 18px; border: 1px solid color-mix(in srgb, var(--neon) 28%, var(--line)); border-radius: 23px; background: var(--bg-elev); }
+.app-push--required { border: 2px solid var(--neon); box-shadow: 0 0 0 4px color-mix(in srgb, var(--neon) 13%, transparent), 0 14px 32px rgb(0 0 0 / .19); }
+.app-push__required { display: inline-flex; align-items: center; min-height: 23px; margin-block-end: 6px; padding: 2px 9px; border-radius: 999px; background: var(--neon); color: var(--bg); font-size: .7rem; font-weight: 800; }
 .app-push--on, .app-push--denied { border-color: var(--line); gap: 12px; padding: 14px 16px; }
+.app-push--denied.app-push--required { border-color: var(--neon); padding: 18px; }
 .app-push__head { display: flex; align-items: flex-start; gap: 12px; }
 .app-push__head > div { flex: 1; min-width: 0; }
 .app-push__head h2 { margin: 0 0 5px; font-size: 1.05rem; line-height: 1.4; letter-spacing: -.02em; }

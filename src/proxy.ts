@@ -14,7 +14,7 @@ import { SESSION_COOKIE_OPTIONS } from '@/lib/supabase/cookie-options'
 // first door.
 // /staff/payslips (2026-10-14) is an employee's own salary documents: any staff row may open the page, which then
 // narrows everything to THEIR row; the routes behind it re-check on every request.
-const STAFF_PREFIXES = ['/staff/dashboard', '/staff/loyalty', '/staff/z-report', '/staff/payslips']
+const STAFF_PREFIXES = ['/staff/dashboard', '/staff/preview/glass', '/staff/loyalty', '/staff/z-report', '/staff/payslips']
 
 const PROTECTED_ROUTES = [
   '/customer/dashboard',

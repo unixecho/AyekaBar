@@ -1,11 +1,10 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { badgeMeta } from '@/lib/staff/badges'
 import { isDev, isOp } from '@/lib/staff/access'
-import OwnerHeader from '@/components/OwnerHeader'
-import SignOutButton from '@/components/SignOutButton'
 import EmployeeDashboard from '@/components/dashboard/EmployeeDashboard'
+import PreviewFrame from '@/components/glass-preview/PreviewFrame'
+import { STAFF_CATEGORIES, STAFF_EXCLUDE, sectionsFor } from '@/lib/dashboard/tiles'
+import { getOmsStaffDashboardEnabled } from '@/lib/settings/server'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'אזור הצוות · אייכה בר' }
@@ -36,40 +35,11 @@ export default async function StaffDashboardPage() {
   // The developer's one perspective holds the employee view as a lens.
   if (isDev(me)) redirect('/owner/dev?view=employee')
 
-  const meta = badgeMeta(me.badge, me.role)
-  const firstName = me.display_name?.trim() || me.first_name?.trim() || null
-
-  return (
-    <main id="main" tabIndex={-1} style={{ minHeight: '100dvh', padding: '24px 20px', maxWidth: 560, margin: '0 auto' }}>
-      <OwnerHeader right={<SignOutButton />} />
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div className="rise" style={{ animationDelay: '30ms', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text)' }}>
-            {firstName ? `שלום, ${firstName}` : 'שלום'}
-          </h1>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: `${meta.color}18`, border: `1px solid ${meta.color}44`, color: meta.color,
-            borderRadius: 999, padding: '3px 11px', fontSize: '0.76rem', fontWeight: 700,
-          }}>
-            <span aria-hidden>{meta.emoji}</span>{meta.he}
-          </span>
-          {/* Owners and the developer are employees too. Their own dashboards
-              are one tap away from here, and this is theirs to open as an
-              employee — the view the staff actually see. */}
-          {isOp(me) && (
-            <Link href="/owner/dashboard" className="press" style={{
-              marginInlineStart: 'auto', fontSize: '0.8rem', fontWeight: 700, color: 'var(--neon-soft)',
-              textDecoration: 'none', border: '1px solid var(--line-strong)', borderRadius: 999, padding: '5px 12px',
-            }}>
-              ⚙️ לוח ניהול
-            </Link>
-          )}
-        </div>
-
-        <EmployeeDashboard me={me} />
-      </div>
-    </main>
-  )
+  const omsVisible = await getOmsStaffDashboardEnabled()
+  const tiles = sectionsFor(me, STAFF_CATEGORIES, STAFF_EXCLUDE).flatMap((section) => section.tiles)
+    .filter((tile) => tile.id !== 'loyalty' && (tile.id !== 'pos' || omsVisible))
+  return <PreviewFrame mode="live" tiles={tiles} staffId={me.id} backHref="/staff/dashboard"
+    scheduleHref="/staff/schedule" secondaryLink={isOp(me) ? { href: '/owner/dashboard', label: 'לוח ניהול' } : undefined}>
+    <EmployeeDashboard me={me} />
+  </PreviewFrame>
 }

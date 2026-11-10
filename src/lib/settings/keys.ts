@@ -46,6 +46,10 @@ export const PORTAL_REVIEWS = 'portal_reviews'
 export const OMS_NOTIFY_ALL_WAITERS = 'oms_notify_all_waiters'
 export const OMS_NOTIFY_ALL_WAITERS_DEFAULT = true
 
+/** Developer-controlled dashboard entry for the separate staff OMS. Starts hidden. */
+export const OMS_STAFF_DASHBOARD_ENABLED = 'oms_staff_dashboard_enabled'
+export const OMS_STAFF_DASHBOARD_ENABLED_DEFAULT = false
+
 /** Demo mode for the Overall view (`staff.ayeka.bar/?demo=1`) — the
  *  operational birds-eye deck showing waiter, bar and kitchen at once.
  *  2026-08-27: "leave a setting in the new portion for this view in the

@@ -29,15 +29,19 @@ const T = {
   orderingOn: 'דלוק — לקוח שקיבל קוד מהמלצר יכול לשלוח את הרשימה, והמלצרים במשמרת מקבלים התראה.',
   orderingOff: 'כבוי — הכפתור בעגלה מוצג כ"בקרוב" ואינו פעיל, וה-API סגור.',
   orderingNeeds: 'דורש שמיגרציה 058 תופעל ושהקופה (staff.ayeka.bar) תהיה על הגרסה החדשה. בלעדיהן הלקוח יקבל הודעת שגיאה רגועה. בדקו בבדיקת המערכת למטה.',
+  oms: 'גישה לקופה מלוח הצוות',
+  omsOn: 'דלוק — קישור הקופה מוצג לצוות בלוח הבקרה.',
+  omsOff: 'כבוי — הקישור לקופה מוסתר מלוח הצוות.',
+  omsNeeds: 'המתג שולט בקישורים בלוח הבקרה בלבד. הגישה הישירה לאפליקציית הקופה נשארת לפי הרשאותיה.',
   loading: 'טוען…',
   failed: 'השמירה נכשלה. נסו שוב.',
   loadFailed: 'הטעינה נכשלה.',
 }
 
-type FlagKey = 'waiterCallEnabled' | 'tableOrderingEnabled'
+type FlagKey = 'waiterCallEnabled' | 'tableOrderingEnabled' | 'omsStaffDashboardEnabled'
 
 export default function DevFlagsCard() {
-  const [flags, setFlags] = useState<Record<FlagKey, boolean | null>>({ waiterCallEnabled: null, tableOrderingEnabled: null })
+  const [flags, setFlags] = useState<Record<FlagKey, boolean | null>>({ waiterCallEnabled: null, tableOrderingEnabled: null, omsStaffDashboardEnabled: null })
   const [busy, setBusy] = useState<FlagKey | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -46,9 +50,9 @@ export default function DevFlagsCard() {
       const res = await fetch('/api/owner/dev/flags', { cache: 'no-store' })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error)
-      setFlags({ waiterCallEnabled: j.waiterCallEnabled === true, tableOrderingEnabled: j.tableOrderingEnabled === true })
+      setFlags({ waiterCallEnabled: j.waiterCallEnabled === true, tableOrderingEnabled: j.tableOrderingEnabled === true, omsStaffDashboardEnabled: j.omsStaffDashboardEnabled === true })
     } catch {
-      setFlags({ waiterCallEnabled: null, tableOrderingEnabled: null }); setMsg(T.loadFailed)
+      setFlags({ waiterCallEnabled: null, tableOrderingEnabled: null, omsStaffDashboardEnabled: null }); setMsg(T.loadFailed)
     }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -76,6 +80,7 @@ export default function DevFlagsCard() {
   const rows: { key: FlagKey; title: string; on: string; off: string; needs: string }[] = [
     { key: 'waiterCallEnabled', title: T.call, on: T.callOn, off: T.callOff, needs: T.callNeeds },
     { key: 'tableOrderingEnabled', title: T.ordering, on: T.orderingOn, off: T.orderingOff, needs: T.orderingNeeds },
+    { key: 'omsStaffDashboardEnabled', title: T.oms, on: T.omsOn, off: T.omsOff, needs: T.omsNeeds },
   ]
 
   return (
