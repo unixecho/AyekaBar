@@ -159,7 +159,7 @@ export default function PreviewFrame({ children, tiles, backHref, staffId, mode 
         <button className="ag-appearance" type="button" onClick={() => setLook(look === 'dark' ? 'light' : 'dark')} aria-label={`${T.appearance}: ${look === 'dark' ? T.dark : T.light}`}>{look === 'dark' ? <Moon size={17} /> : <Sun size={17} />}</button>
       </div>
       <section className="ag-shortcuts" aria-labelledby="ag-shortcuts-title"><div className="ag-shortcuts-head"><h2 id="ag-shortcuts-title">{T.forYou}</h2><span>{T.forYouHint}</span></div>
-        <div className="ag-shortcut-list">{ranked.slice(0, 3).map((tile) => <ToolLink key={tile.id} tile={tile} className="ag-shortcut" />)}</div>
+        <Glass className="ag-shortcut-list">{ranked.slice(0, 3).map((tile) => <ToolLink key={tile.id} tile={tile} className="ag-shortcut" />)}</Glass>
       </section>
       {children}
     </main>

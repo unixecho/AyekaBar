@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Glass } from 'glisse'
 import { haptic } from '@/lib/haptics'
 import { LENSES, type Lens } from '@/lib/dashboard/lens'
 
@@ -39,7 +40,7 @@ export default function LensTabs({ initial, panels }: { initial: Lens; panels: R
 
   return (
     <>
-      <div role="tablist" aria-label="תצוגות" onKeyDown={onKey} style={rowStyle}>
+      <Glass role="tablist" aria-label="תצוגות" className="ag-lens-tabs" onKeyDown={onKey} style={rowStyle}>
         {LENSES.map((l) => {
           const on = l.id === lens
           return (
@@ -59,7 +60,7 @@ export default function LensTabs({ initial, panels }: { initial: Lens; panels: R
             </button>
           )
         })}
-      </div>
+      </Glass>
 
       <div key={lens} role="tabpanel" id={`lens-panel-${lens}`} aria-labelledby={`lens-tab-${lens}`} tabIndex={-1}
         className="rise" style={{ display: 'flex', flexDirection: 'column', gap: 20, outline: 'none' }}>
@@ -70,6 +71,6 @@ export default function LensTabs({ initial, panels }: { initial: Lens; panels: R
 }
 
 const rowStyle: React.CSSProperties = {
-  display: 'flex', gap: 4, padding: 4, borderRadius: 15, background: 'var(--bg-elev)', border: '1px solid var(--line)',
+  display: 'flex', gap: 4, padding: 4, borderRadius: 15,
   position: 'sticky', top: 8, zIndex: 20,
 }

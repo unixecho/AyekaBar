@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import { Glass } from 'glisse'
 import type { Section, Tile } from '@/lib/dashboard/tiles'
 
 // The category-grouped tile grid shared by the staff, owner and developer
@@ -94,16 +97,18 @@ export default function DashboardSections({
             </h2>
             <span style={{ fontSize: '0.72rem', color: 'var(--text-faint)' }}>{category.hint}</span>
           </div>
-          <ul style={{
-            listStyle: 'none', margin: 0, padding: 0,
-            display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10,
-          }}>
-            {tiles.map((t) => (
-              <li key={t.id} style={{ display: 'flex' }}>
-                <TileView tile={t} lockedReason={locked[t.id]} />
-              </li>
-            ))}
-          </ul>
+          <Glass className="ag-category-surface">
+            <ul style={{
+              listStyle: 'none', margin: 0, padding: 0,
+              display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10,
+            }}>
+              {tiles.map((t) => (
+                <li key={t.id} style={{ display: 'flex' }}>
+                  <TileView tile={t} lockedReason={locked[t.id]} />
+                </li>
+              ))}
+            </ul>
+          </Glass>
         </section>
       ))}
     </div>
